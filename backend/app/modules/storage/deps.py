@@ -19,7 +19,13 @@ if TYPE_CHECKING:
 
 @lru_cache
 def _s3_client(
-    region: str, endpoint_url: str | None, access_key: str | None, secret_key: str | None
+    region: str,
+    endpoint_url: str | None,
+    access_key: str | None,
+    secret_key: str | None,
+    connect_timeout: int,
+    read_timeout: int,
+    max_attempts: int,
 ) -> S3Client:
     return boto3.client(
         "s3",
@@ -29,9 +35,9 @@ def _s3_client(
         aws_secret_access_key=secret_key,
         config=Config(
             signature_version="s3v4",
-            connect_timeout=5,
-            read_timeout=30,
-            retries={"max_attempts": 3, "mode": "standard"},
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+            retries={"max_attempts": max_attempts, "mode": "standard"},
         ),
     )
 
@@ -48,6 +54,9 @@ def get_storage(settings: SettingsDep) -> S3Storage:
         settings.aws_secret_access_key.get_secret_value()
         if settings.aws_secret_access_key
         else None,
+        settings.s3_connect_timeout_seconds,
+        settings.s3_read_timeout_seconds,
+        settings.s3_max_attempts,
     )
     return S3Storage(
         client,

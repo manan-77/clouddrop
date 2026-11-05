@@ -1,6 +1,7 @@
 "Application settings: the only place environment variables are read."
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
-    environment: str = "development"
+    environment: Literal["development", "test", "staging", "production"] = "development"
     database_url: str
     jwt_secret: SecretStr
     jwt_access_ttl_minutes: int = 15
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 100 * 1024 * 1024
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 300
+    user_quota_bytes: int = 5 * 1024 * 1024 * 1024
+    s3_connect_timeout_seconds: int = 5
+    s3_read_timeout_seconds: int = 30
+    s3_max_attempts: int = 3
     allowed_content_types: list[str] = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -54,12 +59,17 @@ class Settings(BaseSettings):
         return value
 
     @property
-    def is_production(self) -> bool:
-        return self.environment == "production"
+    def is_local(self) -> bool:
+        return self.environment in ("development", "test")
 
     @property
     def cookie_secure(self) -> bool:
-        return self.is_production
+        # Fail closed: anything that is not explicitly local gets Secure cookies.
+        return not self.is_local
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.is_local
 
 
 @lru_cache

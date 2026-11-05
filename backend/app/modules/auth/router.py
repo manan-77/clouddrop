@@ -36,7 +36,7 @@ def register(body: RegisterRequest, response: Response, service: AuthServiceDep)
     return UserRead.model_validate(user)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 def login(
     body: LoginRequest, response: Response, service: AuthServiceDep, settings: SettingsDep
 ) -> TokenResponse:
@@ -45,7 +45,7 @@ def login(
     return _token_response(tokens)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 def refresh(
     response: Response,
     service: AuthServiceDep,
@@ -67,6 +67,6 @@ def logout(
     response.delete_cookie(REFRESH_COOKIE, path=COOKIE_PATH)
 
 
-@router.get("/me", response_model=UserRead)
+@router.get("/me", response_model=UserRead, status_code=status.HTTP_200_OK)
 def read_current_user(user: CurrentUser) -> UserRead:
     return UserRead.model_validate(user)

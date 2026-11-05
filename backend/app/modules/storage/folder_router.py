@@ -11,7 +11,7 @@ from app.modules.storage.schemas import FolderCreate, FolderRead, FolderUpdate
 router = APIRouter(prefix="/api/v1/folders", tags=["folders"])
 
 
-@router.get("", response_model=Page[FolderRead])
+@router.get("", response_model=Page[FolderRead], status_code=status.HTTP_200_OK)
 def list_folders(
     user: CurrentUser,
     service: FolderServiceDep,
@@ -36,12 +36,12 @@ def create_folder(
     return FolderRead.model_validate(folder)
 
 
-@router.get("/{folder_id}", response_model=FolderRead)
+@router.get("/{folder_id}", response_model=FolderRead, status_code=status.HTTP_200_OK)
 def get_folder(folder_id: uuid.UUID, user: CurrentUser, service: FolderServiceDep) -> FolderRead:
     return FolderRead.model_validate(service.get_folder(user.id, folder_id))
 
 
-@router.patch("/{folder_id}", response_model=FolderRead)
+@router.patch("/{folder_id}", response_model=FolderRead, status_code=status.HTTP_200_OK)
 def rename_folder(
     folder_id: uuid.UUID, body: FolderUpdate, user: CurrentUser, service: FolderServiceDep
 ) -> FolderRead:

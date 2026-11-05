@@ -61,18 +61,26 @@ class ServiceUnavailableError(AppError):
 
 
 def _envelope(
-    status_code: int, code: str, message: str, details: list[dict[str, str]] | None = None
+    status_code: int,
+    code: str,
+    message: str,
+    details: list[dict[str, str]] | None = None,
+    request_id: str | None = None,
 ) -> JSONResponse:
-    headers = {"WWW-Authenticate": "Bearer"} if status_code == 401 else None
+    headers: dict[str, str] = {}
+    if status_code == 401:
+        headers["WWW-Authenticate"] = "Bearer"
+    if request_id is not None:
+        headers["X-Request-ID"] = request_id
     body: dict[str, Any] = {
         "error": {
             "code": code,
             "message": message,
-            "request_id": request_id_var.get(),
+            "request_id": request_id or request_id_var.get(),
             "details": details or [],
         }
     }
-    return JSONResponse(status_code=status_code, content=body, headers=headers)
+    return JSONResponse(status_code=status_code, content=body, headers=headers or None)
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -95,6 +103,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _envelope(exc.status_code, codes.get(exc.status_code, "http_error"), str(exc.detail))
 
     @app.exception_handler(Exception)
-    async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled error")
-        return _envelope(500, "internal_error", "Internal server error")
+        request_id = str(request.scope.get("request_id", "-"))
+        return _envelope(500, "internal_error", "Internal server error", request_id=request_id)

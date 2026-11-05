@@ -75,7 +75,15 @@ def storage(s3_client: "S3Client") -> S3Storage:
 @pytest.fixture
 def client(session: Session, storage: S3Storage) -> Iterator[TestClient]:
     app = create_app()
-    app.dependency_overrides[get_session] = lambda: session
+
+    def _request_session() -> Iterator[Session]:
+        try:
+            yield session
+        finally:
+            # Like the real get_session, drop anything the request did not commit.
+            session.rollback()
+
+    app.dependency_overrides[get_session] = _request_session
     app.dependency_overrides[get_storage] = lambda: storage
     with TestClient(app) as test_client:
         yield test_client

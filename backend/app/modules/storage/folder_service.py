@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -35,7 +36,7 @@ class FolderService:
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
         workspace_id = self._scope(user_id, Action.WRITE)
         if parent_id is not None:
-            self._get(workspace_id, parent_id)
+            self._get(workspace_id, parent_id, lock="share")
         folder = Folder(workspace_id=workspace_id, parent_id=parent_id, name=sanitize_name(name))
         try:
             # The unique index is the arbiter, not a prior existence check.
@@ -59,7 +60,7 @@ class FolderService:
 
     def delete_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> None:
         workspace_id = self._scope(user_id, Action.DELETE)
-        folder = self._get(workspace_id, folder_id)
+        folder = self._get(workspace_id, folder_id, lock="update")
         if self.folders.has_subfolders(workspace_id, folder_id) or self.files.has_files_in(
             workspace_id, folder_id
         ):
@@ -72,8 +73,13 @@ class FolderService:
         self.access.require(user_id, workspace.id, action)
         return workspace.id
 
-    def _get(self, workspace_id: uuid.UUID, folder_id: uuid.UUID) -> Folder:
-        folder = self.folders.get(workspace_id, folder_id)
+    def _get(
+        self,
+        workspace_id: uuid.UUID,
+        folder_id: uuid.UUID,
+        lock: Literal["update", "share"] | None = None,
+    ) -> Folder:
+        folder = self.folders.get(workspace_id, folder_id, lock=lock)
         if folder is None:
             raise NotFoundError("Folder not found", code="folder_not_found")
         return folder

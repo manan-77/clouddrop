@@ -1,1 +1,20 @@
 # Lessons
+
+Rules I derive from review findings so the same mistake is not made twice. Read at session start.
+
+## From PR #1 review (backend auth and storage)
+
+1. **Check-then-act on a parent row needs a lock.** Whenever code checks that a parent (folder) exists and then writes a child, lock the parent row (`FOR SHARE` on writers, `FOR UPDATE` on delete). A soft-deleted parent is not stopped by a foreign key.
+2. **Every requirement in the contract is implemented or explicitly deferred in the PR.** Quota and rate limiting were in the standards and missing from the code without a word. Before opening a PR, walk the contract bullets for the area and either build, or write "deferred to <branch>" in the PR body and the todo.
+3. **Every route has `response_model` and an explicit `status_code`, including health checks.** Grep for routes without them before the PR.
+4. **Never branch on an exact free-text environment string.** Use a Literal type and fail closed: secure cookies and disabled docs unless the environment is explicitly development or test.
+5. **Starlette runs the unhandled-exception handler outside user middleware.** Anything the error response needs (request id) must travel in the ASGI scope, not only in a context variable.
+6. **Do pure computations (presigning) before committing.** Commit last, so a failure does not leave half-created rows.
+7. **A status that implies the object is gone must not be downloadable.** When deleting an object, check every status set that points at it.
+8. **Every numeric query parameter needs both a lower and an upper bound.**
+9. **Timeouts, retries and pool sizes belong in settings, even for a client factory.**
+10. **Run the PR gate checklist from the CLAUDE.md files literally before requesting review.** Tick each item against the code, not from memory.
+12. **Add structural guard tests for rules that are easy to forget** (every route declares a status code and response model). The first run of such a test found 11 routes that broke the rule.
+13. **A shared test session must behave like production.** The real session closes (rolls back) per request; the test override must roll back too, or uncommitted work leaks between requests and hides bugs.
+14. **Library upgrades change introspection.** In this FastAPI version `include_router` wraps routers, so tests that walk `app.routes` must unwrap them.
+11. **Concurrency claims need a concurrency test or an explicit note.** The savepoint-per-test setup cannot exercise races; say so in the PR instead of implying coverage.

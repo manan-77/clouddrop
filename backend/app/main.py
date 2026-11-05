@@ -15,9 +15,9 @@ def create_app() -> FastAPI:
     configure_logging()
     app = FastAPI(
         title="CloudDrop AI",
-        docs_url=None if settings.is_production else "/docs",
+        docs_url="/docs" if settings.docs_enabled else None,
         redoc_url=None,
-        openapi_url=None if settings.is_production else "/openapi.json",
+        openapi_url="/openapi.json" if settings.docs_enabled else None,
     )
     app.add_middleware(
         CORSMiddleware,

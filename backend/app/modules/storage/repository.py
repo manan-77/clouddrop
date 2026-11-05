@@ -1,9 +1,11 @@
 import uuid
+from typing import Literal
 
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import Session
 
 from app.db.soft_delete import only_active
+from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion, Folder
 
 
@@ -15,12 +17,23 @@ class FolderRepository:
         self.session.add(folder)
         self.session.flush()
 
-    def get(self, workspace_id: uuid.UUID, folder_id: uuid.UUID) -> Folder | None:
-        return self.session.scalar(
-            select(Folder).where(
-                Folder.id == folder_id, Folder.workspace_id == workspace_id, only_active(Folder)
-            )
+    def get(
+        self,
+        workspace_id: uuid.UUID,
+        folder_id: uuid.UUID,
+        *,
+        lock: Literal["update", "share"] | None = None,
+    ) -> Folder | None:
+        query = select(Folder).where(
+            Folder.id == folder_id, Folder.workspace_id == workspace_id, only_active(Folder)
         )
+        # Writers into a folder take FOR SHARE, a delete takes FOR UPDATE, so a folder can
+        # never be deleted while a child is being added to it.
+        if lock == "update":
+            query = query.with_for_update()
+        elif lock == "share":
+            query = query.with_for_update(read=True)
+        return self.session.scalar(query)
 
     def list_children(
         self, workspace_id: uuid.UUID, parent_id: uuid.UUID | None, limit: int, offset: int
@@ -82,6 +95,16 @@ class FileRepository:
             select(File).where(*where).order_by(File.name, File.id).limit(limit).offset(offset)
         )
         return list(rows), total
+
+    def sum_size(self, workspace_id: uuid.UUID) -> int:
+        total = self.session.scalar(
+            select(func.coalesce(func.sum(File.size_bytes), 0)).where(
+                File.workspace_id == workspace_id,
+                only_active(File),
+                File.status != FileStatus.FAILED.value,
+            )
+        )
+        return int(total or 0)
 
     def has_files_in(self, workspace_id: uuid.UUID, folder_id: uuid.UUID) -> bool:
         return (

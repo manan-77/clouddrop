@@ -19,7 +19,7 @@ from app.modules.storage.schemas import (
 router = APIRouter(prefix="/api/v1/files", tags=["files"])
 
 
-@router.get("", response_model=Page[FileRead])
+@router.get("", response_model=Page[FileRead], status_code=status.HTTP_200_OK)
 def list_files(
     user: CurrentUser,
     service: FileServiceDep,
@@ -52,17 +52,17 @@ def init_upload(
     )
 
 
-@router.post("/{file_id}/uploads/complete", response_model=FileRead)
+@router.post("/{file_id}/uploads/complete", response_model=FileRead, status_code=status.HTTP_200_OK)
 def complete_upload(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) -> FileRead:
     return FileRead.model_validate(service.complete_upload(user.id, file_id))
 
 
-@router.get("/{file_id}", response_model=FileRead)
+@router.get("/{file_id}", response_model=FileRead, status_code=status.HTTP_200_OK)
 def get_file(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) -> FileRead:
     return FileRead.model_validate(service.get_file(user.id, file_id))
 
 
-@router.patch("/{file_id}", response_model=FileRead)
+@router.patch("/{file_id}", response_model=FileRead, status_code=status.HTTP_200_OK)
 def update_file(
     file_id: uuid.UUID, body: FileUpdate, user: CurrentUser, service: FileServiceDep
 ) -> FileRead:
@@ -81,7 +81,7 @@ def delete_file(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) 
     service.delete_file(user.id, file_id)
 
 
-@router.get("/{file_id}/download", response_model=DownloadResponse)
+@router.get("/{file_id}/download", response_model=DownloadResponse, status_code=status.HTTP_200_OK)
 def download_file(
     file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep
 ) -> DownloadResponse:
