@@ -2,11 +2,11 @@
 
 AI-powered cloud storage: upload, organize, share, and search files by meaning.
 
-Status: backend foundation, authentication and file storage are built. The Angular app, sharing, the processing pipeline and the AI features are planned. See `tasks/todo.md` for the full plan and `docs/` for the architecture.
+Status: backend foundation, authentication and file storage are built, and the Angular app shell is scaffolded (theme, error handling, shared UI). Sign-in and the file explorer, sharing, the processing pipeline and the AI features are planned. See `tasks/todo.md` for the full plan and `docs/` for the architecture.
 
 ## Layout
 - `backend/` FastAPI, SQLAlchemy 2 (sync), Alembic, Celery (planned)
-- `frontend/` Angular (planned)
+- `frontend/` Angular 21
 - `infra/` database init and deployment config
 - `docs/` ER diagram, API reference, architecture decision records
 - `tasks/` task plan and lessons learned
@@ -26,8 +26,10 @@ Needs PostgreSQL 17 with the pgvector extension, Redis, Python 3.12 and [uv](htt
 4. File uploads need an S3 bucket (`S3_BUCKET` and AWS credentials in `.env`). Without one, the file endpoints return 503 `storage_not_configured`.
 5. AI features need the Azure APIM details; verify them with `bash scripts/check_apim.sh`.
 
-## Checks (backend)
-From `backend/`: `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`.
+## Checks
+Backend, from `backend/`: `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`.
+
+Frontend, from `frontend/` (after `npm install`): `npm run lint`, `npm run format:check`, `npm run build`, `npm test`. Run the app with `npm start` (port 4200; it proxies the API on port 8000, so start the backend too).
 
 ## Branches and pull requests
 `main` (protected) <- `develop` <- `feat/*` | `fix/*` | `docs/*` | `chore/*` | `refactor/*`. Every change goes through a pull request into `develop`, is reviewed against the CLAUDE.md standards, and is squash merged; the branch is then deleted. Commits follow Conventional Commits: `type(scope): description`.

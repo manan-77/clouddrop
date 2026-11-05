@@ -1,0 +1,59 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cd-space-2);
+  min-height: 2.5rem;
+  padding: var(--cd-space-2) var(--cd-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--cd-radius-md);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--cd-duration);
+  background: var(--cd-primary);
+  color: var(--cd-primary-text);
+}
+
+:host(:hover:not(:disabled)) {
+  background: var(--cd-primary-hover);
+}
+
+:host([data-variant='secondary']) {
+  background: var(--cd-surface);
+  color: var(--cd-text);
+  border-color: var(--cd-border-strong);
+}
+
+:host([data-variant='secondary']:hover:not(:disabled)) {
+  background: var(--cd-surface-2);
+}
+
+:host([data-variant='danger']) {
+  background: var(--cd-danger);
+  color: var(--cd-danger-text);
+}
+
+:host([data-variant='danger']:hover:not(:disabled)) {
+  background: var(--cd-danger-hover);
+}
+
+:host(:disabled) {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

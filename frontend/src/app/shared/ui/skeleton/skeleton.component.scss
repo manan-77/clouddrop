@@ -1,0 +1,24 @@
+.skeleton {
+  display: grid;
+  gap: var(--cd-space-3);
+}
+
+.line {
+  display: block;
+  height: 1.25rem;
+  border-radius: var(--cd-radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--cd-skeleton-a),
+    var(--cd-skeleton-b),
+    var(--cd-skeleton-a)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}

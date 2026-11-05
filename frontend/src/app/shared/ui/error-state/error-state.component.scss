@@ -1,0 +1,13 @@
+.error {
+  display: grid;
+  justify-items: start;
+  gap: var(--cd-space-3);
+  padding: var(--cd-space-4);
+  border: 1px solid var(--cd-danger);
+  border-radius: var(--cd-radius-md);
+  background: var(--cd-danger-bg);
+}
+
+p {
+  margin: 0;
+}

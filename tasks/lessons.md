@@ -24,3 +24,16 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 15. **Quote exact paths and prefixes in docs.** A global "base path" sentence made two un-prefixed routes read as prefixed. State exceptions next to the rule.
 16. **Describe scope by what the code actually does.** A dependency resolved by a whole router affects every route in it; say "every route", not "the routes that need it".
 17. **Template placeholders must satisfy the validators.** A copy-pasted `.env` should start the app, or the comment must say what to change.
+
+## From the frontend scaffold
+
+18. **Check the engine range before scaffolding.** The newest Angular CLI refused the local Node. Read `engines` first and record the pin as an ADR.
+19. **`ng add` installs the newest package, not the one matching the workspace.** Re-run with the matching major (`angular-eslint@21`).
+20. **Node 25 breaks the global `localStorage` in tests.** Tests that touch storage install their own in-memory Storage.
+22. **A fragment link breaks under a base href.** `href="#main"` resolves against `<base href="/">`; move focus in a click handler and test it.
+23. **Lookups keyed by server strings must use own-property checks.** `table[code]` returns functions for `constructor`; use `Object.hasOwn` or a Map, and validate array/shape of every field from the wire.
+24. **Do not mix a persistent live region with conditional rendering.** Keep the region in the DOM and change only its text.
+25. **A visible label must be part of the accessible name.** Do not override a button's visible text with a different aria-label.
+26. **Prove lint rules fire.** After adding rules, lint a deliberately bad file once, then delete it.
+27. **Test harnesses give host elements their own ids**; assert on what your component renders, not on the host.
+21. **Run prettier and the linter before the first commit of any new tier**, and give test host components OnPush too, since the lint rule applies to specs.

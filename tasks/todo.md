@@ -75,7 +75,7 @@ It contains tasks only. No code lives here.
 - [ ] Values placed in the local .env file only.
 
 ### 3.3 Decisions - DECISION
-- [ ] Angular version to pin, and confirmation of the no-UI-kit default (plain SCSS with design tokens).
+- [x] Angular version pinned to 21.2 (ADR 0004) and the no-UI-kit default confirmed by default (ADR 0005). Owner may revisit.
 - [ ] Embedding model: Azure endpoint or a local sentence-transformers model (fixes the vector size forever).
 - [ ] Permission inheritance model for folders and files (Phase 4).
 - [ ] Display date format (assumed day/month/year with 24-hour time).
@@ -123,19 +123,19 @@ Unblocked work to do first if the owner is away: pre-work, then Phase 3, then Ph
 Goal: a person can register, sign in, browse folders, upload, download and manage files in a browser.
 
 ### 6.1 Branch: feat/frontend-scaffold (OK-NOW, needs the Angular version decision)
-- [ ] Create the Angular workspace inside the frontend folder: standalone components, strict TypeScript, routing, SCSS.
-- [ ] Wire Vitest for unit tests, ESLint and Prettier. Prove all four gates run.
-- [ ] Add the dev proxy so the browser talks to the backend on the same origin, with no hostname baked into the build.
-- [ ] Create design tokens as CSS custom properties: colours, spacing, radii, typography, elevation.
-- [ ] Light and dark themes controlled in exactly one place, following the system setting by default.
-- [ ] App shell: header, sidebar, content area, responsive down to phone width.
-- [ ] Global error handler and a one-place error message resolver that maps the API error code to user-safe text.
-- [ ] Shared pipes: file size, date and time in the single agreed format.
-- [ ] Shared presentational pieces: button with in-flight spinner, loading skeleton, empty state, error state with retry, inline field error.
-- [ ] Lazy routes only. Bundle budgets set.
-- [ ] Accessibility baseline: visible focus, skip link, landmarks.
-- [ ] Update the frontend CLAUDE.md with the pinned version and the real commands.
-- [ ] Tests: error resolver, pipes, theme switching.
+- [x] Create the Angular workspace inside the frontend folder: standalone components, strict TypeScript, routing, SCSS.
+- [x] Wire Vitest for unit tests, ESLint and Prettier. Prove all four gates run.
+- [x] Add the dev proxy so the browser talks to the backend on the same origin, with no hostname baked into the build.
+- [x] Create design tokens as CSS custom properties: colours, spacing, radii, typography, elevation.
+- [x] Light and dark themes controlled in exactly one place, following the system setting by default.
+- [x] App shell: header, sidebar, content area, responsive down to phone width.
+- [x] Global error handler and a one-place error message resolver that maps the API error code to user-safe text.
+- [x] Shared pipes: file size, date and time in the single agreed format.
+- [x] Shared presentational pieces: button with in-flight spinner, loading skeleton, empty state, error state with retry, inline field error.
+- [x] Lazy routes only. Bundle budgets set.
+- [x] Accessibility baseline: visible focus, skip link, landmarks (automated accessibility checks are not set up yet).
+- [x] Update the frontend CLAUDE.md with the pinned version and the real commands.
+- [x] Tests: error resolver, pipes, theme switching.
 
 ### 6.2 Branch: feat/frontend-auth (OK-NOW)
 - [ ] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.
@@ -420,6 +420,12 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Case-insensitive duplicate names for files are allowed on purpose, revisit if it confuses users.
 - [ ] The register endpoint reveals whether an email exists (409). Accepted trade-off for now, revisit with email verification.
 - [ ] Minor review findings that are not fixed in their PR must be listed here with the PR number.
+- [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
+- [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
+- [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.
+- [ ] (PR 4) The busy button uses native disabled (per our standard), so keyboard focus is lost while busy; revisit with aria-disabled and a click guard if it hurts in the forms.
+- [ ] (PR 4) Method calls in templates cannot be linted (signal reads are calls); the PR gate review enforces it. Revisit if angular-eslint adds a signal-aware rule.
+- [ ] (PR 4) Production errors are dropped until telemetry exists (Phase 8 observability).
 - [ ] (PR 1) The same workspace-scope lookup is duplicated in the folder and file services and costs two queries per request; extract once sharing lands in Phase 4.
 - [ ] (PR 1) mypy covers the app package only, not tests; alembic migrations keep the generated boilerplate comments; the file_versions composite unique constraint name hides the version column.
 - [ ] (PR 1) Repeat DELETE returns 404 on the second call (accepted); expired refresh tokens are purged by the Phase 5 purge job.
