@@ -2,19 +2,32 @@
 
 AI-powered cloud storage: upload, organize, share, and search files by meaning.
 
+Status: backend foundation, authentication and file storage are built. The Angular app, sharing, the processing pipeline and the AI features are planned. See `tasks/todo.md` for the full plan and `docs/` for the architecture.
+
 ## Layout
-- `backend/` FastAPI + SQLAlchemy + Celery
-- `frontend/` Angular
-- `infra/` Docker and deployment config
-- `docs/` architecture, ER diagram, API design
+- `backend/` FastAPI, SQLAlchemy 2 (sync), Alembic, Celery (planned)
+- `frontend/` Angular (planned)
+- `infra/` database init and deployment config
+- `docs/` ER diagram, API reference, architecture decision records
+- `tasks/` task plan and lessons learned
+- `CLAUDE.md` files hold the engineering standards for every tier
 
-## Local start
-1. `cp .env.example .env`; set `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`
-2. Local Postgres (with the `vector` extension) and Redis running via Homebrew. Create the DB:
-   `createdb clouddrop` then `psql clouddrop -c 'CREATE EXTENSION IF NOT EXISTS vector;'`
-   (Docker alternative: `docker compose up -d`)
-3. `bash scripts/check_apim.sh` once the APIM values are in `.env`
+## Local setup
+Needs PostgreSQL 17 with the pgvector extension, Redis, Python 3.12 and [uv](https://docs.astral.sh/uv/). Docker is optional (`docker-compose.yml`).
 
-## Branches
-`main` (protected) <- `develop` <- `feat/*` | `fix/*` | `refactor/*`. PRs target `develop`, squash merge.
-Commits follow Conventional Commits: `type(scope): description`.
+1. `cp .env.example .env` and fill it in. `JWT_SECRET` must be 32+ characters.
+2. Create the databases (the vector extension is created once by a superuser):
+   - `createdb clouddrop` then `psql clouddrop -c 'CREATE EXTENSION IF NOT EXISTS vector;'`
+   - `createdb clouddrop_test` (the tests rebuild it from the migrations)
+3. Backend, from `backend/`:
+   - `uv sync`
+   - `uv run alembic upgrade head`
+   - `uv run uvicorn app.main:app --reload` (docs at `http://localhost:8000/docs`)
+4. File uploads need an S3 bucket (`S3_BUCKET` and AWS credentials in `.env`). Without one, the file endpoints return 503 `storage_not_configured`.
+5. AI features need the Azure APIM details; verify them with `bash scripts/check_apim.sh`.
+
+## Checks (backend)
+From `backend/`: `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`.
+
+## Branches and pull requests
+`main` (protected) <- `develop` <- `feat/*` | `fix/*` | `docs/*` | `chore/*` | `refactor/*`. Every change goes through a pull request into `develop`, is reviewed against the CLAUDE.md standards, and is squash merged; the branch is then deleted. Commits follow Conventional Commits: `type(scope): description`.
