@@ -169,3 +169,26 @@ def test_register_nameWithSurroundingSpaces_isStoredTrimmed(client: TestClient) 
     )
     assert response.status_code == 201
     assert response.json()["display_name"] == "Ada"
+
+
+def test_register_nameWithNonBreakingSpaceOnly_returns422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": _email(), "password": PASSWORD, "display_name": "\u00a0\u00a0"},
+    )
+    assert response.status_code == 422
+
+
+def test_register_hundredCharacterNamePaddedWithSpaces_isAcceptedAndTrimmed(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": _email(),
+            "password": PASSWORD,
+            "display_name": " " * 30 + "a" * 100 + " " * 30,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "a" * 100
