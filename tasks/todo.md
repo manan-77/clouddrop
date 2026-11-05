@@ -53,8 +53,8 @@ It contains tasks only. No code lives here.
 - [ ] Phase 0 leftover: APIM check script run (BLOCKED-APIM, needs values).
 - [x] Phase 1: backend foundation and auth (23 tests).
 - [x] Phase 2: workspaces, folders, files, file versions, S3 presigned upload and download, tested with a fake S3 (54 tests total).
-- [~] PR number 1 (feat/backend-auth-and-storage into develop) is open, waiting for review and squash merge.
-- [ ] Phase 3 to Phase 8 below.
+- [x] PR number 1 and PR number 2 (review fixes) are squash merged into develop and their branches are deleted.
+- [~] Phase 3 to Phase 8 below. Pre-work branch chore/env-template-and-docs is in review.
 
 ## 3. Inputs needed from the owner
 
@@ -106,17 +106,17 @@ Unblocked work to do first if the owner is away: pre-work, then Phase 3, then Ph
 - [x] Run the independent review of PR number 1 against the root and backend CLAUDE.md PR gates.
 - [x] Record findings by severity in the PR.
 - [x] Fix blockers and majors on the same branch, re-run ruff, mypy and pytest, push. (Quota, folder row locks, health schema, fail-closed environment, explicit status codes, request id on 500, presign-before-commit, page bound, S3 settings. Rate limiting accepted and deferred to Phase 8.)
-- [ ] Squash merge into develop, delete the remote and local branch, pull develop.
-- [ ] Tick Phase 1 and Phase 2 items here as merged.
+- [x] Squash merge into develop, delete the remote and local branch, pull develop.
+- [x] Tick Phase 1 and Phase 2 items here as merged.
 
 ### Branch: chore/env-template-and-docs (small, right after the merge)
-- [ ] Add the new S3 and upload settings to the env template (bucket, region, endpoint override, max upload size, allowed types, presigned lifetimes) with placeholder values only.
-- [ ] Write ADR 0001: synchronous SQLAlchemy and plain def endpoints.
-- [ ] Write ADR 0002: uv and Python 3.12 pinned.
-- [ ] Write ADR 0003: local Postgres 17 with pgvector instead of Docker for development.
-- [ ] Write the ER diagram of the current schema in docs.
-- [ ] Write the API endpoint list of the current endpoints in docs.
-- [ ] Update the README local-start section to match reality.
+- [x] Add the new S3 and upload settings to the env template (bucket, region, endpoint override, max upload size, allowed types, presigned lifetimes) with placeholder values only.
+- [x] Write ADR 0001: synchronous SQLAlchemy and plain def endpoints.
+- [x] Write ADR 0002: uv and Python 3.12 pinned.
+- [x] Write ADR 0003: local Postgres 17 with pgvector instead of Docker for development.
+- [x] Write the ER diagram of the current schema in docs.
+- [x] Write the API endpoint list of the current endpoints in docs.
+- [x] Update the README local-start section to match reality.
 
 ## 6. Phase 3 - Angular frontend v1
 

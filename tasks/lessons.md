@@ -18,3 +18,9 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 13. **A shared test session must behave like production.** The real session closes (rolls back) per request; the test override must roll back too, or uncommitted work leaks between requests and hides bugs.
 14. **Library upgrades change introspection.** In this FastAPI version `include_router` wraps routers, so tests that walk `app.routes` must unwrap them.
 11. **Concurrency claims need a concurrency test or an explicit note.** The savepoint-per-test setup cannot exercise races; say so in the PR instead of implying coverage.
+
+## From PR #3 review (docs)
+
+15. **Quote exact paths and prefixes in docs.** A global "base path" sentence made two un-prefixed routes read as prefixed. State exceptions next to the rule.
+16. **Describe scope by what the code actually does.** A dependency resolved by a whole router affects every route in it; say "every route", not "the routes that need it".
+17. **Template placeholders must satisfy the validators.** A copy-pasted `.env` should start the app, or the comment must say what to change.
