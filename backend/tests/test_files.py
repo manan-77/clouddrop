@@ -301,3 +301,42 @@ def test_storageNotConfigured_onlyUploadAndDownloadRoutesNeedIt(
     ):
         assert response.status_code == 503
         assert response.json()["error"]["code"] == "storage_not_configured"
+
+
+def test_realEmptyBucketSetting_returns503OnlyOnS3RoutesAndAuthComesFirst(
+    client: TestClient, make_user: Callable[[], Headers]
+) -> None:
+    from app.core.config import get_settings
+
+    headers = make_user()
+    client.app.dependency_overrides.pop(get_storage)  # type: ignore[attr-defined]
+    unconfigured = get_settings().model_copy(update={"s3_bucket": None})
+    client.app.dependency_overrides[get_settings] = lambda: unconfigured  # type: ignore[attr-defined]
+
+    assert client.get("/api/v1/files", headers=headers).status_code == 200
+    missing = "00000000-0000-0000-0000-000000000000"
+    response = _init(client, headers)
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "storage_not_configured"
+    # Authentication still wins: an anonymous caller cannot learn whether storage is configured.
+    assert _init(client, {}).status_code == 401
+    assert client.get(f"/api/v1/files/{missing}/download").status_code == 401
+    assert client.post(f"/api/v1/files/{missing}/uploads/complete").status_code == 401
+
+
+def test_storageDown_strangerStillSeesNothingOnTheNonS3Routes(
+    client: TestClient, make_user: Callable[[], Headers], s3_client: "S3Client"
+) -> None:
+    owner, stranger = make_user(), make_user()
+    file_id = _ready_file(client, s3_client, owner)["id"]
+
+    def _down() -> None:
+        raise ServiceUnavailableError("down", code="storage_unavailable")
+
+    client.app.dependency_overrides[get_storage] = _down  # type: ignore[attr-defined]
+    listing = client.get("/api/v1/files", headers=stranger).json()
+    assert listing["total"] == 0 and listing["items"] == []
+    url = f"/api/v1/files/{file_id}"
+    assert client.get(url, headers=stranger).status_code == 404
+    assert client.patch(url, json={"name": "x.pdf"}, headers=stranger).status_code == 404
+    assert client.delete(url, headers=stranger).status_code == 404
