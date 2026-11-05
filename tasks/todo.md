@@ -420,6 +420,12 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Case-insensitive duplicate names for files are allowed on purpose, revisit if it confuses users.
 - [ ] The register endpoint reveals whether an email exists (409). Accepted trade-off for now, revisit with email verification.
 - [ ] Minor review findings that are not fixed in their PR must be listed here with the PR number.
+- [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
+- [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
+- [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.
+- [ ] (PR 4) The busy button uses native disabled (per our standard), so keyboard focus is lost while busy; revisit with aria-disabled and a click guard if it hurts in the forms.
+- [ ] (PR 4) Method calls in templates cannot be linted (signal reads are calls); the PR gate review enforces it. Revisit if angular-eslint adds a signal-aware rule.
+- [ ] (PR 4) Production errors are dropped until telemetry exists (Phase 8 observability).
 - [ ] (PR 1) The same workspace-scope lookup is duplicated in the folder and file services and costs two queries per request; extract once sharing lands in Phase 4.
 - [ ] (PR 1) mypy covers the app package only, not tests; alembic migrations keep the generated boilerplate comments; the file_versions composite unique constraint name hides the version column.
 - [ ] (PR 1) Repeat DELETE returns 404 on the second call (accepted); expired refresh tokens are purged by the Phase 5 purge job.

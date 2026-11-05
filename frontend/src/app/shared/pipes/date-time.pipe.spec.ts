@@ -1,4 +1,4 @@
-import { DatePipe, DateTimePipe } from './date-time.pipe';
+import { DateOnlyPipe, DateTimePipe } from './date-time.pipe';
 
 describe('DateTimePipe', () => {
   const pipe = new DateTimePipe();
@@ -24,8 +24,8 @@ describe('DateTimePipe', () => {
   });
 });
 
-describe('DatePipe', () => {
+describe('DateOnlyPipe', () => {
   it('transform_date_returnsDayMonthYearOnly', () => {
-    expect(new DatePipe().transform(new Date(2026, 3, 5, 9, 7))).toBe('05/04/2026');
+    expect(new DateOnlyPipe().transform(new Date(2026, 3, 5, 9, 7))).toBe('05/04/2026');
   });
 });

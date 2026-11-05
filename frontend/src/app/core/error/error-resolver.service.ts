@@ -16,20 +16,37 @@ export interface ResolvedError {
   readonly fieldErrors: Readonly<Record<string, string>>;
 }
 
-interface ApiErrorEnvelope {
-  error: {
-    code: string;
-    request_id?: string;
-    details?: { field: string; message: string }[];
-  };
+interface ParsedEnvelope {
+  code: string;
+  requestId: string | null;
+  details: readonly unknown[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isEnvelope(value: unknown): value is ApiErrorEnvelope {
-  return isRecord(value) && isRecord(value['error']) && typeof value['error']['code'] === 'string';
+function parseEnvelope(body: unknown): ParsedEnvelope | null {
+  if (!isRecord(body) || !isRecord(body['error'])) {
+    return null;
+  }
+  const { code, request_id: requestId, details } = body['error'];
+  if (typeof code !== 'string') {
+    return null;
+  }
+  return {
+    code,
+    requestId: typeof requestId === 'string' ? requestId : null,
+    details: Array.isArray(details) ? details : [],
+  };
+}
+
+// Own-property lookups only: a server-sent code such as "constructor" must not hit Object.prototype.
+function lookup(
+  table: Readonly<Record<string | number, string>>,
+  key: string | number,
+): string | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
 }
 
 /** The single place API failures become text a person can read. */
@@ -37,23 +54,25 @@ function isEnvelope(value: unknown): value is ApiErrorEnvelope {
 export class ErrorResolver {
   resolve(error: unknown): ResolvedError {
     if (!(error instanceof HttpErrorResponse)) {
-      return this.build(GENERIC_MESSAGE, null, null, {});
+      return this.build(GENERIC_MESSAGE);
     }
     if (error.status === 0) {
-      return this.build(NETWORK_MESSAGE, null, null, {});
+      return this.build(NETWORK_MESSAGE);
     }
-    if (isEnvelope(error.error)) {
-      const { code, request_id: requestId, details } = error.error.error;
+    const envelope = parseEnvelope(error.error);
+    if (envelope) {
       const message =
-        ERROR_MESSAGES[code] ?? STATUS_MESSAGES[error.status] ?? this.fallbackFor(error.status);
-      return this.build(message, code, requestId ?? null, this.fieldErrors(details));
+        lookup(ERROR_MESSAGES, envelope.code) ??
+        lookup(STATUS_MESSAGES, error.status) ??
+        this.fallbackFor(error.status);
+      return this.build(
+        message,
+        envelope.code,
+        envelope.requestId,
+        this.fieldErrors(envelope.details),
+      );
     }
-    return this.build(
-      STATUS_MESSAGES[error.status] ?? this.fallbackFor(error.status),
-      null,
-      null,
-      {},
-    );
+    return this.build(lookup(STATUS_MESSAGES, error.status) ?? this.fallbackFor(error.status));
   }
 
   private fallbackFor(status: number): string {
@@ -62,27 +81,29 @@ export class ErrorResolver {
       : GENERIC_MESSAGE;
   }
 
-  private fieldErrors(
-    details: { field: string; message: string }[] | undefined,
-  ): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (const item of details ?? []) {
+  // Field messages come from the server's validation layer and are deliberately shown as sent (the
+  // API contract marks them safe); they are only ever interpolated, never injected as HTML.
+  private fieldErrors(details: readonly unknown[]): Record<string, string> {
+    const first = new Map<string, string>();
+    for (const item of details) {
       if (
-        typeof item.field === 'string' &&
-        typeof item.message === 'string' &&
-        !(item.field in result)
+        isRecord(item) &&
+        typeof item['field'] === 'string' &&
+        typeof item['message'] === 'string' &&
+        !first.has(item['field'])
       ) {
-        result[item.field] = item.message;
+        first.set(item['field'], item['message']);
       }
     }
-    return result;
+    // fromEntries defines own properties, so a field named "__proto__" stays harmless data.
+    return Object.fromEntries(first);
   }
 
   private build(
     message: string,
-    code: string | null,
-    requestId: string | null,
-    fieldErrors: Readonly<Record<string, string>>,
+    code: string | null = null,
+    requestId: string | null = null,
+    fieldErrors: Readonly<Record<string, string>> = {},
   ): ResolvedError {
     return { message, code, requestId, fieldErrors };
   }

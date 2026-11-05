@@ -64,4 +64,58 @@ describe('ErrorResolver', () => {
     expect(resolver().resolve(new Error('boom')).message).toBe(GENERIC_MESSAGE);
     expect(resolver().resolve('weird').message).toBe(GENERIC_MESSAGE);
   });
+
+  it('resolve_unauthorizedWithAndWithoutEnvelope_returnsSignInMessage', () => {
+    const withEnvelope = resolver().resolve(
+      new HttpErrorResponse({ status: 401, error: envelope('some_new_auth_code') }),
+    );
+    const without = resolver().resolve(new HttpErrorResponse({ status: 401, error: 'nope' }));
+    expect(withEnvelope.message).toBe('Please sign in to continue.');
+    expect(without.message).toBe('Please sign in to continue.');
+  });
+
+  it('resolve_serverErrorWithEnvelope_returnsFriendlyMappedMessage', () => {
+    const result = resolver().resolve(
+      new HttpErrorResponse({ status: 503, error: envelope('db_unavailable') }),
+    );
+    expect(result.message).toContain('temporarily unavailable');
+  });
+
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'resolve_prototypeKeyAsCode_%s_fallsBackToGenericText',
+    (code) => {
+      const result = resolver().resolve(
+        new HttpErrorResponse({ status: 400, error: envelope(code) }),
+      );
+      expect(result.message).toBe(GENERIC_MESSAGE);
+    },
+  );
+
+  it('resolve_malformedDetails_doesNotThrowAndKeepsValidItems', () => {
+    const body = {
+      error: {
+        code: 'validation_error',
+        request_id: 42,
+        details: [null, 'x', { field: 1 }, { field: 'email', message: 'invalid' }],
+      },
+    };
+    const result = resolver().resolve(new HttpErrorResponse({ status: 422, error: body }));
+    expect(result.fieldErrors).toEqual({ email: 'invalid' });
+    expect(result.requestId).toBeNull();
+    const notAList = { error: { code: 'validation_error', details: { field: 'x' } } };
+    expect(
+      resolver().resolve(new HttpErrorResponse({ status: 422, error: notAList })).fieldErrors,
+    ).toEqual({});
+  });
+
+  it('resolve_protoFieldName_isKeptAsPlainData', () => {
+    const result = resolver().resolve(
+      new HttpErrorResponse({
+        status: 422,
+        error: envelope('validation_error', [{ field: '__proto__', message: 'bad' }]),
+      }),
+    );
+    expect(Object.keys(result.fieldErrors)).toEqual(['__proto__']);
+    expect(({} as Record<string, unknown>)['bad']).toBeUndefined();
+  });
 });

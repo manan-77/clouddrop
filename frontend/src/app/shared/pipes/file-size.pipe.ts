@@ -10,7 +10,8 @@ export class FileSizePipe implements PipeTransform {
     }
     let value = bytes;
     let unit = 0;
-    while (value >= 1024 && unit < UNITS.length - 1) {
+    // Compare the rounded value so 1048575 bytes shows as 1.0 MB, not 1024 KB.
+    while (Math.round(value) >= 1024 && unit < UNITS.length - 1) {
       value /= 1024;
       unit += 1;
     }

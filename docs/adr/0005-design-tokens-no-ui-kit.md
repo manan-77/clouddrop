@@ -12,3 +12,5 @@ All colours, spacing, radii and type sizes are CSS custom properties defined onc
 - Components in `shared/ui` (button, skeleton, empty state, error state, field error) are written in-house and kept small.
 - Every new screen must be checked in light and dark.
 - Fonts are the system stack; nothing loads from a third-party origin.
+- Known trade-off: a stored light preference on a dark system shows dark for a moment until the service runs, because the theme is applied by one service and not by an inline script. Accepted to keep a single writer.
+- Control borders use a stronger token (`--cd-border-strong`, at least 3:1) so outlines meet non-text contrast.

@@ -22,7 +22,7 @@
 :host([data-variant='secondary']) {
   background: var(--cd-surface);
   color: var(--cd-text);
-  border-color: var(--cd-border);
+  border-color: var(--cd-border-strong);
 }
 
 :host([data-variant='secondary']:hover:not(:disabled)) {

@@ -45,7 +45,7 @@ describe('ThemeService', () => {
     document.documentElement.removeAttribute('data-theme');
   });
 
-  it('defaults to system and leaves the attribute unset', () => {
+  it('constructor_nothingStored_defaultsToSystemAndLeavesAttributeUnset', () => {
     const service = TestBed.inject(ThemeService);
     TestBed.tick();
     expect(service.preference()).toBe('system');
@@ -83,5 +83,27 @@ describe('ThemeService', () => {
   it('constructor_corruptStoredValue_fallsBackToSystem', () => {
     storage().setItem('cd-theme', 'neon');
     expect(TestBed.inject(ThemeService).preference()).toBe('system');
+  });
+
+  it('storageThrows_constructorAndSetPreference_stillWork', () => {
+    vi.stubGlobal('localStorage', undefined);
+    const blocked = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    if (document.defaultView) {
+      Object.defineProperty(document.defaultView, 'localStorage', {
+        value: blocked,
+        configurable: true,
+      });
+    }
+    const service = TestBed.inject(ThemeService);
+    expect(service.preference()).toBe('system');
+    expect(() => service.setPreference('dark')).not.toThrow();
+    expect(service.preference()).toBe('dark');
   });
 });

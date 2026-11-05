@@ -10,6 +10,8 @@ describe('FileSizePipe', () => {
     [10 * 1024, '10 KB'],
     [5 * 1024 * 1024, '5.0 MB'],
     [1024 ** 4 * 3, '3.0 TB'],
+    [1048575, '1.0 MB'],
+    [1023, '1023 B'],
   ])('transform_%i_returns%s', (bytes, expected) => {
     expect(pipe.transform(bytes)).toBe(expected);
   });

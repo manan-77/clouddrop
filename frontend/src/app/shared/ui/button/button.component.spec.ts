@@ -39,6 +39,19 @@ describe('ButtonComponent', () => {
     expect(button.querySelector('.spinner')).not.toBeNull();
   });
 
+  it('click_whileBusyIsIgnoredAndWhenIdleIsDelivered', async () => {
+    const busy = TestBed.createComponent(HostComponent);
+    busy.componentInstance.busy = true;
+    await busy.whenStable();
+    (busy.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    expect(busy.componentInstance.clicks).toBe(0);
+
+    const idle = TestBed.createComponent(HostComponent);
+    await idle.whenStable();
+    (idle.nativeElement.querySelector('button') as HTMLButtonElement).click();
+    expect(idle.componentInstance.clicks).toBe(1);
+  });
+
   it('disabled_isDisabledWithoutSpinner', async () => {
     const button = await setup({ disabled: true });
     expect(button.disabled).toBe(true);

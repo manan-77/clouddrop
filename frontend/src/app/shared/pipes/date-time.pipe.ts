@@ -24,7 +24,7 @@ export class DateTimePipe implements PipeTransform {
 }
 
 @Pipe({ name: 'cdDate' })
-export class DatePipe implements PipeTransform {
+export class DateOnlyPipe implements PipeTransform {
   transform(value: string | Date | null | undefined): string {
     const date = toDate(value);
     return date ? formatDate(date) : '';
