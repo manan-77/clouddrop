@@ -11,6 +11,7 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   file_not_found: 'That file no longer exists.',
   conflict: 'That already exists.',
   folder_name_taken: 'A folder with this name already exists here.',
+  folder_too_deep: 'Folders cannot be nested that deeply.',
   folder_not_empty: 'This folder is not empty. Move or delete its contents first.',
   invalid_name: 'That name is not allowed.',
   empty_update: 'There is nothing to change.',

@@ -1,0 +1,8 @@
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--cd-space-3);
+  margin-top: var(--cd-space-3);
+  color: var(--cd-text-muted);
+}

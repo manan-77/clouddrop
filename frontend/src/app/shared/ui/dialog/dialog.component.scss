@@ -1,0 +1,13 @@
+.dialog {
+  width: min(28rem, calc(100vw - 2rem));
+  padding: var(--cd-space-5);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-lg);
+  background: var(--cd-surface);
+  color: var(--cd-text);
+  box-shadow: var(--cd-shadow);
+
+  &::backdrop {
+    background: rgb(0 0 0 / 50%);
+  }
+}
