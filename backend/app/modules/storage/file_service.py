@@ -16,10 +16,9 @@ from app.modules.workspaces.service import WorkspaceService
 
 
 class FileService:
-    def __init__(self, session: Session, settings: Settings, storage: S3Storage) -> None:
+    def __init__(self, session: Session, settings: Settings) -> None:
         self.session = session
         self.settings = settings
-        self.storage = storage
         self.files = FileRepository(session)
         self.versions = FileVersionRepository(session)
         self.folders = FolderRepository(session)
@@ -33,6 +32,7 @@ class FileService:
         content_type: str,
         size_bytes: int,
         folder_id: uuid.UUID | None,
+        storage: S3Storage,
     ) -> tuple[File, PresignedUpload]:
         workspace_id = self._scope(user_id, Action.WRITE)
         normalized_type = content_type.split(";")[0].strip().lower()
@@ -71,11 +71,11 @@ class FileService:
             )
         )
         # Presign before committing so a storage failure leaves no orphan rows.
-        upload = self.storage.create_upload(key, normalized_type, size_bytes)
+        upload = storage.create_upload(key, normalized_type, size_bytes)
         self.session.commit()
         return file, upload
 
-    def complete_upload(self, user_id: uuid.UUID, file_id: uuid.UUID) -> File:
+    def complete_upload(self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage) -> File:
         workspace_id = self._scope(user_id, Action.WRITE)
         # Row lock: two concurrent completes must not both flip the status.
         file = self._get(workspace_id, file_id, for_update=True)
@@ -85,12 +85,12 @@ class FileService:
         if version is None:
             raise NotFoundError("File not found", code="file_not_found")
 
-        info = self.storage.head(version.s3_key)
+        info = storage.head(version.s3_key)
         if info is None:
             raise ConflictError("The file has not been uploaded yet", code="upload_incomplete")
         if info.size_bytes != file.size_bytes:
             # Never trust the client's claim: discard whatever was actually uploaded.
-            self.storage.delete(version.s3_key)
+            storage.delete(version.s3_key)
             file.status = FileStatus.FAILED
             self.session.commit()
             raise UnprocessableError(
@@ -155,7 +155,9 @@ class FileService:
         file.deleted_at = datetime.now(UTC)
         self.session.commit()
 
-    def create_download_url(self, user_id: uuid.UUID, file_id: uuid.UUID) -> tuple[str, int]:
+    def create_download_url(
+        self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage
+    ) -> tuple[str, int]:
         file = self._get(self._scope(user_id, Action.READ), file_id)
         if file.status == FileStatus.INFECTED:
             raise ForbiddenError(
@@ -167,7 +169,7 @@ class FileService:
         if version is None:
             raise NotFoundError("File not found", code="file_not_found")
         return (
-            self.storage.create_download_url(version.s3_key, file.name),
+            storage.create_download_url(version.s3_key, file.name),
             self.settings.presigned_download_ttl_seconds,
         )
 

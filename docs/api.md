@@ -42,4 +42,4 @@ Resources that do not belong to the caller return 404, never 403. The interactiv
 | DELETE | `/{file_id}` | 204 | Soft delete; the stored object is purged later |
 | GET | `/{file_id}/download` | 200 `{url, expires_in}` | Short-lived link forced to download. 409 `file_not_ready`, 403 `file_infected` |
 
-While no bucket is configured (`S3_BUCKET` empty), **every** `/api/v1/files*` route returns 503 `storage_not_configured`, because the S3 dependency is resolved for all of them. Auth, folders and health are unaffected.
+While no bucket is configured (`S3_BUCKET` empty), only the routes that talk to S3 return 503 `storage_not_configured`: upload init, upload completion and download. Listing, reading, renaming and deleting files, folders, auth and health are unaffected.

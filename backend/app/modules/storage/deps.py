@@ -70,13 +70,12 @@ def get_folder_service(session: SessionDep) -> FolderService:
     return FolderService(session)
 
 
-def get_file_service(
-    session: SessionDep,
-    settings: SettingsDep,
-    storage: Annotated[S3Storage, Depends(get_storage)],
-) -> FileService:
-    return FileService(session, settings, storage)
+def get_file_service(session: SessionDep, settings: SettingsDep) -> FileService:
+    return FileService(session, settings)
 
 
 FolderServiceDep = Annotated[FolderService, Depends(get_folder_service)]
+# Only the routes that really talk to S3 declare this, so listing, renaming and deleting work
+# even while no bucket is configured.
+StorageDep = Annotated[S3Storage, Depends(get_storage)]
 FileServiceDep = Annotated[FileService, Depends(get_file_service)]

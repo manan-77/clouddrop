@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, Response, status
 from app.core.pagination import Page, PageParamsDep
 from app.modules.auth.deps import CurrentUser
 from app.modules.storage.constants import FileStatus
-from app.modules.storage.deps import FileServiceDep
+from app.modules.storage.deps import FileServiceDep, StorageDep
 from app.modules.storage.schemas import (
     DownloadResponse,
     FileRead,
@@ -38,10 +38,14 @@ def list_files(
 
 @router.post("/uploads", response_model=UploadInitResponse, status_code=status.HTTP_201_CREATED)
 def init_upload(
-    body: FileUploadRequest, response: Response, user: CurrentUser, service: FileServiceDep
+    body: FileUploadRequest,
+    response: Response,
+    user: CurrentUser,
+    service: FileServiceDep,
+    storage: StorageDep,
 ) -> UploadInitResponse:
     file, upload = service.init_upload(
-        user.id, body.name, body.content_type, body.size_bytes, body.folder_id
+        user.id, body.name, body.content_type, body.size_bytes, body.folder_id, storage
     )
     response.headers["Location"] = f"/api/v1/files/{file.id}"
     return UploadInitResponse(
@@ -53,8 +57,10 @@ def init_upload(
 
 
 @router.post("/{file_id}/uploads/complete", response_model=FileRead, status_code=status.HTTP_200_OK)
-def complete_upload(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) -> FileRead:
-    return FileRead.model_validate(service.complete_upload(user.id, file_id))
+def complete_upload(
+    file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep, storage: StorageDep
+) -> FileRead:
+    return FileRead.model_validate(service.complete_upload(user.id, file_id, storage))
 
 
 @router.get("/{file_id}", response_model=FileRead, status_code=status.HTTP_200_OK)
@@ -83,7 +89,7 @@ def delete_file(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) 
 
 @router.get("/{file_id}/download", response_model=DownloadResponse, status_code=status.HTTP_200_OK)
 def download_file(
-    file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep
+    file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep, storage: StorageDep
 ) -> DownloadResponse:
-    url, expires_in = service.create_download_url(user.id, file_id)
+    url, expires_in = service.create_download_url(user.id, file_id, storage)
     return DownloadResponse(url=url, expires_in=expires_in)
