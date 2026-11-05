@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, text
 from sqlalchemy.orm import Session
 
+from app.core.errors import ServiceUnavailableError
+from app.modules.storage.deps import get_storage
 from tests.conftest import BUCKET
 
 if TYPE_CHECKING:
@@ -273,3 +275,29 @@ def test_listFiles_queryCountDoesNotGrowWithRows(
     with _count_queries(engine) as many:
         client.get("/api/v1/files", headers=headers)
     assert len(many) == len(few)
+
+
+def test_storageNotConfigured_onlyUploadAndDownloadRoutesNeedIt(
+    client: TestClient, make_user: Callable[[], Headers], s3_client: "S3Client"
+) -> None:
+    headers = make_user()
+    file_id = _ready_file(client, s3_client, headers)["id"]
+
+    def _not_configured() -> None:
+        raise ServiceUnavailableError("not configured", code="storage_not_configured")
+
+    client.app.dependency_overrides[get_storage] = _not_configured  # type: ignore[attr-defined]
+
+    assert client.get("/api/v1/files", headers=headers).status_code == 200
+    assert client.get(f"/api/v1/files/{file_id}", headers=headers).status_code == 200
+    renamed = client.patch(f"/api/v1/files/{file_id}", json={"name": "x.pdf"}, headers=headers)
+    assert renamed.status_code == 200
+    assert client.delete(f"/api/v1/files/{file_id}", headers=headers).status_code == 204
+
+    for response in (
+        _init(client, headers),
+        client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=headers),
+        client.get(f"/api/v1/files/{file_id}/download", headers=headers),
+    ):
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "storage_not_configured"

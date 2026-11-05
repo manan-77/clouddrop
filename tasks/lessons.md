@@ -57,3 +57,9 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 36. **If a cap makes a query safe, enforce the same cap at write time.** Otherwise the read silently truncates and returns a misleading result.
 37. **Tick a todo item only when a test covers it.** The soft-deleted ancestor case was ticked without one.
 38. **Standards exceptions are an ADR plus a note for the owner**, not a quiet deviation.
+
+## From the explorer work
+
+39. **Do not make a dependency global when only some routes need it.** Resolving S3 for every file route turned a missing bucket into an outage of list, rename and delete; declare the dependency on the routes that use it.
+40. **A `<form>` needs a form directive for `(ngSubmit)` to fire.** With reactive forms only, wrap controls in a form group, or the browser performs a real submit and reloads the page.
+41. **Initialise page-scoped stores lazily**, so opening a page does not load once for the default state and again for the real one.
