@@ -138,16 +138,16 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Tests: error resolver, pipes, theme switching.
 
 ### 6.2 Branch: feat/frontend-auth (OK-NOW)
-- [ ] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.
-- [ ] Session store using signals. Access token kept in memory only.
-- [ ] Auth interceptor attaches the token only to same-origin API calls. It must never attach it to the S3 upload address.
-- [ ] Single-flight refresh on 401: concurrent failures wait on one refresh, the original call is retried once, a failed refresh logs the user out.
-- [ ] Silent session restore on page load using the refresh cookie.
-- [ ] Pages: sign in, register, with typed reactive forms and inline validation that mirrors the server rules (email format, password length 12 to 128, name length).
-- [ ] Guards: authenticated, and guest-only for the auth pages.
-- [ ] Logout clears every in-memory store.
-- [ ] Every write shows progress on its button, disables it and guards against a double submit.
-- [ ] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
+- [x] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.
+- [x] Session store using signals. Access token kept in memory only.
+- [x] Auth interceptor attaches the token only to same-origin API calls. It must never attach it to the S3 upload address.
+- [x] Single-flight refresh on 401: concurrent failures wait on one refresh, the original call is retried once, a failed refresh logs the user out.
+- [x] Silent session restore on page load using the refresh cookie.
+- [x] Pages: sign in, register, with typed reactive forms and inline validation that mirrors the server rules (email format, password length 12 to 128, name length).
+- [x] Guards: authenticated, and guest-only for the auth pages.
+- [x] Logout clears every in-memory store.
+- [x] Every write shows progress on its button, disables it and guards against a double submit.
+- [x] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
 
 ### 6.3 Branch: feat/folder-path-api (backend, OK-NOW)
 - [ ] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
