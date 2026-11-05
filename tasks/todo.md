@@ -150,10 +150,10 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
 
 ### 6.3 Branch: feat/folder-path-api (backend, OK-NOW)
-- [ ] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
-- [ ] Protect against cycles and cap the depth.
-- [ ] Tests: root folder, deep chain, stranger gets 404, soft-deleted ancestor handling.
-- [ ] Update the API list in docs.
+- [x] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
+- [x] Protect against cycles and cap the depth.
+- [x] Tests: root folder, deep chain, stranger gets 404, soft-deleted ancestor handling.
+- [x] Update the API list in docs.
 
 ### 6.4 Branch: feat/frontend-explorer (OK-NOW)
 - [ ] Explorer page for the root and for a folder id, with breadcrumbs from the new endpoint.

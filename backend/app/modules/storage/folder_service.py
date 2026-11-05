@@ -13,6 +13,9 @@ from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FolderRepository
 from app.modules.workspaces.service import WorkspaceService
 
+# Breadcrumb queries stop climbing here, so a corrupted parent chain can never loop or run long.
+MAX_FOLDER_DEPTH = 50
+
 
 class FolderService:
     def __init__(self, session: Session) -> None:
@@ -32,6 +35,11 @@ class FolderService:
 
     def get_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> Folder:
         return self._get(self._scope(user_id, Action.READ), folder_id)
+
+    def get_folder_path(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> list[Folder]:
+        workspace_id = self._scope(user_id, Action.READ)
+        self._get(workspace_id, folder_id)
+        return self.folders.get_path(workspace_id, folder_id, MAX_FOLDER_DEPTH)
 
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
         workspace_id = self._scope(user_id, Action.WRITE)
