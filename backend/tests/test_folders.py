@@ -3,8 +3,9 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, func, update
 from sqlalchemy.orm import Session
 
 from app.modules.storage.models import Folder
@@ -226,3 +227,28 @@ def _sql_count(engine: Engine) -> Iterator[list[str]]:
         yield statements
     finally:
         event.remove(engine, "before_cursor_execute", _record)
+
+
+def test_createFolder_beyondMaxDepth_returns422(
+    client: TestClient, make_user: Callable[[], Headers], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.modules.storage.folder_service.MAX_FOLDER_DEPTH", 3)
+    headers = make_user()
+    ids = _chain(client, headers, 3)
+    response = _create(client, headers, "too-deep", ids[-1])
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "folder_too_deep"
+    assert _create(client, headers, "sibling-of-leaf", ids[-2]).status_code == 201
+
+
+def test_folderPath_softDeletedMiddleAncestor_pathStopsBelowIt(
+    client: TestClient, make_user: Callable[[], Headers], session: Session
+) -> None:
+    headers = make_user()
+    ids = _chain(client, headers, 5)
+    session.execute(
+        update(Folder).where(Folder.id == uuid.UUID(ids[1])).values(deleted_at=func.now())
+    )
+    response = client.get(f"/api/v1/folders/{ids[-1]}/path", headers=headers)
+    assert response.status_code == 200
+    assert [f["id"] for f in response.json()] == ids[2:]

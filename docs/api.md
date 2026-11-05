@@ -25,7 +25,7 @@ Resources that do not belong to the caller return 404, never 403. The interactiv
 | Method | Path | Success | Notes |
 |---|---|---|---|
 | GET | `` | 200 page | `parent_id` omitted = root |
-| POST | `` | 201 + `Location` | Body `name`, optional `parent_id`. 409 `folder_name_taken` |
+| POST | `` | 201 + `Location` | Body `name`, optional `parent_id`. 409 `folder_name_taken`, 422 `folder_too_deep` (more than 50 levels) |
 | GET | `/{folder_id}` | 200 | |
 | PATCH | `/{folder_id}` | 200 | Rename. 409 on a sibling name clash |
 | GET | `/{folder_id}/path` | 200 list | The folder and its ancestors, root first, for breadcrumbs. Not paginated on purpose: bounded by a depth cap of 50. 404 for other users' folders |

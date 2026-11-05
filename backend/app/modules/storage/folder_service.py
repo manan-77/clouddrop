@@ -5,7 +5,7 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.models import Folder
@@ -45,6 +45,15 @@ class FolderService:
         workspace_id = self._scope(user_id, Action.WRITE)
         if parent_id is not None:
             self._get(workspace_id, parent_id, lock="share")
+            # Enforced at write time so the breadcrumb cap can never silently truncate a path.
+            if (
+                len(self.folders.get_path(workspace_id, parent_id, MAX_FOLDER_DEPTH))
+                >= MAX_FOLDER_DEPTH
+            ):
+                raise UnprocessableError(
+                    f"Folders cannot be nested more than {MAX_FOLDER_DEPTH} levels deep",
+                    code="folder_too_deep",
+                )
         folder = Folder(workspace_id=workspace_id, parent_id=parent_id, name=sanitize_name(name))
         try:
             # The unique index is the arbiter, not a prior existence check.
