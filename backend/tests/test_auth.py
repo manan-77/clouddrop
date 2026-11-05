@@ -151,3 +151,44 @@ def test_errorEnvelope_unknownRoute_usesSharedShapeAndRequestId(client: TestClie
 def test_health_liveAndReady_returnOk(client: TestClient) -> None:
     assert client.get("/health").json() == {"status": "ok"}
     assert client.get("/health/ready").json() == {"status": "ready"}
+
+
+def test_register_whitespaceOnlyName_returns422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": _email(), "password": PASSWORD, "display_name": "   "},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"][0]["field"] == "display_name"
+
+
+def test_register_nameWithSurroundingSpaces_isStoredTrimmed(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": _email(), "password": PASSWORD, "display_name": "  Ada  "},
+    )
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "Ada"
+
+
+def test_register_nameWithNonBreakingSpaceOnly_returns422(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": _email(), "password": PASSWORD, "display_name": "\u00a0\u00a0"},
+    )
+    assert response.status_code == 422
+
+
+def test_register_hundredCharacterNamePaddedWithSpaces_isAcceptedAndTrimmed(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": _email(),
+            "password": PASSWORD,
+            "display_name": " " * 30 + "a" * 100 + " " * 30,
+        },
+    )
+    assert response.status_code == 201
+    assert response.json()["display_name"] == "a" * 100

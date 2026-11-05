@@ -421,9 +421,10 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] The register endpoint reveals whether an email exists (409). Accepted trade-off for now, revisit with email verification.
 - [ ] Minor review findings that are not fixed in their PR must be listed here with the PR number.
 - [ ] (PR 5, NEEDS-YOU) frontend/CLAUDE.md has two rules that conflict literally ("never auto-retry a write" and "retry once after a refresh on 401"). ADR 0006 records the chosen reading; owner to confirm or reword the standard (not edited by me).
-- [ ] (PR 5, backend) `display_name` is stripped after the min-length check, so a whitespace-only name can be stored as empty; fix in the backend with a stripped constrained string and add a test.
+- [x] (PR 5, backend) FIXED in PR 6: `display_name` was stripped after the min-length check, so a whitespace-only name can be stored as empty; fix in the backend with a stripped constrained string and add a test.
 - [ ] (PR 5) No cross-tab logout sync (another tab stays signed in until its access token expires); no returnUrl after expiry; the access token is not refreshed proactively before it expires.
 - [ ] (PR 5) If the logout API call fails the UI shows signed out but the refresh cookie may still be valid; cancelling a page mid-sign-in leaves state that heals on the next restore.
+- [ ] (PR 6) Names made only of zero-width characters (U+200B, U+200C, U+200D, U+2060) are not stripped and display as invisible; reject names with no visible character for display names and file/folder names. A name truncated at 255 characters can end in a space (cosmetic).
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

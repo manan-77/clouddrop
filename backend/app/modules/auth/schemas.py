@@ -1,14 +1,18 @@
 import uuid
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 
 class RegisterRequest(BaseModel):
     email: EmailStr
     # 128 caps the cost of hashing a hostile input.
     password: str = Field(min_length=12, max_length=128)
-    display_name: str = Field(min_length=1, max_length=100)
+    # Trimmed before the length check, so a whitespace-only name is rejected, not stored empty.
+    display_name: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+    ]
 
 
 class LoginRequest(BaseModel):
