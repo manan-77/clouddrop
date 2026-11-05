@@ -51,3 +51,9 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 33. **Match endpoint paths with a pattern, not equality**: trailing slashes, query strings and fragments must not turn an auth call into a normal call. Reject dot segments and encoded dots before treating a URL as same-origin API.
 34. **When two standards conflict, do not silently pick one**: record the reading as an ADR, comment it in the code, and flag the standard for the owner.
 35. **Server field errors must clear when the field is edited**, and a failed submit should focus the first invalid field.
+
+## From the PR 7 review (folder path)
+
+36. **If a cap makes a query safe, enforce the same cap at write time.** Otherwise the read silently truncates and returns a misleading result.
+37. **Tick a todo item only when a test covers it.** The soft-deleted ancestor case was ticked without one.
+38. **Standards exceptions are an ADR plus a note for the owner**, not a quiet deviation.

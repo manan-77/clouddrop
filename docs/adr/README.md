@@ -10,3 +10,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0004](0004-angular-21-pinned.md) | Angular 21 pinned because local Node 25 does not satisfy Angular 22 | Accepted |
 | [0005](0005-design-tokens-no-ui-kit.md) | Plain SCSS design tokens, no UI kit | Accepted |
 | [0006](0006-retry-after-401-includes-writes.md) | The single retry after a 401 includes writes | Accepted |
+| [0007](0007-folder-path-endpoint-is-unpaged.md) | The folder path endpoint is not paginated | Accepted |

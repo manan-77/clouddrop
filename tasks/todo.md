@@ -150,10 +150,10 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
 
 ### 6.3 Branch: feat/folder-path-api (backend, OK-NOW)
-- [ ] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
-- [ ] Protect against cycles and cap the depth.
-- [ ] Tests: root folder, deep chain, stranger gets 404, soft-deleted ancestor handling.
-- [ ] Update the API list in docs.
+- [x] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
+- [x] Protect against cycles and cap the depth.
+- [x] Tests: root folder, deep chain, stranger gets 404, soft-deleted ancestor handling.
+- [x] Update the API list in docs.
 
 ### 6.4 Branch: feat/frontend-explorer (OK-NOW)
 - [ ] Explorer page for the root and for a folder id, with breadcrumbs from the new endpoint.
@@ -425,6 +425,8 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 5) No cross-tab logout sync (another tab stays signed in until its access token expires); no returnUrl after expiry; the access token is not refreshed proactively before it expires.
 - [ ] (PR 5) If the logout API call fails the UI shows signed out but the refresh cookie may still be valid; cancelling a page mid-sign-in leaves state that heals on the next restore.
 - [ ] (PR 6) Names made only of zero-width characters (U+200B, U+200C, U+200D, U+2060) are not stripped and display as invisible; reject names with no visible character for display names and file/folder names. A name truncated at 255 characters can end in a space (cosmetic).
+- [ ] (PR 7, NEEDS-YOU) Root CLAUDE.md says 'no unpaged collection endpoint, ever'; ADR 0007 records the folder path exception. Owner to confirm or reword the standard (not edited by me).
+- [ ] (PR 7) The permission matrix has only owner and stranger so far; editor, viewer and revoked arrive with sharing (Phase 4). Folder moves need cycle prevention before they exist.
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

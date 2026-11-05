@@ -41,6 +41,14 @@ def get_folder(folder_id: uuid.UUID, user: CurrentUser, service: FolderServiceDe
     return FolderRead.model_validate(service.get_folder(user.id, folder_id))
 
 
+@router.get("/{folder_id}/path", response_model=list[FolderRead], status_code=status.HTTP_200_OK)
+def get_folder_path(
+    folder_id: uuid.UUID, user: CurrentUser, service: FolderServiceDep
+) -> list[FolderRead]:
+    # Not paginated on purpose: the chain is bounded by MAX_FOLDER_DEPTH, root first.
+    return [FolderRead.model_validate(f) for f in service.get_folder_path(user.id, folder_id)]
+
+
 @router.patch("/{folder_id}", response_model=FolderRead, status_code=status.HTTP_200_OK)
 def rename_folder(
     folder_id: uuid.UUID, body: FolderUpdate, user: CurrentUser, service: FolderServiceDep

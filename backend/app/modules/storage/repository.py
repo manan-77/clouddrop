@@ -1,8 +1,8 @@
 import uuid
 from typing import Literal
 
-from sqlalchemy import ColumnElement, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import ColumnElement, func, literal, select
+from sqlalchemy.orm import Session, aliased
 
 from app.db.soft_delete import only_active
 from app.modules.storage.constants import FileStatus
@@ -34,6 +34,30 @@ class FolderRepository:
         elif lock == "share":
             query = query.with_for_update(read=True)
         return self.session.scalar(query)
+
+    def get_path(
+        self, workspace_id: uuid.UUID, folder_id: uuid.UUID, max_depth: int
+    ) -> list[Folder]:
+        """The folder and its ancestors, root first, in one recursive query."""
+        chain = (
+            select(Folder.id, Folder.parent_id, literal(1).label("depth"))
+            .where(Folder.id == folder_id, Folder.workspace_id == workspace_id, only_active(Folder))
+            .cte("chain", recursive=True)
+        )
+        parent = aliased(Folder)
+        chain = chain.union_all(
+            select(parent.id, parent.parent_id, chain.c.depth + 1)
+            .join(chain, parent.id == chain.c.parent_id)
+            .where(
+                parent.workspace_id == workspace_id,
+                only_active(parent),
+                chain.c.depth < max_depth,
+            )
+        )
+        rows = self.session.scalars(
+            select(Folder).join(chain, Folder.id == chain.c.id).order_by(chain.c.depth.desc())
+        )
+        return list(rows)
 
     def list_children(
         self, workspace_id: uuid.UUID, parent_id: uuid.UUID | None, limit: int, offset: int

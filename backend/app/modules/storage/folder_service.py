@@ -5,13 +5,16 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.models import Folder
 from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FolderRepository
 from app.modules.workspaces.service import WorkspaceService
+
+# Breadcrumb queries stop climbing here, so a corrupted parent chain can never loop or run long.
+MAX_FOLDER_DEPTH = 50
 
 
 class FolderService:
@@ -33,10 +36,24 @@ class FolderService:
     def get_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> Folder:
         return self._get(self._scope(user_id, Action.READ), folder_id)
 
+    def get_folder_path(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> list[Folder]:
+        workspace_id = self._scope(user_id, Action.READ)
+        self._get(workspace_id, folder_id)
+        return self.folders.get_path(workspace_id, folder_id, MAX_FOLDER_DEPTH)
+
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
         workspace_id = self._scope(user_id, Action.WRITE)
         if parent_id is not None:
             self._get(workspace_id, parent_id, lock="share")
+            # Enforced at write time so the breadcrumb cap can never silently truncate a path.
+            if (
+                len(self.folders.get_path(workspace_id, parent_id, MAX_FOLDER_DEPTH))
+                >= MAX_FOLDER_DEPTH
+            ):
+                raise UnprocessableError(
+                    f"Folders cannot be nested more than {MAX_FOLDER_DEPTH} levels deep",
+                    code="folder_too_deep",
+                )
         folder = Folder(workspace_id=workspace_id, parent_id=parent_id, name=sanitize_name(name))
         try:
             # The unique index is the arbiter, not a prior existence check.
