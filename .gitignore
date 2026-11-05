@@ -1,0 +1,28 @@
+# secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# node / angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+
+# infra / os / ide
+.DS_Store
+.idea/
+.vscode/
+*.log
+pgdata/
