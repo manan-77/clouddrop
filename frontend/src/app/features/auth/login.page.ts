@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   signal,
 } from '@angular/core';
@@ -11,11 +12,15 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { ErrorResolver } from '@core/error/error-resolver.service';
 import { AuthService } from '@core/auth/auth.service';
+import { ErrorResolver } from '@core/error/error-resolver.service';
 import { validationMessage } from '@shared/forms/validation-messages';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { FieldErrorComponent } from '@shared/ui/field-error/field-error.component';
+
+type Field = 'email' | 'password';
+const FIELDS: readonly Field[] = ['email', 'password'];
+const LABELS: Readonly<Record<Field, string>> = { email: 'Email', password: 'Password' };
 
 @Component({
   selector: 'cd-login-page',
@@ -36,7 +41,7 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
             aria-describedby="login-email-error"
             [attr.aria-invalid]="emailMessage() ? 'true' : null"
             (blur)="validate('email')"
-            (input)="validate('email')"
+            (input)="edited('email')"
           />
           <cd-field-error fieldId="login-email-error" [message]="emailMessage()" />
         </div>
@@ -51,7 +56,7 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
             aria-describedby="login-password-error"
             [attr.aria-invalid]="passwordMessage() ? 'true' : null"
             (blur)="validate('password')"
-            (input)="validate('password')"
+            (input)="edited('password')"
           />
           <cd-field-error fieldId="login-password-error" [message]="passwordMessage()" />
         </div>
@@ -71,6 +76,7 @@ export class LoginPage {
   private readonly router = inject(Router);
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     email: ['', [Validators.required, Validators.email]],
@@ -78,31 +84,39 @@ export class LoginPage {
   });
   protected readonly submitting = signal(false);
   protected readonly formError = signal<string | null>(null);
-  private readonly localErrors = signal<Readonly<Record<string, string | null>>>({});
+  private readonly localErrors = signal<Readonly<Partial<Record<Field, string | null>>>>({});
   private readonly serverErrors = signal<Readonly<Record<string, string>>>({});
 
   protected readonly emailMessage = computed(
-    () => this.localErrors()['email'] ?? this.serverErrors()['email'] ?? null,
+    () => this.localErrors().email ?? this.serverErrors()['email'] ?? null,
   );
   protected readonly passwordMessage = computed(
-    () => this.localErrors()['password'] ?? this.serverErrors()['password'] ?? null,
+    () => this.localErrors().password ?? this.serverErrors()['password'] ?? null,
   );
 
-  protected validate(field: 'email' | 'password'): void {
-    const label = field === 'email' ? 'Email' : 'Password';
+  protected validate(field: Field): void {
     this.localErrors.update((errors) => ({
       ...errors,
-      [field]: validationMessage(this.form.controls[field], label),
+      [field]: validationMessage(this.form.controls[field], LABELS[field]),
     }));
+  }
+
+  /** Typing again dismisses the server's complaint about that field. */
+  protected edited(field: Field): void {
+    this.serverErrors.update((errors) =>
+      Object.fromEntries(Object.entries(errors).filter(([name]) => name !== field)),
+    );
+    this.validate(field);
   }
 
   protected submit(): void {
     if (this.submitting()) {
       return;
     }
-    this.validate('email');
-    this.validate('password');
-    if (this.form.invalid) {
+    FIELDS.forEach((field) => this.validate(field));
+    const firstInvalid = FIELDS.find((field) => this.form.controls[field].invalid);
+    if (firstInvalid) {
+      this.host.nativeElement.querySelector<HTMLElement>(`#login-${firstInvalid}`)?.focus();
       return;
     }
     this.submitting.set(true);

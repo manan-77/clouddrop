@@ -33,7 +33,9 @@ describe('AppShellComponent', () => {
   });
 
   it('anonymous_showsSignInLinksAndNoSignOut', async () => {
-    const { root } = await setup();
+    const { fixture, root } = await setup();
+    TestBed.inject(SessionStore).clear();
+    await fixture.whenStable();
     const links = [...root.querySelectorAll('nav a')].map((a) => a.textContent?.trim());
     expect(links).toEqual(['Sign in', 'Create account']);
     expect(root.textContent).not.toContain('Sign out');
@@ -57,5 +59,11 @@ describe('AppShellComponent', () => {
     await fixture.whenStable();
     expect(session.isAuthenticated()).toBe(false);
     expect(session.accessToken()).toBeNull();
+  });
+
+  it('sessionUnknown_showsNoNavLinksYetSoThereIsNoFlicker', async () => {
+    const { root } = await setup();
+    TestBed.inject(SessionStore).status.set('unknown');
+    expect(root.querySelectorAll('nav a').length).toBe(0);
   });
 });

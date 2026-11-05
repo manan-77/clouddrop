@@ -6,7 +6,7 @@ export function validationMessage(control: AbstractControl, label: string): stri
   if (!errors) {
     return null;
   }
-  if (errors['required']) {
+  if (errors['required'] || errors['blank']) {
     return `${label} is required.`;
   }
   if (errors['email']) {

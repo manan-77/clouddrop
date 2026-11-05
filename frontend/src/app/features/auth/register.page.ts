@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   signal,
 } from '@angular/core';
@@ -11,17 +12,24 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
-import { AuthService } from '@core/auth/auth.service';
+import { AccountCreatedSignInError, AuthService } from '@core/auth/auth.service';
 import { ErrorResolver } from '@core/error/error-resolver.service';
+import { notBlank } from '@shared/forms/validators';
 import { validationMessage } from '@shared/forms/validation-messages';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { FieldErrorComponent } from '@shared/ui/field-error/field-error.component';
 
 type Field = 'display_name' | 'email' | 'password';
+const FIELDS: readonly Field[] = ['display_name', 'email', 'password'];
 const LABELS: Readonly<Record<Field, string>> = {
   display_name: 'Name',
   email: 'Email',
   password: 'Password',
+};
+const INPUT_IDS: Readonly<Record<Field, string>> = {
+  display_name: 'register-name',
+  email: 'register-email',
+  password: 'register-password',
 };
 
 @Component({
@@ -43,7 +51,7 @@ const LABELS: Readonly<Record<Field, string>> = {
             aria-describedby="register-name-error"
             [attr.aria-invalid]="messages().display_name ? 'true' : null"
             (blur)="validate('display_name')"
-            (input)="validate('display_name')"
+            (input)="edited('display_name')"
           />
           <cd-field-error fieldId="register-name-error" [message]="messages().display_name" />
         </div>
@@ -58,7 +66,7 @@ const LABELS: Readonly<Record<Field, string>> = {
             aria-describedby="register-email-error"
             [attr.aria-invalid]="messages().email ? 'true' : null"
             (blur)="validate('email')"
-            (input)="validate('email')"
+            (input)="edited('email')"
           />
           <cd-field-error fieldId="register-email-error" [message]="messages().email" />
         </div>
@@ -73,7 +81,7 @@ const LABELS: Readonly<Record<Field, string>> = {
             aria-describedby="register-password-hint register-password-error"
             [attr.aria-invalid]="messages().password ? 'true' : null"
             (blur)="validate('password')"
-            (input)="validate('password')"
+            (input)="edited('password')"
           />
           <p id="register-password-hint" class="cd-hint">12 to 128 characters.</p>
           <cd-field-error fieldId="register-password-error" [message]="messages().password" />
@@ -94,9 +102,10 @@ export class RegisterPage {
   private readonly router = inject(Router);
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected readonly form = inject(NonNullableFormBuilder).group({
-    display_name: ['', [Validators.required, Validators.maxLength(100)]],
+    display_name: ['', [Validators.required, notBlank, Validators.maxLength(100)]],
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(12), Validators.maxLength(128)]],
   });
@@ -118,12 +127,22 @@ export class RegisterPage {
     }));
   }
 
+  /** Typing again dismisses the server's complaint about that field. */
+  protected edited(field: Field): void {
+    this.serverErrors.update((errors) =>
+      Object.fromEntries(Object.entries(errors).filter(([name]) => name !== field)),
+    );
+    this.validate(field);
+  }
+
   protected submit(): void {
     if (this.submitting()) {
       return;
     }
-    (Object.keys(LABELS) as Field[]).forEach((field) => this.validate(field));
-    if (this.form.invalid) {
+    FIELDS.forEach((field) => this.validate(field));
+    const firstInvalid = FIELDS.find((field) => this.form.controls[field].invalid);
+    if (firstInvalid) {
+      this.host.nativeElement.querySelector<HTMLElement>(`#${INPUT_IDS[firstInvalid]}`)?.focus();
       return;
     }
     this.submitting.set(true);
@@ -139,6 +158,11 @@ export class RegisterPage {
       .subscribe({
         next: () => void this.router.navigateByUrl('/'),
         error: (error: unknown) => {
+          if (error instanceof AccountCreatedSignInError) {
+            // The account exists now; registering again would only say "already exists".
+            void this.router.navigateByUrl('/login');
+            return;
+          }
           const resolved = this.resolver.resolve(error);
           if (resolved.code === 'conflict') {
             this.serverErrors.set({ email: 'An account with this email already exists.' });

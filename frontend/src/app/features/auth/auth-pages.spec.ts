@@ -162,4 +162,73 @@ describe('RegisterPage', () => {
     await fixture.whenStable();
     expect(text(root, '#register-password-error')).toBe('Rejected by server');
   });
+
+  describe('auth forms behaviour', () => {
+    afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+    it('loginSubmitInvalid_movesFocusToTheFirstInvalidField', async () => {
+      TestBed.configureTestingModule({ providers: provideAuthTesting() });
+      const fixture = TestBed.createComponent(LoginPage);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      submit(root);
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(root.querySelector('#login-email'));
+    });
+
+    it('loginServerFieldError_disappearsWhenTheFieldIsEditedAgain', async () => {
+      TestBed.configureTestingModule({ providers: provideAuthTesting() });
+      vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      const fixture = TestBed.createComponent(LoginPage);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      fill(root, 'login-email', 'ada@example.com');
+      fill(root, 'login-password', 'whatever-it-is');
+      submit(root);
+      TestBed.inject(HttpTestingController)
+        .expectOne('/api/v1/auth/login')
+        .flush(ENVELOPE('validation_error', [{ field: 'email', message: 'Server says no' }]), {
+          status: 422,
+          statusText: 'Unprocessable',
+        });
+      await fixture.whenStable();
+      expect(text(root, '#login-email-error')).toBe('Server says no');
+      fill(root, 'login-email', 'ada2@example.com');
+      await fixture.whenStable();
+      expect(text(root, '#login-email-error')).toBe('');
+    });
+
+    it('registerWhitespaceOnlyName_isRejectedAsRequired', async () => {
+      TestBed.configureTestingModule({ providers: provideAuthTesting() });
+      const fixture = TestBed.createComponent(RegisterPage);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      fill(root, 'register-name', '   ');
+      fill(root, 'register-email', 'ada@example.com');
+      fill(root, 'register-password', 'a-long-password');
+      submit(root);
+      await fixture.whenStable();
+      expect(text(root, '#register-name-error')).toBe('Name is required.');
+      TestBed.inject(HttpTestingController).expectNone('/api/v1/auth/register');
+    });
+
+    it('registerSucceedsButSignInFails_sendsTheUserToSignInInsteadOfRegisteringAgain', async () => {
+      TestBed.configureTestingModule({ providers: provideAuthTesting() });
+      const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      const fixture = TestBed.createComponent(RegisterPage);
+      await fixture.whenStable();
+      const root = fixture.nativeElement as HTMLElement;
+      fill(root, 'register-name', 'Ada');
+      fill(root, 'register-email', 'ada@example.com');
+      fill(root, 'register-password', 'a-long-password');
+      submit(root);
+      const backend = TestBed.inject(HttpTestingController);
+      backend.expectOne('/api/v1/auth/register').flush(USER);
+      backend
+        .expectOne('/api/v1/auth/login')
+        .flush(null, { status: 500, statusText: 'Server Error' });
+      await fixture.whenStable();
+      expect(navigate).toHaveBeenCalledWith('/login');
+    });
+  });
 });

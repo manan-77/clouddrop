@@ -2,7 +2,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { AuthService } from './auth.service';
+import { AccountCreatedSignInError, AuthService } from './auth.service';
 import { ENVELOPE, provideAuthTesting, TOKENS, USER } from './auth-testing';
 import { SessionStore } from './session.store';
 
@@ -105,5 +105,45 @@ describe('AuthService', () => {
     expect(session.isAuthenticated()).toBe(false);
     expect(session.accessToken()).toBeNull();
     expect(router.navigateByUrl).toHaveBeenCalledWith('/login');
+  });
+
+  it('ensureSession_networkErrorAtRestore_staysUnknownAndRetriesNextTime', () => {
+    const { service, backend, session } = setup();
+    const results: boolean[] = [];
+    service.ensureSession().subscribe((ok) => results.push(ok));
+    backend.expectOne('/api/v1/auth/refresh').error(new ProgressEvent('error'));
+    expect(results).toEqual([false]);
+    expect(session.status()).toBe('unknown');
+
+    service.ensureSession().subscribe((ok) => results.push(ok));
+    backend.expectOne('/api/v1/auth/refresh').flush(TOKENS('t'));
+    backend.expectOne('/api/v1/auth/me').flush(USER);
+    expect(results).toEqual([false, true]);
+  });
+
+  it('ensureSession_logoutDuringRestore_doesNotResurrectTheSession', () => {
+    const { service, backend, session } = setup();
+    const results: boolean[] = [];
+    service.ensureSession().subscribe((ok) => results.push(ok));
+    backend.expectOne('/api/v1/auth/refresh').flush(TOKENS('t'));
+    const me = backend.expectOne('/api/v1/auth/me');
+    session.clear();
+    me.flush(USER);
+    expect(results).toEqual([false]);
+    expect(session.isAuthenticated()).toBe(false);
+    expect(session.accessToken()).toBeNull();
+  });
+
+  it('registerAndSignIn_signInFails_raisesAccountCreatedError', () => {
+    const { service, backend } = setup();
+    let error: unknown;
+    service
+      .registerAndSignIn('a@b.c', 'a-long-password', 'A')
+      .subscribe({ error: (e) => (error = e) });
+    backend.expectOne('/api/v1/auth/register').flush(USER);
+    backend
+      .expectOne('/api/v1/auth/login')
+      .flush(null, { status: 500, statusText: 'Server Error' });
+    expect(error).toBeInstanceOf(AccountCreatedSignInError);
   });
 });

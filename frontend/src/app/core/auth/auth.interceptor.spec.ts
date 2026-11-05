@@ -3,6 +3,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
+import { AuthService } from './auth.service';
 import { provideAuthTesting, TOKENS } from './auth-testing';
 import { SessionStore } from './session.store';
 
@@ -120,5 +121,123 @@ describe('authInterceptor', () => {
     backend.expectOne('/api/v1/folders').flush(null, { status: 500, statusText: 'Server Error' });
     backend.expectNone('/api/v1/auth/refresh');
     expect(error?.status).toBe(500);
+  });
+
+  it.each([
+    '//evil.example/api/v1/folders',
+    'http://localhost/api/v1/folders',
+    '/api/v1/../admin',
+    '/api/v1/%2e%2e/admin',
+  ])('suspiciousUrl_%s_neverReceivesTheToken', (url) => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('secret-token');
+    http.get(url).subscribe();
+    expect(backend.expectOne(url).request.headers.has('Authorization')).toBe(false);
+  });
+
+  it.each(['/api/v1/auth/login/', '/api/v1/auth/login?x=1', '/api/v1/auth/refresh/'])(
+    'authEndpointVariant_%s_isStillTreatedAsAuthEndpoint',
+    (url) => {
+      const { http, backend, session } = setup();
+      session.setAccessToken('t1');
+      http.post(url, {}).subscribe({ error: () => undefined });
+      const request = backend.expectOne(url);
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush(null, UNAUTHORIZED);
+      backend.expectNone('/api/v1/auth/refresh');
+    },
+  );
+
+  it('unauthorizedWrite_isRetriedOnceWithTheSameBody', () => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('old');
+    http.post('/api/v1/folders', { name: 'Reports' }).subscribe();
+    backend.expectOne('/api/v1/folders').flush(null, UNAUTHORIZED);
+    backend.expectOne('/api/v1/auth/refresh').flush(TOKENS('new'));
+    const retry = backend.expectOne('/api/v1/folders');
+    expect(retry.request.method).toBe('POST');
+    expect(retry.request.body).toEqual({ name: 'Reports' });
+    expect(retry.request.headers.get('Authorization')).toBe('Bearer new');
+    retry.flush({});
+  });
+
+  it('unauthorizedAfterAnotherRequestRefreshed_retriesWithCurrentTokenWithoutRefreshing', () => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('old');
+    http.get('/api/v1/folders').subscribe();
+    const first = backend.expectOne('/api/v1/folders');
+    session.setAccessToken('newer');
+    first.flush(null, UNAUTHORIZED);
+    backend.expectNone('/api/v1/auth/refresh');
+    const retry = backend.expectOne('/api/v1/folders');
+    expect(retry.request.headers.get('Authorization')).toBe('Bearer newer');
+    retry.flush({});
+  });
+
+  it('refreshNetworkError_keepsTheSessionAndSurfacesTheOriginalError', () => {
+    const { http, backend, session, router } = setup();
+    session.setAccessToken('old');
+    session.establish({ id: 'u', email: 'a@b.c', display_name: 'A', created_at: '' });
+    let error: HttpErrorResponse | undefined;
+    http.get('/api/v1/folders').subscribe({ error: (e: HttpErrorResponse) => (error = e) });
+    backend.expectOne('/api/v1/folders').flush(null, UNAUTHORIZED);
+    backend.expectOne('/api/v1/auth/refresh').error(new ProgressEvent('error'));
+    expect(error?.status).toBe(401);
+    expect(session.isAuthenticated()).toBe(true);
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
+  it('refreshAfterAnEarlierFailedRefresh_startsAFreshRequest', () => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('old');
+    http.get('/api/v1/folders').subscribe({ error: () => undefined });
+    backend.expectOne('/api/v1/folders').flush(null, UNAUTHORIZED);
+    backend.expectOne('/api/v1/auth/refresh').flush(null, UNAUTHORIZED);
+
+    session.setAccessToken('again');
+    http.get('/api/v1/files').subscribe({ error: () => undefined });
+    backend.expectOne('/api/v1/files').flush(null, UNAUTHORIZED);
+    backend.expectOne('/api/v1/auth/refresh').flush(TOKENS('fresh'));
+    backend.expectOne('/api/v1/files').flush({});
+  });
+
+  it('logoutWhileRefreshInFlight_neverResurrectsTheSession', () => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('old');
+    session.establish({ id: 'u', email: 'a@b.c', display_name: 'A', created_at: '' });
+    let error: HttpErrorResponse | undefined;
+    http.get('/api/v1/folders').subscribe({ error: (e: HttpErrorResponse) => (error = e) });
+    backend.expectOne('/api/v1/folders').flush(null, UNAUTHORIZED);
+    const refresh = backend.expectOne('/api/v1/auth/refresh');
+
+    TestBed.inject(AuthService).logout().subscribe();
+    backend.expectOne('/api/v1/auth/logout').flush(null);
+    refresh.flush(TOKENS('stale'));
+
+    backend.expectNone('/api/v1/folders');
+    expect(error?.status).toBe(401);
+    expect(session.accessToken()).toBeNull();
+    expect(session.status()).toBe('anonymous');
+  });
+
+  it('loginWhileRefreshInFlight_keepsTheNewSessionAndDropsTheStaleToken', () => {
+    const { http, backend, session } = setup();
+    session.setAccessToken('old');
+    http.get('/api/v1/folders').subscribe({ error: () => undefined });
+    backend.expectOne('/api/v1/folders').flush(null, UNAUTHORIZED);
+    const refresh = backend.expectOne('/api/v1/auth/refresh');
+
+    TestBed.inject(AuthService).login('a@b.c', 'password-12345').subscribe();
+    refresh.flush(TOKENS('stale'));
+    backend.expectOne('/api/v1/auth/login').flush(TOKENS('fresh'));
+    backend.expectOne('/api/v1/auth/me').flush({
+      id: 'u',
+      email: 'a@b.c',
+      display_name: 'A',
+      created_at: '',
+    });
+    expect(session.accessToken()).toBe('fresh');
+    expect(session.isAuthenticated()).toBe(true);
+    backend.expectNone('/api/v1/folders');
   });
 });
