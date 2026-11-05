@@ -5,7 +5,7 @@ Current schema after migrations 0001 and 0002. Primary keys are UUIDs generated 
 ```mermaid
 erDiagram
     users ||--o{ refresh_tokens : "has"
-    users ||--|| workspaces : "owns (one personal workspace)"
+    users ||--o| workspaces : "owns (at most one; register creates it)"
     workspaces ||--o{ folders : "contains"
     workspaces ||--o{ files : "contains"
     folders ||--o{ folders : "parent of"
@@ -69,6 +69,12 @@ erDiagram
         timestamptz created_at
     }
 ```
+
+## Delete rules
+
+- `refresh_tokens.user_id`, `workspaces.owner_id`, `folders.workspace_id`, `files.workspace_id` and `file_versions.file_id` cascade from their parent.
+- `folders.parent_id` and `files.folder_id` are RESTRICT: a folder row with children cannot be hard-deleted. The API only soft-deletes, and refuses to delete a non-empty folder.
+- Nullable columns: `refresh_tokens.revoked_at`, `file_versions.etag`, `folders.deleted_at`, `files.deleted_at`, `folders.parent_id`, `files.folder_id`.
 
 ## File status machine
 
