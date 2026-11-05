@@ -1,0 +1,15 @@
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--cd-space-2);
+  padding: var(--cd-space-8) var(--cd-space-4);
+  text-align: center;
+  border: 1px dashed var(--cd-border);
+  border-radius: var(--cd-radius-lg);
+  background: var(--cd-surface);
+}
+
+p {
+  margin: 0;
+  color: var(--cd-text-muted);
+}

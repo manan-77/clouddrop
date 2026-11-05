@@ -10,15 +10,17 @@ It never talks to AWS or the AI gateway except the one S3 upload step (presigned
 
 ## Stack & commands
 
-Angular (latest stable; **pin the exact version when scaffolding and record it**) · TypeScript `strict` · RxJS · Signals · Vitest · ESLint · Prettier. Styling: SCSS with design tokens as CSS custom properties. **No UI kit, Tailwind or icon font without an ADR.**
+Angular 21.2 (standalone, zoneless, signals) · TypeScript 5.9 `strict` · RxJS 7.8 · Vitest 4 (via `@angular/build:unit-test`, jsdom) · ESLint 10 with angular-eslint · Prettier 3. Styling: SCSS with design tokens as CSS custom properties (`src/styles/_tokens.scss`). **No UI kit, Tailwind or icon font without an ADR.** Angular 21 is pinned because the local Node 25 does not satisfy the Angular 22 CLI (see ADR 0004).
 
 ```bash
-npm start                  # ng serve with proxy.conf.json -> backend
-ng build | ng test | ng lint
-npm run format             # prettier
+npm start              # ng serve on :4200, proxies /api and /health to the backend on :8000
+npm run build          # production build; budgets are enforced
+npm test               # unit tests, single run
+npm run lint           # ng lint
+npm run format         # prettier --write ; npm run format:check to verify
 ```
 
-Dev uses a proxy so the app is same-origin with the API (cookies and CORS behave like production). **No hostname, port or API base is baked into the build**; the API base is the relative path `/api/v1`.
+Dev uses `proxy.conf.json` so the app is same-origin with the API (cookies and CORS behave like production). **No hostname, port or API base is baked into the build**; the API base is the relative path `/api/v1`.
 
 ## Structure & layering
 

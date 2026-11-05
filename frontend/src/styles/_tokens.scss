@@ -1,0 +1,73 @@
+// Design tokens. The only place colours, spacing, radii and type sizes are defined.
+@mixin dark-tokens {
+  color-scheme: dark;
+  --cd-bg: #0f1217;
+  --cd-surface: #171b22;
+  --cd-surface-2: #1f2530;
+  --cd-border: #2c3441;
+  --cd-text: #e8ecf3;
+  --cd-text-muted: #a3adbd;
+  --cd-primary: #7aa2ff;
+  --cd-primary-hover: #9bb9ff;
+  --cd-primary-text: #0b1220;
+  --cd-danger: #ff8a80;
+  --cd-danger-hover: #ffa8a0;
+  --cd-danger-text: #1d0a08;
+  --cd-danger-bg: #3a1714;
+  --cd-success: #6fdc9a;
+  --cd-focus: #9bb9ff;
+  --cd-skeleton-a: #1f2530;
+  --cd-skeleton-b: #2a3240;
+  --cd-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 16px rgb(0 0 0 / 30%);
+}
+
+:root {
+  color-scheme: light;
+  --cd-bg: #f6f7f9;
+  --cd-surface: #ffffff;
+  --cd-surface-2: #eef1f5;
+  --cd-border: #d5dbe4;
+  --cd-text: #14181f;
+  --cd-text-muted: #566070;
+  --cd-primary: #2457d6;
+  --cd-primary-hover: #1d46ab;
+  --cd-primary-text: #ffffff;
+  --cd-danger: #b42318;
+  --cd-danger-hover: #8f1c13;
+  --cd-danger-text: #ffffff;
+  --cd-danger-bg: #fdecea;
+  --cd-success: #1a7f4b;
+  --cd-focus: #2457d6;
+  --cd-skeleton-a: #e6eaf0;
+  --cd-skeleton-b: #f3f5f8;
+  --cd-shadow: 0 1px 2px rgb(16 24 40 / 8%), 0 4px 16px rgb(16 24 40 / 6%);
+
+  --cd-space-1: 0.25rem;
+  --cd-space-2: 0.5rem;
+  --cd-space-3: 0.75rem;
+  --cd-space-4: 1rem;
+  --cd-space-5: 1.5rem;
+  --cd-space-6: 2rem;
+  --cd-space-8: 3rem;
+  --cd-radius-sm: 0.375rem;
+  --cd-radius-md: 0.625rem;
+  --cd-radius-lg: 1rem;
+  --cd-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --cd-font-size-sm: 0.875rem;
+  --cd-font-size-md: 1rem;
+  --cd-font-size-lg: 1.25rem;
+  --cd-font-size-xl: 1.75rem;
+  --cd-line-height: 1.5;
+  --cd-duration: 150ms;
+  --cd-sidebar-width: 14rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-tokens;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-tokens;
+}
