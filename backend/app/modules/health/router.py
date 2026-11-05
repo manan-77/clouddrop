@@ -4,19 +4,20 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.deps import SessionDep
 from app.core.errors import ServiceUnavailableError
+from app.modules.health.schemas import HealthRead
 
 router = APIRouter(prefix="/health", tags=["health"])
 
 
-@router.get("")
-def liveness() -> dict[str, str]:
-    return {"status": "ok"}
+@router.get("", response_model=HealthRead, status_code=200)
+def liveness() -> HealthRead:
+    return HealthRead(status="ok")
 
 
-@router.get("/ready")
-def readiness(session: SessionDep) -> dict[str, str]:
+@router.get("/ready", response_model=HealthRead, status_code=200)
+def readiness(session: SessionDep) -> HealthRead:
     try:
         session.execute(text("SELECT 1"))
     except SQLAlchemyError as exc:
         raise ServiceUnavailableError("Database unavailable", code="db_unavailable") from exc
-    return {"status": "ready"}
+    return HealthRead(status="ready")

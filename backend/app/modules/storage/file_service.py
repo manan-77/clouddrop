@@ -42,7 +42,13 @@ class FileService:
             raise UnprocessableError(
                 "This file type is not supported", code="unsupported_file_type"
             )
-        if folder_id is not None and self.folders.get(workspace_id, folder_id) is None:
+        # Soft limit: two simultaneous inits may overshoot by one file.
+        if self.files.sum_size(workspace_id) + size_bytes > self.settings.user_quota_bytes:
+            raise UnprocessableError("Storage quota exceeded", code="quota_exceeded")
+        if (
+            folder_id is not None
+            and self.folders.get(workspace_id, folder_id, lock="share") is None
+        ):
             raise NotFoundError("Folder not found", code="folder_not_found")
 
         file = File(
@@ -64,8 +70,10 @@ class FileService:
                 content_type=normalized_type,
             )
         )
+        # Presign before committing so a storage failure leaves no orphan rows.
+        upload = self.storage.create_upload(key, normalized_type, size_bytes)
         self.session.commit()
-        return file, self.storage.create_upload(key, normalized_type, size_bytes)
+        return file, upload
 
     def complete_upload(self, user_id: uuid.UUID, file_id: uuid.UUID) -> File:
         workspace_id = self._scope(user_id, Action.WRITE)
@@ -128,7 +136,11 @@ class FileService:
         file = self._get(workspace_id, file_id)
         if name is None and not move:
             raise UnprocessableError("Nothing to update", code="empty_update")
-        if move and folder_id is not None and self.folders.get(workspace_id, folder_id) is None:
+        if (
+            move
+            and folder_id is not None
+            and self.folders.get(workspace_id, folder_id, lock="share") is None
+        ):
             raise NotFoundError("Folder not found", code="folder_not_found")
         if name is not None:
             file.name = sanitize_name(name)
