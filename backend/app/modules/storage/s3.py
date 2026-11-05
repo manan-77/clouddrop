@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+from urllib.parse import quote
+
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.core.errors import ServiceUnavailableError
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.client import S3Client
+
+logger = logging.getLogger(__name__)
+
+_NOT_FOUND_CODES = {"404", "NoSuchKey", "NotFound"}
+
+
+@dataclass(frozen=True)
+class PresignedUpload:
+    url: str
+    fields: dict[str, str]
+    expires_in: int
+
+
+@dataclass(frozen=True)
+class ObjectInfo:
+    size_bytes: int
+    etag: str
+
+
+class S3Storage:
+    "The only code that talks to S3. Blocking: call from `def` endpoints or workers only."
+
+    def __init__(
+        self,
+        client: S3Client,
+        bucket: str,
+        upload_ttl_seconds: int,
+        download_ttl_seconds: int,
+    ) -> None:
+        self.client = client
+        self.bucket = bucket
+        self.upload_ttl_seconds = upload_ttl_seconds
+        self.download_ttl_seconds = download_ttl_seconds
+
+    def create_upload(self, key: str, content_type: str, size_bytes: int) -> PresignedUpload:
+        # S3 itself rejects any body whose size or type differs from what we approved.
+        try:
+            post = self.client.generate_presigned_post(
+                Bucket=self.bucket,
+                Key=key,
+                Fields={"Content-Type": content_type},
+                Conditions=[
+                    {"Content-Type": content_type},
+                    ["content-length-range", size_bytes, size_bytes],
+                ],
+                ExpiresIn=self.upload_ttl_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("presign upload", exc) from exc
+        return PresignedUpload(post["url"], dict(post["fields"]), self.upload_ttl_seconds)
+
+    def head(self, key: str) -> ObjectInfo | None:
+        try:
+            response = self.client.head_object(Bucket=self.bucket, Key=key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in _NOT_FOUND_CODES:
+                return None
+            raise self._unavailable("head object", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("head object", exc) from exc
+        return ObjectInfo(response["ContentLength"], response["ETag"].strip('"'))
+
+    def delete(self, key: str) -> None:
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("delete object", exc) from exc
+
+    def create_download_url(self, key: str, filename: str) -> str:
+        # `attachment` stops the browser rendering an uploaded HTML/SVG file inline.
+        ascii_name = filename.encode("ascii", "ignore").decode()
+        ascii_name = ascii_name.replace('"', "").replace("\\", "") or "download"
+        disposition = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename)}"
+        try:
+            return self.client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": self.bucket,
+                    "Key": key,
+                    "ResponseContentDisposition": disposition,
+                },
+                ExpiresIn=self.download_ttl_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("presign download", exc) from exc
+
+    @staticmethod
+    def _unavailable(operation: str, exc: Exception) -> ServiceUnavailableError:
+        logger.error("S3 %s failed: %s", operation, type(exc).__name__)
+        return ServiceUnavailableError(
+            "File storage is temporarily unavailable", code="storage_unavailable"
+        )
