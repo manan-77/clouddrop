@@ -270,7 +270,7 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 
 ### 8.5 Branch: feat/purge-job (OK-NOW)
 - [ ] Scheduled task that permanently removes soft-deleted files past a retention period: delete the S3 objects, then versions, chunks and rows.
-- [ ] Also removes stale pending uploads and abandoned multiparts.
+- [ ] Also removes stale pending uploads and abandoned multiparts. Until it exists, abandoned pending_upload rows still count toward the storage quota (consider excluding pending rows older than the presign lifetime from the quota sum).
 - [ ] Cleanup of expired refresh tokens and share links.
 - [ ] Safe to run twice, bounded per run, logs counts only.
 - [ ] Tests: retention boundary, partial failure leaves consistent state, repeat run is a no-op.
@@ -423,7 +423,8 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 1) The same workspace-scope lookup is duplicated in the folder and file services and costs two queries per request; extract once sharing lands in Phase 4.
 - [ ] (PR 1) mypy covers the app package only, not tests; alembic migrations keep the generated boilerplate comments; the file_versions composite unique constraint name hides the version column.
 - [ ] (PR 1) Repeat DELETE returns 404 on the second call (accepted); expired refresh tokens are purged by the Phase 5 purge job.
-- [ ] (PR 1) Concurrency is covered by SQL lock assertions, not by a real two-session race test.
+- [ ] (PR 1) Concurrency is covered by SQL lock assertions, not by a real two-session race test; the assertions cover upload init and folder delete but not create-folder or file move.
+- [ ] (PR 2, NEEDS-YOU) backend/CLAUDE.md still says docs are disabled when the environment is production; the code now disables them unless development or test. Owner to approve the wording change (not edited by me).
 
 ## 13. Risks to watch
 
