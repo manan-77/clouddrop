@@ -75,7 +75,7 @@ It contains tasks only. No code lives here.
 - [ ] Values placed in the local .env file only.
 
 ### 3.3 Decisions - DECISION
-- [ ] Angular version to pin, and confirmation of the no-UI-kit default (plain SCSS with design tokens).
+- [x] Angular version pinned to 21.2 (ADR 0004) and the no-UI-kit default confirmed by default (ADR 0005). Owner may revisit.
 - [ ] Embedding model: Azure endpoint or a local sentence-transformers model (fixes the vector size forever).
 - [ ] Permission inheritance model for folders and files (Phase 4).
 - [ ] Display date format (assumed day/month/year with 24-hour time).
@@ -123,19 +123,19 @@ Unblocked work to do first if the owner is away: pre-work, then Phase 3, then Ph
 Goal: a person can register, sign in, browse folders, upload, download and manage files in a browser.
 
 ### 6.1 Branch: feat/frontend-scaffold (OK-NOW, needs the Angular version decision)
-- [ ] Create the Angular workspace inside the frontend folder: standalone components, strict TypeScript, routing, SCSS.
-- [ ] Wire Vitest for unit tests, ESLint and Prettier. Prove all four gates run.
-- [ ] Add the dev proxy so the browser talks to the backend on the same origin, with no hostname baked into the build.
-- [ ] Create design tokens as CSS custom properties: colours, spacing, radii, typography, elevation.
-- [ ] Light and dark themes controlled in exactly one place, following the system setting by default.
-- [ ] App shell: header, sidebar, content area, responsive down to phone width.
-- [ ] Global error handler and a one-place error message resolver that maps the API error code to user-safe text.
-- [ ] Shared pipes: file size, date and time in the single agreed format.
-- [ ] Shared presentational pieces: button with in-flight spinner, loading skeleton, empty state, error state with retry, inline field error.
-- [ ] Lazy routes only. Bundle budgets set.
-- [ ] Accessibility baseline: visible focus, skip link, landmarks.
-- [ ] Update the frontend CLAUDE.md with the pinned version and the real commands.
-- [ ] Tests: error resolver, pipes, theme switching.
+- [x] Create the Angular workspace inside the frontend folder: standalone components, strict TypeScript, routing, SCSS.
+- [x] Wire Vitest for unit tests, ESLint and Prettier. Prove all four gates run.
+- [x] Add the dev proxy so the browser talks to the backend on the same origin, with no hostname baked into the build.
+- [x] Create design tokens as CSS custom properties: colours, spacing, radii, typography, elevation.
+- [x] Light and dark themes controlled in exactly one place, following the system setting by default.
+- [x] App shell: header, sidebar, content area, responsive down to phone width.
+- [x] Global error handler and a one-place error message resolver that maps the API error code to user-safe text.
+- [x] Shared pipes: file size, date and time in the single agreed format.
+- [x] Shared presentational pieces: button with in-flight spinner, loading skeleton, empty state, error state with retry, inline field error.
+- [x] Lazy routes only. Bundle budgets set.
+- [x] Accessibility baseline: visible focus, skip link, landmarks (automated accessibility checks are not set up yet).
+- [x] Update the frontend CLAUDE.md with the pinned version and the real commands.
+- [x] Tests: error resolver, pipes, theme switching.
 
 ### 6.2 Branch: feat/frontend-auth (OK-NOW)
 - [ ] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.

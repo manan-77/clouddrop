@@ -24,3 +24,10 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 15. **Quote exact paths and prefixes in docs.** A global "base path" sentence made two un-prefixed routes read as prefixed. State exceptions next to the rule.
 16. **Describe scope by what the code actually does.** A dependency resolved by a whole router affects every route in it; say "every route", not "the routes that need it".
 17. **Template placeholders must satisfy the validators.** A copy-pasted `.env` should start the app, or the comment must say what to change.
+
+## From the frontend scaffold
+
+18. **Check the engine range before scaffolding.** The newest Angular CLI refused the local Node. Read `engines` first and record the pin as an ADR.
+19. **`ng add` installs the newest package, not the one matching the workspace.** Re-run with the matching major (`angular-eslint@21`).
+20. **Node 25 breaks the global `localStorage` in tests.** Tests that touch storage install their own in-memory Storage.
+21. **Run prettier and the linter before the first commit of any new tier**, and give test host components OnPush too, since the lint rule applies to specs.
