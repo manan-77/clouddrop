@@ -1,0 +1,49 @@
+.cd-card {
+  max-width: 28rem;
+  margin: var(--cd-space-6) auto;
+  padding: var(--cd-space-5);
+  background: var(--cd-surface);
+  border: 1px solid var(--cd-border);
+  border-radius: var(--cd-radius-lg);
+  box-shadow: var(--cd-shadow);
+}
+
+.cd-form {
+  display: grid;
+  gap: var(--cd-space-4);
+}
+
+.cd-field label {
+  display: block;
+  margin-bottom: var(--cd-space-1);
+  font-weight: 600;
+}
+
+.cd-input {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--cd-space-2) var(--cd-space-3);
+  border: 1px solid var(--cd-border-strong);
+  border-radius: var(--cd-radius-md);
+  background: var(--cd-surface);
+  color: var(--cd-text);
+  font: inherit;
+
+  &[aria-invalid='true'] {
+    border-color: var(--cd-danger);
+  }
+}
+
+.cd-form-error {
+  margin: 0;
+  padding: var(--cd-space-3);
+  border: 1px solid var(--cd-danger);
+  border-radius: var(--cd-radius-md);
+  background: var(--cd-danger-bg);
+}
+
+.cd-hint {
+  margin: var(--cd-space-1) 0 0;
+  color: var(--cd-text-muted);
+  font-size: var(--cd-font-size-sm);
+}

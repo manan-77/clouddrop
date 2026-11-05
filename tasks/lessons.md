@@ -37,3 +37,17 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 26. **Prove lint rules fire.** After adding rules, lint a deliberately bad file once, then delete it.
 27. **Test harnesses give host elements their own ids**; assert on what your component renders, not on the host.
 21. **Run prettier and the linter before the first commit of any new tier**, and give test host components OnPush too, since the lint rule applies to specs.
+
+## From the frontend auth work
+
+28. **Configure TestBed before the first inject.** Helpers that read the injector (to pre-load a session) must run after `configureTestingModule`, so pass a flag into the setup function.
+29. **Spec helpers that wrap `dispatchEvent` must return void explicitly**; an arrow returning the boolean fails type checking.
+30. **Verify the cookie and proxy path end to end with curl**, not only with unit tests: the unit tests mock HTTP and cannot see a wrong cookie path.
+
+## From the PR 5 review (auth)
+
+31. **Anything async that writes session state needs a generation check.** A refresh or restore that started before a logout or login must drop its result; bump a counter on every session change and compare it when the response arrives.
+32. **Only an explicit 401 from the refresh endpoint ends a session.** Network errors and 5xx must leave the user signed in and let the next call retry.
+33. **Match endpoint paths with a pattern, not equality**: trailing slashes, query strings and fragments must not turn an auth call into a normal call. Reject dot segments and encoded dots before treating a URL as same-origin API.
+34. **When two standards conflict, do not silently pick one**: record the reading as an ADR, comment it in the code, and flag the standard for the owner.
+35. **Server field errors must clear when the field is edited**, and a failed submit should focus the first invalid field.

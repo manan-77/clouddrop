@@ -19,6 +19,16 @@
   border-bottom: 1px solid var(--cd-border);
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cd-space-3);
+}
+
+.user {
+  color: var(--cd-text-muted);
+}
+
 .brand {
   font-size: var(--cd-font-size-lg);
   font-weight: 700;

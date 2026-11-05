@@ -138,16 +138,16 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Tests: error resolver, pipes, theme switching.
 
 ### 6.2 Branch: feat/frontend-auth (OK-NOW)
-- [ ] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.
-- [ ] Session store using signals. Access token kept in memory only.
-- [ ] Auth interceptor attaches the token only to same-origin API calls. It must never attach it to the S3 upload address.
-- [ ] Single-flight refresh on 401: concurrent failures wait on one refresh, the original call is retried once, a failed refresh logs the user out.
-- [ ] Silent session restore on page load using the refresh cookie.
-- [ ] Pages: sign in, register, with typed reactive forms and inline validation that mirrors the server rules (email format, password length 12 to 128, name length).
-- [ ] Guards: authenticated, and guest-only for the auth pages.
-- [ ] Logout clears every in-memory store.
-- [ ] Every write shows progress on its button, disables it and guards against a double submit.
-- [ ] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
+- [x] Typed API client layer: one client per resource, generics on every call, wire types mirrored from the backend including the file status union.
+- [x] Session store using signals. Access token kept in memory only.
+- [x] Auth interceptor attaches the token only to same-origin API calls. It must never attach it to the S3 upload address.
+- [x] Single-flight refresh on 401: concurrent failures wait on one refresh, the original call is retried once, a failed refresh logs the user out.
+- [x] Silent session restore on page load using the refresh cookie.
+- [x] Pages: sign in, register, with typed reactive forms and inline validation that mirrors the server rules (email format, password length 12 to 128, name length).
+- [x] Guards: authenticated, and guest-only for the auth pages.
+- [x] Logout clears every in-memory store.
+- [x] Every write shows progress on its button, disables it and guards against a double submit.
+- [x] Tests: interceptor attach and skip rules, single-flight refresh, guards, login failure handling, session restore.
 
 ### 6.3 Branch: feat/folder-path-api (backend, OK-NOW)
 - [ ] Add an endpoint that returns the ancestor chain of a folder for breadcrumbs, scoped to the caller, returning 404 for other users.
@@ -420,6 +420,10 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Case-insensitive duplicate names for files are allowed on purpose, revisit if it confuses users.
 - [ ] The register endpoint reveals whether an email exists (409). Accepted trade-off for now, revisit with email verification.
 - [ ] Minor review findings that are not fixed in their PR must be listed here with the PR number.
+- [ ] (PR 5, NEEDS-YOU) frontend/CLAUDE.md has two rules that conflict literally ("never auto-retry a write" and "retry once after a refresh on 401"). ADR 0006 records the chosen reading; owner to confirm or reword the standard (not edited by me).
+- [ ] (PR 5, backend) `display_name` is stripped after the min-length check, so a whitespace-only name can be stored as empty; fix in the backend with a stripped constrained string and add a test.
+- [ ] (PR 5) No cross-tab logout sync (another tab stays signed in until its access token expires); no returnUrl after expiry; the access token is not refreshed proactively before it expires.
+- [ ] (PR 5) If the logout API call fails the UI shows signed out but the refresh cookie may still be valid; cancelling a page mid-sign-in leaves state that heals on the next restore.
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

@@ -1,14 +1,14 @@
 import { DOCUMENT } from '@angular/common';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
 
+import { provideAuthTesting } from '@core/auth/auth-testing';
 import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([])],
+      providers: provideAuthTesting(),
     }).compileComponents();
   });
 
