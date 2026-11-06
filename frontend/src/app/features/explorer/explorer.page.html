@@ -1,0 +1,149 @@
+<div class="cd-toolbar">
+  <h1>Files</h1>
+  <button cd-button type="button" (click)="show({ kind: 'create-folder' })">New folder</button>
+</div>
+
+<p class="cd-form-error" role="alert">
+  @if (notice(); as message) {
+    {{ message }}
+  }
+</p>
+
+@let current = store.view();
+
+<nav aria-label="Breadcrumb">
+  <ol class="cd-breadcrumbs">
+    <li>
+      @if (current.path.length > 0) {
+        <a routerLink="/">All files</a>
+      } @else {
+        <span aria-current="page">All files</span>
+      }
+    </li>
+    @for (crumb of current.path; track crumb.id; let last = $last) {
+      <li>
+        @if (last) {
+          <span aria-current="page">{{ crumb.name }}</span>
+        } @else {
+          <a [routerLink]="['/folders', crumb.id]">{{ crumb.name }}</a>
+        }
+      </li>
+    }
+  </ol>
+</nav>
+
+@switch (current.status) {
+  @case ('loading') {
+    <cd-skeleton [lines]="6" />
+  }
+  @case ('error') {
+    <cd-error-state [message]="current.error ?? ''" (retry)="store.reload()" />
+    @if (store.folderId()) {
+      <p><a routerLink="/">Go to all files</a></p>
+    }
+  }
+  @default {
+    @if (current.folders && current.files) {
+      @if (current.folders.total === 0 && current.files.total === 0) {
+        <cd-empty-state
+          title="This folder is empty"
+          description="Create a folder to get started."
+        />
+      }
+      @if (current.folders.total > 0) {
+        <section aria-labelledby="folders-heading">
+          <h2 id="folders-heading">Folders</h2>
+          <cd-folder-table
+            [folders]="current.folders.items"
+            (rename)="show({ kind: 'rename-folder', folder: $event })"
+            (remove)="show({ kind: 'delete-folder', folder: $event })"
+          />
+          <cd-pager
+            label="Folders pagination"
+            [page]="current.folders.page"
+            [pageSize]="current.folders.page_size"
+            [total]="current.folders.total"
+            (pageChange)="store.setFolderPage($event)"
+          />
+        </section>
+      }
+      @if (current.files.total > 0) {
+        <section aria-labelledby="files-heading">
+          <h2 id="files-heading">Files</h2>
+          <cd-file-table
+            [files]="current.files.items"
+            [downloading]="downloading()"
+            (download)="download($event)"
+            (rename)="show({ kind: 'rename-file', file: $event })"
+            (remove)="show({ kind: 'delete-file', file: $event })"
+          />
+          <cd-pager
+            label="Files pagination"
+            [page]="current.files.page"
+            [pageSize]="current.files.page_size"
+            [total]="current.files.total"
+            (pageChange)="store.setFilePage($event)"
+          />
+        </section>
+      }
+    }
+  }
+}
+
+@let open = dialog();
+@if (open && open.kind === 'create-folder') {
+  <cd-name-dialog
+    heading="New folder"
+    label="Folder name"
+    submitLabel="Create"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'rename-folder') {
+  <cd-name-dialog
+    heading="Rename folder"
+    label="Folder name"
+    submitLabel="Rename"
+    [initialValue]="open.folder.name"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'rename-file') {
+  <cd-name-dialog
+    heading="Rename file"
+    label="File name"
+    submitLabel="Rename"
+    [initialValue]="open.file.name"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'delete-folder') {
+  <cd-confirm-dialog
+    heading="Delete folder"
+    [message]="'Delete the folder ' + open.folder.name + '? It must be empty.'"
+    confirmLabel="Delete"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (confirmed)="confirmDelete()"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'delete-file') {
+  <cd-confirm-dialog
+    heading="Delete file"
+    [message]="'Delete the file ' + open.file.name + '?'"
+    confirmLabel="Delete"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (confirmed)="confirmDelete()"
+    (dismissed)="closeDialog()"
+  />
+}

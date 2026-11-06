@@ -2,13 +2,11 @@ import { type Routes } from '@angular/router';
 
 import { authGuard, guestGuard } from '@core/auth/auth.guards';
 
+const explorer = () => import('./features/explorer/explorer.page').then((m) => m.ExplorerPage);
+
 export const routes: Routes = [
-  {
-    path: '',
-    pathMatch: 'full',
-    canActivate: [authGuard],
-    loadComponent: () => import('./features/home/home.page').then((m) => m.HomePage),
-  },
+  { path: '', pathMatch: 'full', canActivate: [authGuard], loadComponent: explorer },
+  { path: 'folders/:folderId', canActivate: [authGuard], loadComponent: explorer },
   {
     path: 'login',
     canActivate: [guestGuard],

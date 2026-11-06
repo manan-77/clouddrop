@@ -1,0 +1,19 @@
+.badge {
+  display: inline-block;
+  padding: 0 var(--cd-space-2);
+  border: 1px solid var(--cd-border-strong);
+  border-radius: var(--cd-radius-sm);
+  background: var(--cd-surface-2);
+  font-size: var(--cd-font-size-sm);
+  white-space: nowrap;
+}
+
+.badge[data-status='ready'] {
+  border-color: var(--cd-success);
+}
+
+.badge[data-status='failed'],
+.badge[data-status='infected'] {
+  border-color: var(--cd-danger);
+  background: var(--cd-danger-bg);
+}

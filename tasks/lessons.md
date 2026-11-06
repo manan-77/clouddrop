@@ -63,3 +63,12 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 39. **Do not make a dependency global when only some routes need it.** Resolving S3 for every file route turned a missing bucket into an outage of list, rename and delete; declare the dependency on the routes that use it.
 40. **A `<form>` needs a form directive for `(ngSubmit)` to fire.** With reactive forms only, wrap controls in a form group, or the browser performs a real submit and reloads the page.
 41. **Initialise page-scoped stores lazily**, so opening a page does not load once for the default state and again for the real one.
+
+## From the PR 9 review (explorer)
+
+42. **A state setter must be a no-op when the value is unchanged**, and any 'correct the page' logic must only move when the target is actually different, or inconsistent server counts become an endless reload loop.
+43. **Make a modal non-dismissible while its request runs** (Escape, Cancel, backdrop) and tie the page state to the dialog's lifetime; reset dialogs and messages when the route changes.
+44. **Every button that triggers a request needs its own in-flight guard**, including reads that start side effects such as downloads.
+45. **Read route identifiers from the route path, not from input binding**: input binding also binds query strings, so `/?id=x` could open something unintended.
+46. **Do not name a component input `title`**: the static attribute also becomes a native tooltip on the host element.
+47. **A scripted find-and-replace over templates must be checked for collateral matches** (it renamed another component's `title` input); the compiler caught it, so always build after a bulk edit.
