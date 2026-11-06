@@ -41,6 +41,6 @@ jobs:
         run: |
           docker run -d --name web -p 8080:8080 -e API_UPSTREAM=http://127.0.0.1:9 clouddrop-web
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/nginx-health && break; sleep 1; done
-          curl -fsS http://127.0.0.1:8080/ | grep -qi "<app-root"
+          curl -fsS http://127.0.0.1:8080/ | grep -qi "<cd-root"
           curl -fsSI http://127.0.0.1:8080/some/spa/route | grep -qi "content-security-policy"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/files)" = "502"
