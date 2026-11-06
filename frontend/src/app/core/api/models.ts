@@ -64,3 +64,21 @@ export interface DownloadResponse {
   url: string;
   expires_in: number;
 }
+
+export interface UploadInitRequest {
+  name: string;
+  content_type: string;
+  size_bytes: number;
+  folder_id: string | null;
+}
+
+export interface UploadInstructions {
+  url: string;
+  fields: Record<string, string>;
+  expires_in: number;
+}
+
+export interface UploadInitResponse {
+  file: FileRead;
+  upload: UploadInstructions;
+}

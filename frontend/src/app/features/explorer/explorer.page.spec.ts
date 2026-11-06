@@ -6,6 +6,7 @@ import { BehaviorSubject } from 'rxjs';
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
 import { type FileRead, type FileStatus, type FolderRead, type Page } from '@core/api/models';
 import { DownloadService } from '@core/download/download.service';
+import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { ExplorerPage } from './explorer.page';
 
 const STAMP = '2026-01-02T10:00:00Z';
@@ -206,7 +207,7 @@ describe('ExplorerPage', () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([]));
     await settle();
-    click(root, '.cd-toolbar button');
+    click(root, '.cd-toolbar .cd-actions > button');
     await settle();
     (root.querySelector('cd-name-dialog form') as HTMLFormElement).dispatchEvent(
       new Event('submit'),
@@ -222,7 +223,7 @@ describe('ExplorerPage', () => {
     backend.expectOne(isList('folders')).flush(page([]));
     backend.expectOne(isList('files')).flush(page([]));
     await settle();
-    click(root, '.cd-toolbar button');
+    click(root, '.cd-toolbar .cd-actions > button');
     await settle();
     const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
     input.value = '  Invoices  ';
@@ -249,7 +250,7 @@ describe('ExplorerPage', () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([]));
     await settle();
-    click(root, '.cd-toolbar button');
+    click(root, '.cd-toolbar .cd-actions > button');
     await settle();
     const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
     input.value = 'Reports';
@@ -372,7 +373,7 @@ describe('ExplorerPage', () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([]));
     await settle();
-    click(root, '.cd-toolbar button');
+    click(root, '.cd-toolbar .cd-actions > button');
     await settle();
     const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
     input.value = 'Reports';
@@ -402,7 +403,7 @@ describe('ExplorerPage', () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([]));
     await settle();
-    click(root, '.cd-toolbar button');
+    click(root, '.cd-toolbar .cd-actions > button');
     await settle();
     const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
     input.value = 'Reports';
@@ -475,8 +476,63 @@ describe('ExplorerPage', () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([]));
     await settle();
-    const region = root.querySelector('.cd-toolbar + p[role="alert"]') as HTMLElement;
+    const region = root.querySelector('.cd-toolbar ~ p[role="alert"]') as HTMLElement;
     expect(region).not.toBeNull();
     expect(region.textContent?.trim()).toBe('');
+  });
+
+  const finishUpload = (backend: HttpTestingController, id: string): void => {
+    backend
+      .expectOne((r) => r.method === 'POST' && r.url === '/api/v1/files/uploads')
+      .flush({
+        file: { ...file(id, 'new.pdf'), status: 'pending_upload' },
+        upload: { url: 'https://bucket.example/', fields: { key: 'k' }, expires_in: 900 },
+      });
+    backend
+      .expectOne('https://bucket.example/')
+      .flush(null, { status: 204, statusText: 'No Content' });
+    backend
+      .expectOne(`/api/v1/files/${id}/uploads/complete`)
+      .flush(file(id, 'new.pdf', 'uploaded'));
+  };
+
+  it('uploadFinishedInThisFolder_refreshesTheListing', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    TestBed.inject(UploadQueue).add(
+      [new File(['x'], 'new.pdf', { type: 'application/pdf' })],
+      null,
+    );
+    finishUpload(backend, 'n1');
+    await settle();
+    loadRoot(backend, page([]), page([file('n1', 'new.pdf', 'uploaded')]));
+    await settle();
+    expect(text(root, 'cd-file-table tbody tr td')).toBe('new.pdf');
+    expect(text(root, 'cd-upload-panel .state')).toBe('Uploaded');
+  });
+
+  it('uploadFinishedInAnotherFolder_doesNotRefreshThisListing', async () => {
+    const { backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    TestBed.inject(UploadQueue).add(
+      [new File(['x'], 'new.pdf', { type: 'application/pdf' })],
+      'other',
+    );
+    finishUpload(backend, 'n2');
+    await settle();
+    backend.expectNone(isList('folders'));
+    backend.expectNone(isList('files'));
+  });
+
+  it('toolbar_offersUploadAndNewFolder', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    const labels = [...root.querySelectorAll('.cd-toolbar button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(labels).toEqual(['Upload files', 'New folder']);
   });
 });

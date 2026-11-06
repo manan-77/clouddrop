@@ -168,14 +168,14 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Tests: list states, create and rename error mapping, download link handling, pagination.
 
 ### 6.5 Branch: feat/frontend-upload (OK-NOW against the fake; BLOCKED-AWS for real)
-- [ ] Upload queue store: per-file state (queued, requesting, uploading, completing, done, failed, cancelled), progress and speed.
-- [ ] Choose files by button and by drag and drop. Client checks for size and type are advisory only.
-- [ ] Flow: ask the API for upload instructions, send the form straight to storage with progress reporting and no auth header, then call complete.
-- [ ] Cancel stops network work. A failed upload leaves the UI usable and shows the server message.
-- [ ] Concurrency limit on parallel uploads.
-- [ ] After complete, poll the file status with backoff until it reaches a final state, and stop polling when the page is left.
-- [ ] Never read the whole file into memory.
-- [ ] Tests: queue state machine, cancel, failure recovery, polling stop conditions, the Authorization header is absent on the storage call.
+- [x] Upload queue store: per-file state (queued, requesting, uploading, completing, done, failed, cancelled), progress and speed.
+- [x] Choose files by button and by drag and drop. Client checks for size and type are advisory only.
+- [x] Flow: ask the API for upload instructions, send the form straight to storage with progress reporting and no auth header, then call complete.
+- [x] Cancel stops network work. A failed upload leaves the UI usable and shows the server message.
+- [x] Concurrency limit on parallel uploads.
+- [ ] After complete, poll the file status with backoff until it reaches a final state: DEFERRED to Phase 5, because nothing moves a file past 'uploaded' until the worker exists (polling now would only spin).
+- [x] Never read the whole file into memory.
+- [x] Tests: queue state machine, cancel, failure recovery, polling stop conditions, the Authorization header is absent on the storage call.
 - [ ] Real upload test against the actual bucket once the owner provides AWS (BLOCKED-AWS), including verifying the bucket CORS settings.
 
 ### 6.6 Phase 3 exit criteria
@@ -428,6 +428,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 7, NEEDS-YOU) Root CLAUDE.md says 'no unpaged collection endpoint, ever'; ADR 0007 records the folder path exception. Owner to confirm or reword the standard (not edited by me).
 - [ ] (PR 7) The permission matrix has only owner and stranger so far; editor, viewer and revoked arrive with sharing (Phase 4). Folder moves need cycle prevention before they exist.
 - [ ] (PR 9) Explorer: the whole view is swapped for a skeleton on every reload (keep previous data while refreshing and restore focus); the pager text is not a live region; dialog error blocks are not persistent live regions; file move needs a folder picker; no route titles or focus management on folder navigation; hostile-name rendering is covered by a test but no visual check in a real browser; the dialog does not close on backdrop click.
+- [ ] (PR 10) Upload: cancelling after the API created the file row leaves a pending_upload row for the Phase 5 sweeper; an upload that fails after the API call is retried as a brand-new file; no total-progress summary; no real-browser or real-bucket check (CORS must allow POST from the app origin).
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

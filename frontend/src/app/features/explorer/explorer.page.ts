@@ -12,16 +12,20 @@ import { finalize, map, type Observable } from 'rxjs';
 
 import { type FileRead, type FolderRead } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
+import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { EmptyStateComponent } from '@shared/ui/empty-state/empty-state.component';
 import { ErrorStateComponent } from '@shared/ui/error-state/error-state.component';
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
 import { ConfirmDialogComponent } from './confirm-dialog.component';
+import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerStore } from './explorer.store';
 import { FileTableComponent } from './file-table.component';
 import { FolderTableComponent } from './folder-table.component';
 import { NameDialogComponent } from './name-dialog.component';
+import { UploadButtonComponent } from './upload-button.component';
+import { UploadPanelComponent } from './upload-panel.component';
 
 type Dialog =
   | { kind: 'create-folder' }
@@ -36,6 +40,7 @@ type Dialog =
     RouterLink,
     ButtonComponent,
     ConfirmDialogComponent,
+    DropZoneDirective,
     EmptyStateComponent,
     ErrorStateComponent,
     FileTableComponent,
@@ -43,6 +48,8 @@ type Dialog =
     NameDialogComponent,
     PagerComponent,
     SkeletonComponent,
+    UploadButtonComponent,
+    UploadPanelComponent,
   ],
   providers: [ExplorerStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +57,7 @@ type Dialog =
 })
 export class ExplorerPage {
   protected readonly store = inject(ExplorerStore);
+  protected readonly uploads = inject(UploadQueue);
   protected readonly dialog = signal<Dialog | null>(null);
   protected readonly busy = signal(false);
   protected readonly dialogError = signal<string | null>(null);
@@ -67,6 +75,12 @@ export class ExplorerPage {
   );
 
   constructor() {
+    // A finished upload into the folder on screen refreshes the listing.
+    this.uploads.completed$.pipe(takeUntilDestroyed()).subscribe((item) => {
+      if (item.folderId === (this.folderId() ?? null)) {
+        this.store.reload();
+      }
+    });
     effect(() => {
       this.store.open(this.folderId() ?? null);
       // A dialog or message belongs to the folder it was opened in.
@@ -74,6 +88,10 @@ export class ExplorerPage {
       this.dialogError.set(null);
       this.notice.set(null);
     });
+  }
+
+  protected addFiles(files: File[]): void {
+    this.uploads.add(files, this.folderId() ?? null);
   }
 
   protected show(dialog: Dialog): void {
