@@ -131,3 +131,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 89. **Tests must never share a real counter store**: inject an in-memory limiter by default; test the Redis implementation separately on a throwaway DB with unique keys and no flush.
 90. **Hash rate-limit subjects** (IP, email) before they become keys so Redis holds no PII.
 91. **A union of two observable types cannot be called with `.subscribe` in a spec**; branch before subscribing.
+92. **Key a per-account limit on the account and the client together**, or one stranger can lock the owner out.
+93. **A limiter that reads the socket peer needs the proxy configuration written down in the same PR**, or every user shares one budget in production.

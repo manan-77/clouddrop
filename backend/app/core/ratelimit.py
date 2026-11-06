@@ -6,6 +6,7 @@ must not lock every user out, and the login hash cost already bounds a single gu
 """
 
 import hashlib
+import ipaddress
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
@@ -30,6 +31,8 @@ class RateLimiter(Protocol):
     def hit(self, key: str, limit: int, window_seconds: int) -> RateLimitResult: ...
 
 
+# shortcut: fixed windows allow up to 2x the limit across a window edge; move to a sliding window
+# if that matters.
 class RedisRateLimiter:
     def __init__(self, client: redis.Redis) -> None:
         self.client = client
@@ -41,10 +44,13 @@ class RedisRateLimiter:
             pipe.incr(key)
             pipe.ttl(key)
             _, count, ttl = pipe.execute()
+            if ttl < 0:  # a key without an expiry would block forever
+                self.client.expire(key, window_seconds)
+                ttl = window_seconds
         except redis.RedisError:
             logger.warning("Rate limiter unavailable; allowing the request")
             return RateLimitResult(True, 0)
-        return RateLimitResult(count <= limit, ttl if ttl > 0 else window_seconds)
+        return RateLimitResult(count <= limit, ttl)
 
 
 @lru_cache
@@ -67,7 +73,18 @@ RateLimiterDep = Annotated[RateLimiter, Depends(get_rate_limiter)]
 def client_ip(request: Request) -> str:
     # Behind a reverse proxy, run uvicorn with --proxy-headers and --forwarded-allow-ips set to
     # the proxy, so this is the real client and a spoofed X-Forwarded-For is ignored.
-    return request.client.host if request.client else "unknown"
+    return ip_bucket(request.client.host if request.client else "unknown")
+
+
+def ip_bucket(host: str) -> str:
+    """IPv6 clients rotate freely inside a /64, so they share one budget per /64."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    if address.version == 6:
+        return str(ipaddress.ip_network(f"{host}/64", strict=False))
+    return host
 
 
 def enforce(

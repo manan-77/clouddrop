@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 
@@ -5,7 +6,7 @@ import pytest
 import redis
 from fastapi.testclient import TestClient
 
-from app.core.ratelimit import RedisRateLimiter
+from app.core.ratelimit import RedisRateLimiter, enforce, ip_bucket
 from tests.conftest import FakeRateLimiter
 
 CREDENTIALS = {"email": "a@example.com", "password": "wrong-password-1"}
@@ -24,6 +25,19 @@ class TestLoginLimits:
         assert response.status_code == 429
         assert int(response.headers["Retry-After"]) >= 1
         assert response.json()["error"]["code"] == "rate_limited"
+
+    def test_429_usesTheStandardEnvelopeWithARequestId(self, client: TestClient) -> None:
+        for _ in range(10):
+            _login(client)
+        body = client.post("/api/v1/auth/login", json=CREDENTIALS).json()["error"]
+        assert body["code"] == "rate_limited" and body["request_id"] and body["details"] == []
+
+    def test_accountBudget_isPerClient_soAStrangerCannotLockTheOwnerOut(
+        self, rate_limiter: FakeRateLimiter
+    ) -> None:
+        for _ in range(10):
+            enforce(rate_limiter, "login:account", "victim@example.com|203.0.113.9", 10, 900)
+        enforce(rate_limiter, "login:account", "victim@example.com|198.51.100.4", 10, 900)
 
     def test_oneAccountBeingHammered_doesNotBlockAnother(self, client: TestClient) -> None:
         for _ in range(11):
@@ -82,6 +96,19 @@ class TestCsrfHeader:
         )
 
 
+@pytest.mark.parametrize(
+    ("host", "bucket"),
+    [
+        ("203.0.113.9", "203.0.113.9"),
+        ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64"),
+        ("2001:db8:1:2:1::1", "2001:db8:1:2::/64"),
+        ("not-an-ip", "not-an-ip"),
+    ],
+)
+def test_ipBucket_groupsIpv6ByTheir64(host: str, bucket: str) -> None:
+    assert ip_bucket(host) == bucket
+
+
 @pytest.fixture
 def redis_limiter() -> RedisRateLimiter:
     # Database 15 with unique keys; nothing is flushed, so shared data is never touched.
@@ -110,6 +137,15 @@ class TestRedisLimiter:
         assert not redis_limiter.hit(first, 1, 5).allowed
         assert redis_limiter.hit(second, 1, 5).allowed
 
-    def test_redisDown_failsOpen(self) -> None:
+    def test_keyWithoutExpiry_getsOne(self, redis_limiter: RedisRateLimiter) -> None:
+        key = f"rl:test:{uuid.uuid4()}"
+        redis_limiter.client.set(key, 5)  # a leftover counter with no TTL
+        result = redis_limiter.hit(key, 2, 30)
+        assert not result.allowed and result.retry_after_seconds == 30
+        assert 0 < redis_limiter.client.ttl(key) <= 30
+
+    def test_redisDown_failsOpenAndLogsNoKey(self, caplog: pytest.LogCaptureFixture) -> None:
         down = redis.Redis.from_url("redis://localhost:1/0", socket_connect_timeout=0.2)
-        assert RedisRateLimiter(down).hit("rl:x", 1, 5).allowed
+        with caplog.at_level(logging.WARNING):
+            assert RedisRateLimiter(down).hit("rl:secret-key", 1, 5).allowed
+        assert "Rate limiter unavailable" in caplog.text and "secret-key" not in caplog.text

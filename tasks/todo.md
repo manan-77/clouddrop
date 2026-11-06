@@ -374,6 +374,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Update the PR checklist docs. Enable branch protection (NEEDS-YOU in GitHub settings).
 
 ### 11.3 Branch: feat/containers (OK-NOW)
+- [ ] Run the API with `--proxy-headers --forwarded-allow-ips=<proxy>` so rate limits see the real client (see docs/api.md).
 - [ ] Production container image for the API and for the worker, minimal, non-root, with health checks.
 - [ ] Frontend static build served behind a reverse proxy that also proxies the API on the same origin.
 - [ ] Compose file for a full local stack for people who do use Docker (optional).

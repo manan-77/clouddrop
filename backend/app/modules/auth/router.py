@@ -72,7 +72,9 @@ def login(
     enforce(
         limiter,
         "login:account",
-        body.email.strip().lower(),
+        # Per (account, client): another client's bad guesses never lock the owner out. Spread-out
+        # guessing is bounded by the per-IP limit and the password hashing cost.
+        f"{body.email.strip().lower()}|{client_ip(request)}",
         settings.rate_limit_login_per_account,
         window,
     )
