@@ -235,7 +235,7 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [x] Complete verifies the assembled object size and records the ETag.
 - [x] Abort endpoint and a lifecycle expectation for abandoned uploads.
 - [x] Raise the effective maximum size and document it.
-- [ ] (next branch feat/frontend-multipart) Frontend: part slicing, limited concurrency, per-part retry, ETag capture (needs the bucket to expose the header).
+- [x] Frontend: part slicing, limited concurrency, per-part retry. (No ETag capture: the server lists the parts itself.) Real-browser/real-bucket check is BLOCKED-AWS.
 - [x] Tests: happy path, missing part, wrong size, abort, stranger gets 404, repeated complete is safe.
 
 ### 8.2 Branch: feat/celery-pipeline (OK-NOW, needs only local Redis)
@@ -456,3 +456,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - Real S3 behaviour (CORS, multipart ETag exposure, presigned conditions) is only proven against a fake so far.
 - The development laptop sleeping stops all unattended work. Keep it awake and plugged in.
 - Commands that need approval stall unattended runs. Consider an allowlist of safe commands in settings.
+
+## OWNER-DECISION log (wording conflicts to confirm; the standards files were not edited)
+- frontend/CLAUDE.md "Uploads" says multipart needs the part ETag and S3 CORS `ExposeHeaders: ETag`; the implementation has the server list the parts itself, so no ETag is read in the browser (CORS must still allow PUT).
+- frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.

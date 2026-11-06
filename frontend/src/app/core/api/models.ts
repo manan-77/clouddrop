@@ -82,3 +82,19 @@ export interface UploadInitResponse {
   file: FileRead;
   upload: UploadInstructions;
 }
+
+export interface MultipartInstructions {
+  part_size_bytes: number;
+  part_count: number;
+  expires_in: number;
+}
+
+export interface MultipartInitResponse {
+  file: FileRead;
+  multipart: MultipartInstructions;
+}
+
+export interface PartUrlsResponse {
+  parts: { part_number: number; url: string }[];
+  expires_in: number;
+}
