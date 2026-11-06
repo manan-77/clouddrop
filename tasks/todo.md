@@ -371,7 +371,9 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] GitHub Actions workflows (first real run happens on its PR): backend (lint, format check, types, tests with a Postgres service that has the vector extension, and Redis), frontend (build, test, lint, format check).
 - [x] Cache dependencies. (Requiring the workflows to pass is a GitHub setting: NEEDS-YOU.)
 - [x] Dependency vulnerability scan jobs for both tiers.
-- [x] PR template added. Enable branch protection and required checks `backend / checks` and `frontend / checks` (NEEDS-YOU in GitHub settings).
+- [x] PR template added. Enable branch protection and require ONLY `backend / checks` and `frontend / checks` (NEEDS-YOU in GitHub settings). Do not require the `audit` workflow (an advisory published tomorrow would block every merge), and do not add `paths:` filters to the two check workflows without a fallback job, or a required check never reports.
+- Note: CI runs Postgres 17 (matches the Homebrew install); `docker-compose.yml` still uses pg16 for optional local Docker use.
+- Note: `@emnapi/core` and `@emnapi/runtime` are devDependencies only because npm 11 omits these optional peers of `@napi-rs/wasm-runtime` from a lock written on macOS (npm/cli#4828), which breaks `npm ci` on Linux. Remove them when npm fixes this.
 
 ### 11.3 Branch: feat/containers (OK-NOW)
 - [ ] Run the API with `--proxy-headers --forwarded-allow-ips=<proxy>` so rate limits see the real client (see docs/api.md).

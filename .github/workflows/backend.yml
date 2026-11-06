@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: backend-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -22,7 +22,7 @@ jobs:
         working-directory: backend
     services:
       postgres:
-        image: pgvector/pgvector:pg16
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: clouddrop
           POSTGRES_PASSWORD: ci-only-password
@@ -44,7 +44,7 @@ jobs:
       JWT_SECRET: ci-only-secret-ci-only-secret-ci-only-secret
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
         with:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
@@ -59,17 +59,3 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest -q
-
-  audit:
-    # A new advisory can fail this without any code change, so it is a separate check that the
-    # owner may choose not to require.
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv export --frozen --no-hashes --no-emit-project --no-dev -o "$RUNNER_TEMP/requirements.txt"
-      - run: uvx pip-audit -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip

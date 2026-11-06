@@ -146,3 +146,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 104. **Tests that build Settings must pin every field they assert on**; an environment variable set by CI or a developer's `.env` otherwise changes the result.
 105. **CI's npm must match the one that wrote the lock file**: use the Node line that ships the same npm major (Node 24 / npm 11), not an older LTS.
 106. **A lock file written on macOS can miss Linux-only optional peers** (`@emnapi/*` for the wasm runtime); pin them as dev dependencies, with the reason in the PR, so `npm ci` works on every platform.
+107. **Pin third-party actions to a commit SHA and audit tools to a version**; tags move and unpinned tools change behaviour without any code change.
+108. **Keep advisory checks out of the required set and give them a schedule**, so a new advisory neither blocks every merge nor waits for the next PR to be noticed.

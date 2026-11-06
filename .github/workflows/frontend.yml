@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: frontend-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
@@ -32,16 +32,3 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-
-  audit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: npm audit --omit=dev --audit-level=high
