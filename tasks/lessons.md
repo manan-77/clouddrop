@@ -72,3 +72,18 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 45. **Read route identifiers from the route path, not from input binding**: input binding also binds query strings, so `/?id=x` could open something unintended.
 46. **Do not name a component input `title`**: the static attribute also becomes a native tooltip on the host element.
 47. **A scripted find-and-replace over templates must be checked for collateral matches** (it renamed another component's `title` input); the compiler caught it, so always build after a bulk edit.
+
+## From the upload work
+
+48. **Angular's fetch backend cannot report upload progress.** Use the default XHR backend whenever upload progress is needed.
+49. **Presigned form posts need the file field last**, and the browser must never attach our credentials to the storage origin; test both.
+50. **Do not name component outputs after native DOM events** (for example `cancel`): the native event would also trigger the handler. Use specific names such as `cancelUpload`.
+
+## From the PR 10 review (upload)
+
+51. **Every client step that creates server state needs a matching cleanup on failure and cancel.** Otherwise retries leave duplicate pending rows that count against the quota.
+52. **A server-supplied URL must be validated before the client uses it**, especially when an interceptor adds credentials by URL pattern: require another origin and http(s).
+53. **Count dragenter/dragleave pairs** (they fire for child elements) instead of toggling a flag, or the highlight flickers.
+54. **Keep one persistent live region for progress and status summaries**, not one `role=status` per row.
+55. **Do not keep `File` handles in visible state**; hold them privately and release them when the upload is done or cancelled.
+56. **Tests that use `match()` consume requests**; assert state (statuses, counts) too, or a following `expectNone` proves nothing. Test URLs must be derived from the runtime origin, not hardcoded.

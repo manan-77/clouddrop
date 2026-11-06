@@ -52,3 +52,14 @@
   gap: var(--cd-space-3);
   margin-bottom: var(--cd-space-4);
 }
+
+.cd-dropzone {
+  min-height: 50vh;
+  border: 2px dashed transparent;
+  border-radius: var(--cd-radius-lg);
+
+  &.cd-dropzone--active {
+    border-color: var(--cd-primary);
+    background: var(--cd-surface-2);
+  }
+}
