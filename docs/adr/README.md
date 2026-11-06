@@ -12,3 +12,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0006](0006-retry-after-401-includes-writes.md) | The single retry after a 401 includes writes | Accepted |
 | [0007](0007-folder-path-endpoint-is-unpaged.md) | The folder path endpoint is not paginated | Accepted |
 | [0008](0008-processing-module-reads-storage-tables.md) | The processing module reads the storage tables directly | Accepted |
+| [0009](0009-server-side-multipart-part-listing.md) | The server lists multipart parts; the browser never reads ETag | Accepted |
