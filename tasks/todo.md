@@ -156,16 +156,16 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Update the API list in docs.
 
 ### 6.4 Branch: feat/frontend-explorer (OK-NOW)
-- [ ] Explorer page for the root and for a folder id, with breadcrumbs from the new endpoint.
-- [ ] Folder list and file list with server pagination and a page size control.
-- [ ] Create folder dialog, rename, delete with confirmation, with the folder-not-empty and name-taken errors shown inline.
-- [ ] File rename, move to another folder, delete.
-- [ ] Download: request a signed link on click and navigate to it, never fetch it into memory, never store or log the link.
-- [ ] File status badge driven by the shared status union, with clear text for every status.
-- [ ] Loading skeletons, empty states and error states with retry on every list.
-- [ ] Keyboard navigation through the list, focus handling in dialogs, screen reader labels.
-- [ ] File names are treated as untrusted text and always interpolated.
-- [ ] Tests: list states, create and rename error mapping, download link handling, pagination.
+- [x] Explorer page for the root and for a folder id, with breadcrumbs from the new endpoint.
+- [x] Folder list and file list with server pagination and a page size control.
+- [x] Create folder dialog, rename, delete with confirmation, with the folder-not-empty and name-taken errors shown inline.
+- [x] File rename and delete. - [ ] Moving a file to another folder is NOT built yet: it needs a folder picker (tree navigation); the API supports it (PATCH folder_id).
+- [x] Download: request a signed link on click and navigate to it, never fetch it into memory, never store or log the link.
+- [x] File status badge driven by the shared status union, with clear text for every status.
+- [x] Loading skeletons, empty states and error states with retry on every list.
+- [x] Keyboard operability through native controls and tab order, focus handling in dialogs via the native dialog element, screen reader labels on every row action. (No arrow-key list navigation; no real-browser check yet.)
+- [x] File names are treated as untrusted text and always interpolated.
+- [x] Tests: list states, create and rename error mapping, download link handling, pagination.
 
 ### 6.5 Branch: feat/frontend-upload (OK-NOW against the fake; BLOCKED-AWS for real)
 - [ ] Upload queue store: per-file state (queued, requesting, uploading, completing, done, failed, cancelled), progress and speed.
@@ -427,6 +427,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 6) Names made only of zero-width characters (U+200B, U+200C, U+200D, U+2060) are not stripped and display as invisible; reject names with no visible character for display names and file/folder names. A name truncated at 255 characters can end in a space (cosmetic).
 - [ ] (PR 7, NEEDS-YOU) Root CLAUDE.md says 'no unpaged collection endpoint, ever'; ADR 0007 records the folder path exception. Owner to confirm or reword the standard (not edited by me).
 - [ ] (PR 7) The permission matrix has only owner and stranger so far; editor, viewer and revoked arrive with sharing (Phase 4). Folder moves need cycle prevention before they exist.
+- [ ] (PR 9) Explorer: file move needs a folder picker; no route titles or focus management on folder navigation; hostile-name rendering is covered by a test but no visual check in a real browser; the dialog does not close on backdrop click.
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.
