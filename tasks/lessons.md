@@ -148,3 +148,10 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 106. **A lock file written on macOS can miss Linux-only optional peers** (`@emnapi/*` for the wasm runtime); pin them as dev dependencies, with the reason in the PR, so `npm ci` works on every platform.
 107. **Pin third-party actions to a commit SHA and audit tools to a version**; tags move and unpinned tools change behaviour without any code change.
 108. **Keep advisory checks out of the required set and give them a schedule**, so a new advisory neither blocks every merge nor waits for the next PR to be noticed.
+109. **When a tool is missing locally, make CI the verifier** (a workflow that builds and smoke-tests) instead of shipping unverified config and saying so.
+110. **The proxy must overwrite, not append, X-Forwarded-For**, and the API must trust only the proxy's address.
+111. **nginx `add_header` inside a location drops every inherited one**; share security headers through an include in each such location and assert the header on the real response in CI.
+112. **A CSP header check by curl proves nothing about rendering**: remove the inline handlers the policy would block (Angular `inlineCritical: false`) and assert their absence in CI.
+113. **Run every container role as the real user in CI**, not only the API: beat needs a writable schedule path and failed only for a non-root user.
+114. **Use `^~` for proxied prefixes in nginx** so asset-extension regexes cannot capture API paths, and give missing files a real 404 instead of the SPA fallback.
+115. **Quote nginx regex locations that contain braces**; an unquoted `{8}` ends the directive and nginx refuses to start.

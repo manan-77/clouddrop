@@ -1,0 +1,68 @@
+# Optional full local stack for people who use Docker (the default dev setup is native Postgres
+# and Redis). Not exercised in CI; CI only builds the two images.
+#   docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
+# Needs .env (see .env.example). DATABASE_URL and REDIS_URL are overridden below to use the
+# compose service names. POSTGRES_PASSWORD is placed in the URL as is: use only URL-safe characters.
+x-api-env: &api-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clouddrop}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clouddrop}
+    REDIS_URL: redis://redis:6379/0
+    # Local stack only: the API publishes no port, so only the web container can reach it. In a
+    # real deployment set this to the proxy's address, never "*".
+    FORWARDED_ALLOW_IPS: "*"
+    # No ClamAV container here, so uploads would fail the scan stage; allowed only because
+    # ENVIRONMENT is development in .env. Add a clamd service to scan locally.
+    SCANNER_MODE: "off"
+
+services:
+  migrate:
+    build: ./backend
+    <<: *api-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    <<: *api-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    <<: *api-env
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "-l", "info"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    <<: *api-env
+    command:
+      ["celery", "-A", "app.worker.celery_app", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:8080"
+    depends_on:
+      api:
+        condition: service_healthy

@@ -1,0 +1,62 @@
+name: containers
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - "backend/Dockerfile"
+      - "backend/.dockerignore"
+      - "backend/pyproject.toml"
+      - "backend/uv.lock"
+      - "frontend/Dockerfile"
+      - "frontend/.dockerignore"
+      - "frontend/nginx/**"
+      - "frontend/package*.json"
+      - ".github/workflows/containers.yml"
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # Not a required check (it is path-filtered); it proves the images build and start.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the images
+        run: |
+          docker build -t clouddrop-api backend
+          docker build -t clouddrop-web frontend
+      - name: The API image runs as a non-root user and imports the app
+        run: |
+          test "$(docker run --rm --entrypoint id clouddrop-api -u)" != "0"
+          docker run --rm --entrypoint python \
+            -e DATABASE_URL=postgresql+psycopg://u:p@localhost/db \
+            -e JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-secret \
+            clouddrop-api -c "import app.main, app.worker.celery_app"
+      - name: Beat can start as the non-root user
+        run: |
+          docker run --rm \
+            -e DATABASE_URL=postgresql+psycopg://u:p@localhost/db \
+            -e JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-secret \
+            clouddrop-api sh -c 'timeout 8 celery -A app.worker.celery_app beat --schedule /tmp/celerybeat-schedule 2>&1 | tee /tmp/beat.log; grep -q "is starting" /tmp/beat.log; ! grep -qi "permission" /tmp/beat.log'
+      - name: The web image serves the app and proxies the API path
+        run: |
+          docker run -d --name web -p 8080:8080 -e API_UPSTREAM=http://127.0.0.1:9 clouddrop-web
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8080/nginx-health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8080/ | grep -qi "<cd-root"
+          curl -fsSI http://127.0.0.1:8080/some/spa/route | grep -qi "content-security-policy"
+          # The production page must not depend on an inline handler the CSP would block.
+          ! curl -fsS http://127.0.0.1:8080/ | grep -qi "onload="
+          # Missing files and API-like paths must not be answered by the SPA fallback.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/missing.map)" = "404"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/x.png)" = "502"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/ready)" = "502"
+          curl -fsSI http://127.0.0.1:8080/ | grep -qi "no-store"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/files)" = "502"
+      - name: Web container logs (on failure)
+        if: failure()
+        run: docker logs web || true

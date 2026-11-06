@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -185,3 +186,26 @@ def test_initUpload_presignFailure_leavesNoRows(
     assert _init(client, headers).status_code == 503
     listing = client.get("/api/v1/files", params={"status": "pending_upload"}, headers=headers)
     assert listing.json()["total"] == 0
+
+
+@pytest.mark.parametrize(("env_value", "warns"), [(None, True), ("10.0.0.5", False)])
+def test_createApp_nonLocalWithoutForwardedAllowIps_warnsOnce(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    env_value: str | None,
+    warns: bool,
+) -> None:
+    staging = get_settings().model_copy(update={"environment": "staging"})
+    monkeypatch.setattr(app_main, "get_settings", lambda: staging)
+    if env_value is None:
+        monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+    else:
+        monkeypatch.setenv("FORWARDED_ALLOW_IPS", env_value)
+    # create_app resets the root handlers, so attach the capture handler to the logger itself.
+    logger = logging.getLogger("app.main")
+    logger.addHandler(caplog.handler)
+    try:
+        app_main.create_app()
+    finally:
+        logger.removeHandler(caplog.handler)
+    assert ("FORWARDED_ALLOW_IPS is not set" in caplog.text) is warns
