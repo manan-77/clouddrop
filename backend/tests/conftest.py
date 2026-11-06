@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from app.core.config import get_settings
+from app.core.ratelimit import RateLimitResult, get_rate_limiter
 from app.db.session import get_session
 from app.main import create_app
 from app.modules.processing import scanner as scanner_module
@@ -116,9 +117,25 @@ def storage(s3_client: "S3Client") -> S3Storage:
     return S3Storage(s3_client, BUCKET, upload_ttl_seconds=900, download_ttl_seconds=300)
 
 
+class FakeRateLimiter:
+    """Counts in memory so tests never touch Redis and never leak counts between tests."""
+
+    def __init__(self) -> None:
+        self.counts: dict[str, int] = {}
+
+    def hit(self, key: str, limit: int, window_seconds: int) -> RateLimitResult:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return RateLimitResult(self.counts[key] <= limit, window_seconds)
+
+
+@pytest.fixture
+def rate_limiter() -> FakeRateLimiter:
+    return FakeRateLimiter()
+
+
 @pytest.fixture
 def client(
-    session: Session, storage: S3Storage, dispatcher: FakeDispatcher
+    session: Session, storage: S3Storage, dispatcher: FakeDispatcher, rate_limiter: FakeRateLimiter
 ) -> Iterator[TestClient]:
     app = create_app()
 
@@ -132,7 +149,8 @@ def client(
     app.dependency_overrides[get_session] = _request_session
     app.dependency_overrides[get_storage] = lambda: storage
     app.dependency_overrides[get_dispatcher] = lambda: dispatcher
-    with TestClient(app) as test_client:
+    app.dependency_overrides[get_rate_limiter] = lambda: rate_limiter
+    with TestClient(app, headers={"X-Requested-With": "XMLHttpRequest"}) as test_client:
         yield test_client
 
 

@@ -5,6 +5,8 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   invalid_token: 'Your session has expired. Please sign in again.',
   unauthorized: 'Please sign in to continue.',
   forbidden: 'You do not have permission to do that.',
+  rate_limited: 'Too many attempts. Please wait a moment and try again.',
+  csrf_check_failed: 'Your session could not be verified. Please reload the page.',
   not_found: 'We could not find that.',
   workspace_not_found: 'We could not find your workspace.',
   folder_not_found: 'That folder no longer exists.',
