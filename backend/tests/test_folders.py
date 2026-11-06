@@ -2,7 +2,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
-import httpx
+import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, event, func, update

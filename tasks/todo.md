@@ -384,16 +384,16 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] Verify images build: not possible on this Mac (no Docker); the `containers` workflow builds and smoke-tests both images on GitHub's runners.
 
 ### 11.4 Branch: feat/observability (OK-NOW)
-- [ ] Error tracking integration that scrubs bodies, headers and query strings.
+- [ ] (NEEDS-YOU: choose the backend) Error tracking integration that scrubs bodies, headers and query strings.
 - [ ] Tracing and metrics for request latency, task duration, queue depth and AI call counts.
-- [ ] Security headers, strict CORS review, production settings review (docs disabled, secure cookies).
-- [ ] Log review: confirm no document text, prompts, tokens or presigned links appear.
+- [x] Security headers (nginx), CORS and production settings review (docs/security-review.md).
+- [x] Log review: confirm no document text, prompts, tokens or presigned links appear (docs/security-review.md).
 
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
-- [ ] Dependency audit and updates, including resolving the test-client deprecation warning.
+- [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
-- [ ] Backup and restore procedure for the database tested once.
-- [ ] Threat-model checklist walk-through against the CLAUDE.md security rules.
+- [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
+- [x] Threat-model checklist walk-through against the CLAUDE.md security rules (docs/security-review.md).
 
 ### 11.6 Branch: feat/deploy-azure (NEEDS-YOU: subscription and secrets)
 - [ ] Container Apps for API, worker and beat; managed Postgres with pgvector enabled; managed Redis.
