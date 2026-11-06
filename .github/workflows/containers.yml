@@ -42,7 +42,7 @@ jobs:
           docker run --rm \
             -e DATABASE_URL=postgresql+psycopg://u:p@localhost/db \
             -e JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-secret \
-            clouddrop-api sh -c 'timeout 8 celery -A app.worker.celery_app beat --schedule /tmp/celerybeat-schedule 2>&1 | tee /tmp/beat.log; grep -q "beat: Starting" /tmp/beat.log'
+            clouddrop-api sh -c 'timeout 8 celery -A app.worker.celery_app beat --schedule /tmp/celerybeat-schedule 2>&1 | tee /tmp/beat.log; grep -q "is starting" /tmp/beat.log; ! grep -qi "permission" /tmp/beat.log'
       - name: The web image serves the app and proxies the API path
         run: |
           docker run -d --name web -p 8080:8080 -e API_UPSTREAM=http://127.0.0.1:9 clouddrop-web
