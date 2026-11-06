@@ -362,10 +362,10 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 ## 11. Phase 8 - Hardening, CI and deploy
 
 ### 11.1 Branch: feat/rate-limiting (OK-NOW, local Redis)
-- [ ] Redis-based limits per IP and per account on the auth endpoints, and per user on AI and search endpoints.
-- [ ] Clear 429 responses with Retry-After and the standard error shape.
-- [ ] Add the CSRF header requirement on the refresh endpoint and update the frontend to send it.
-- [ ] Tests: limits trigger, reset after the window, one user cannot exhaust another's budget.
+- [x] Redis-based limits per IP and per account on the auth endpoints. (Per-user AI and search limits: reuse `app.core.ratelimit.enforce` when those endpoints exist.)
+- [x] Clear 429 responses with Retry-After and the standard error shape.
+- [x] Add the CSRF header requirement on the refresh endpoint and update the frontend to send it.
+- [x] Tests: limits trigger, reset after the window, one user cannot exhaust another's budget.
 
 ### 11.2 Branch: feat/ci (OK-NOW)
 - [ ] GitHub Actions workflows: backend (lint, format check, types, tests with a Postgres service that has the vector extension, and Redis), frontend (build, test, lint, format check).

@@ -21,6 +21,10 @@ Resources that do not belong to the caller return 404, never 403. The interactiv
 | POST | `/logout` | 204 | Revokes the token family and clears the cookie |
 | GET | `/me` | 200 user | Authenticated |
 
+Rate limits (fixed window, Redis, per IP and for login also per account; defaults in `Settings`): login 20 per IP and 10 per account per 15 minutes, register 10 per IP per hour, refresh 60 per IP per minute. Exceeding one returns **429** `rate_limited` with a `Retry-After` header. If Redis is down the limiter fails open and logs a warning.
+
+`/refresh` and `/logout` also require the header `X-Requested-With: XMLHttpRequest`; without it they return **403** `csrf_check_failed`. The frontend sends it on both calls.
+
 ## Folders (`/api/v1/folders`) - authenticated
 | Method | Path | Success | Notes |
 |---|---|---|---|

@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     chunk_overlap_chars: int = 150
     sweeper_stuck_after_seconds: int = 600
     sweeper_batch_size: int = 100
+    rate_limit_login_per_ip: int = 20
+    rate_limit_login_per_account: int = 10
+    rate_limit_login_window_seconds: int = 900
+    rate_limit_register_per_ip: int = 10
+    rate_limit_register_window_seconds: int = 3600
+    rate_limit_refresh_per_ip: int = 60
+    rate_limit_refresh_window_seconds: int = 60
     purge_interval_seconds: int = 3600
     purge_retention_days: int = 30
     purge_batch_size: int = 100

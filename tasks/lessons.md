@@ -128,3 +128,6 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 86. **Count only what can still become real in quota sums**: abandoned pending uploads must stop counting once past their presign window, not wait for the purge.
 87. **A batch lock is only as long as the transaction**: committing per item releases the rest, so lock and re-check each item inside the transaction that deletes it.
 88. **A rotation-driven table needs a drain that loops (bounded) and an index on the column the purge filters on**, not one fixed batch per interval.
+89. **Tests must never share a real counter store**: inject an in-memory limiter by default; test the Redis implementation separately on a throwaway DB with unique keys and no flush.
+90. **Hash rate-limit subjects** (IP, email) before they become keys so Redis holds no PII.
+91. **A union of two observable types cannot be called with `.subscribe` in a spec**; branch before subscribing.

@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { type Observable } from 'rxjs';
 
@@ -9,6 +9,12 @@ import {
   type TokenResponse,
   type UserRead,
 } from '@core/api/models';
+
+/**
+ * Cookie-bearing endpoints require this header: a cross-site form cannot send it, and a
+ * cross-origin script needs a CORS preflight the API never grants.
+ */
+const CSRF_HEADERS = new HttpHeaders({ 'X-Requested-With': 'XMLHttpRequest' });
 
 /** Transport only: no state, no navigation. */
 @Injectable({ providedIn: 'root' })
@@ -24,11 +30,13 @@ export class AuthApi {
   }
 
   refresh(): Observable<TokenResponse> {
-    return this.http.post<TokenResponse>(`${API_BASE}/auth/refresh`, null);
+    return this.http.post<TokenResponse>(`${API_BASE}/auth/refresh`, null, {
+      headers: CSRF_HEADERS,
+    });
   }
 
   logout(): Observable<void> {
-    return this.http.post<void>(`${API_BASE}/auth/logout`, null);
+    return this.http.post<void>(`${API_BASE}/auth/logout`, null, { headers: CSRF_HEADERS });
   }
 
   me(): Observable<UserRead> {
