@@ -235,7 +235,7 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [x] Complete verifies the assembled object size and records the ETag.
 - [x] Abort endpoint and a lifecycle expectation for abandoned uploads.
 - [x] Raise the effective maximum size and document it.
-- [ ] (next branch feat/frontend-multipart) Frontend: part slicing, limited concurrency, per-part retry, ETag capture (needs the bucket to expose the header).
+- [x] Frontend: part slicing, limited concurrency, per-part retry. (No ETag capture: the server lists the parts itself.) Real-browser/real-bucket check is BLOCKED-AWS.
 - [x] Tests: happy path, missing part, wrong size, abort, stranger gets 404, repeated complete is safe.
 
 ### 8.2 Branch: feat/celery-pipeline (OK-NOW, needs only local Redis)

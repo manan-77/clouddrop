@@ -137,3 +137,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 95. **Let the server list uploaded parts itself instead of trusting a client part list**; it removes ETag capture from the browser and the trust problem together.
 96. **A cleanup deadline must fit the slowest legitimate flow**: multipart uploads need their own, longer deadline than single uploads, and the quota cutoff must follow it.
 97. **Test the presigned URL with a client built like production** (SigV4); the default test client signs differently and hides what is or is not signed.
+98. **Branch on the server's plan, not on a client guess**: the part size and count come from the API response; the client only slices what it is told.
+99. **Put shared guards (external-URL check, storage error type) in one small module** before a second caller needs them.

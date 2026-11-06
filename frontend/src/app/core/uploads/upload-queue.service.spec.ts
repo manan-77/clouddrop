@@ -1,9 +1,13 @@
 import { HttpEventType } from '@angular/common/http';
 import { HttpTestingController, type TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { of, throwError } from 'rxjs';
+import { vi } from 'vitest';
 
 import { ENVELOPE, provideAuthTesting, TOKENS } from '@core/auth/auth-testing';
 import { SessionStore } from '@core/auth/session.store';
+import { MultipartTransfer } from './multipart-transfer.service';
+import { StorageUploadError } from './storage-upload-error';
 import {
   EMPTY_FILE_MESSAGE,
   MAX_PARALLEL_UPLOADS,
@@ -188,7 +192,7 @@ describe('UploadQueue', () => {
     const { queue, backend } = setup();
     queue.add([new File([], 'empty.pdf', { type: 'application/pdf' })], null);
     const huge = pdf('huge.pdf');
-    Object.defineProperty(huge, 'size', { value: 200 * 1024 * 1024 });
+    Object.defineProperty(huge, 'size', { value: 2 * 1024 * 1024 * 1024 });
     queue.add([huge], null);
     expect(queue.items().map((i) => [i.status, i.error])).toEqual([
       ['failed', EMPTY_FILE_MESSAGE],
@@ -328,5 +332,56 @@ describe('UploadQueue', () => {
     queue.retry(only(queue).id);
     backend.expectNone(isInit);
     expect(only(queue).status).toBe('done');
+  });
+
+  describe('multipart', () => {
+    const big = (name = 'big.pdf') => {
+      const file = pdf(name, 'x'.repeat(30));
+      Object.defineProperty(file, 'size', { value: 150 * 1024 * 1024 });
+      return file;
+    };
+    const multipartInit = (id: string) => ({
+      file: fileRead(id, 'big.pdf'),
+      multipart: { part_size_bytes: 16 * 1024 * 1024, part_count: 10, expires_in: 900 },
+    });
+
+    it('filesOverTheSingleLimit_useTheMultipartEndpointAndTransfer', () => {
+      const { queue, backend } = setup();
+      const transfer = TestBed.inject(MultipartTransfer);
+      const send = vi.spyOn(transfer, 'send').mockImplementation((_id, _file, _plan, progress) => {
+        progress(40);
+        return of(undefined);
+      });
+      queue.add([big()], null);
+      expect(() => backend.expectNone(isInit)).not.toThrow();
+      backend.expectOne('/api/v1/files/uploads/multipart').flush(multipartInit('f9'));
+      expect(send).toHaveBeenCalledOnce();
+      expect(only(queue).progress).toBe(100);
+      backend.expectOne('/api/v1/files/f9/uploads/complete').flush(fileRead('f9'));
+      expect(only(queue).status).toBe('done');
+    });
+
+    it('smallFiles_stayOnTheSingleRequestPath', () => {
+      const { queue, backend } = setup();
+      queue.add([pdf()], null);
+      backend.expectOne(isInit).flush(initResponse('f1'));
+      backend.expectNone('/api/v1/files/uploads/multipart');
+      backend.expectOne(STORAGE);
+    });
+
+    it('transferFailure_abortsTheMultipartUploadInsteadOfSoftDeleting', () => {
+      const { queue, backend } = setup();
+      vi.spyOn(TestBed.inject(MultipartTransfer), 'send').mockReturnValue(
+        throwError(() => new StorageUploadError()),
+      );
+      queue.add([big()], null);
+      backend.expectOne('/api/v1/files/uploads/multipart').flush(multipartInit('f9'));
+      expect(only(queue).status).toBe('failed');
+      expect(only(queue).error).toBe(STORAGE_FAILED_MESSAGE);
+      backend
+        .expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f9/uploads')
+        .flush(null);
+      backend.expectNone('/api/v1/files/f9');
+    });
   });
 });

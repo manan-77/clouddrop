@@ -17,8 +17,14 @@ import {
   type Observable,
 } from 'rxjs';
 
-import { type UploadInstructions } from '@core/api/models';
+import { type UploadInitRequest, type UploadInstructions } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
+import { MultipartTransfer } from './multipart-transfer.service';
+import {
+  isExternalHttpUrl,
+  SINGLE_UPLOAD_MAX_BYTES,
+  StorageUploadError,
+} from './storage-upload-error';
 import { UploadsApi } from './uploads-api.service';
 
 export type UploadStatus =
@@ -37,7 +43,7 @@ export interface UploadItem {
 
 export const MAX_PARALLEL_UPLOADS = 3;
 /** Mirrors the server default for a quick message only; the server stays the authority. */
-export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 export const STORAGE_FAILED_MESSAGE = 'The upload to storage failed. Please try again.';
 export const EMPTY_FILE_MESSAGE = 'This file is empty.';
 export const TOO_LARGE_MESSAGE = 'This file is too large to upload.';
@@ -49,8 +55,6 @@ const ACTIVE: ReadonlySet<UploadStatus> = new Set([
   'completing',
 ]);
 const FINISHED: ReadonlySet<UploadStatus> = new Set(['done', 'failed', 'cancelled']);
-
-class StorageUploadError extends Error {}
 
 let sequence = 0;
 
@@ -64,6 +68,7 @@ let sequence = 0;
 export class UploadQueue {
   private readonly api = inject(UploadsApi);
   private readonly http = inject(HttpClient);
+  private readonly multipart = inject(MultipartTransfer);
   private readonly resolver = inject(ErrorResolver);
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
@@ -75,6 +80,8 @@ export class UploadQueue {
   readonly completed$ = this.completedSubject.asObservable();
 
   private readonly files = new Map<string, File>();
+  /** Uploads that started as multipart, so cleanup aborts the S3 upload too. */
+  private readonly multipartIds = new Set<string>();
   private readonly starts = new Subject<string>();
   private readonly cancels = new Subject<string>();
 
@@ -144,48 +151,77 @@ export class UploadQueue {
       return EMPTY;
     }
     this.patch(id, { status: 'requesting', progress: 0 });
-    return this.api
-      .init({
-        name: item.name,
-        content_type: file.type,
-        size_bytes: item.size,
-        folder_id: item.folderId,
-      })
-      .pipe(
-        tap((response) => this.patch(id, { status: 'uploading', fileId: response.file.id })),
-        switchMap((response) =>
-          this.sendToStorage(id, response.upload, file).pipe(map(() => response.file.id)),
-        ),
-        tap(() => this.patch(id, { status: 'completing', progress: 100 })),
-        switchMap((fileId) => this.api.complete(fileId)),
-        tap(() => {
-          this.patch(id, { status: 'done' });
-          this.files.delete(id);
-          const done = this.find(id);
-          if (done) {
-            this.completedSubject.next(done);
-          }
-        }),
-        map(() => undefined),
-        catchError((error: unknown) => {
-          this.patch(id, {
-            status: 'failed',
-            error:
-              error instanceof StorageUploadError
-                ? STORAGE_FAILED_MESSAGE
-                : this.resolver.resolve(error).message,
-          });
-          this.discardOrphan(id);
-          return of(undefined);
-        }),
-        takeUntil(this.cancels.pipe(filter((cancelled) => cancelled === id))),
-      );
+    const request = {
+      name: item.name,
+      content_type: file.type,
+      size_bytes: item.size,
+      folder_id: item.folderId,
+    };
+    const upload$ =
+      item.size > SINGLE_UPLOAD_MAX_BYTES
+        ? this.uploadInParts(id, request, file)
+        : this.uploadInOneRequest(id, request, file);
+    return upload$.pipe(
+      tap(() => this.patch(id, { status: 'completing', progress: 100 })),
+      switchMap((fileId) => this.api.complete(fileId)),
+      tap(() => {
+        this.patch(id, { status: 'done' });
+        this.files.delete(id);
+        this.multipartIds.delete(id);
+        const done = this.find(id);
+        if (done) {
+          this.completedSubject.next(done);
+        }
+      }),
+      map(() => undefined),
+      catchError((error: unknown) => {
+        this.patch(id, {
+          status: 'failed',
+          error:
+            error instanceof StorageUploadError
+              ? STORAGE_FAILED_MESSAGE
+              : this.resolver.resolve(error).message,
+        });
+        this.discardOrphan(id);
+        return of(undefined);
+      }),
+      takeUntil(this.cancels.pipe(filter((cancelled) => cancelled === id))),
+    );
+  }
+
+  private uploadInOneRequest(
+    id: string,
+    request: UploadInitRequest,
+    file: File,
+  ): Observable<string> {
+    return this.api.init(request).pipe(
+      tap((response) => this.patch(id, { status: 'uploading', fileId: response.file.id })),
+      switchMap((response) =>
+        this.sendToStorage(id, response.upload, file).pipe(map(() => response.file.id)),
+      ),
+    );
+  }
+
+  private uploadInParts(id: string, request: UploadInitRequest, file: File): Observable<string> {
+    return this.api.initMultipart(request).pipe(
+      tap((response) => {
+        this.patch(id, { status: 'uploading', fileId: response.file.id });
+        this.multipartIds.add(id);
+      }),
+      switchMap((response) =>
+        this.multipart
+          .send(response.file.id, file, response.multipart, (progress) =>
+            this.patch(id, { progress }),
+          )
+          .pipe(map(() => response.file.id)),
+      ),
+    );
   }
 
   private sendToStorage(id: string, upload: UploadInstructions, file: File): Observable<void> {
     // The server controls this URL, so insist on another origin: a same-origin address would
     // receive our bearer token from the interceptor.
-    if (!this.isExternalHttpUrl(upload.url)) {
+    if (!isExternalHttpUrl(upload.url, this.document.location.origin)) {
       return throwError(() => new StorageUploadError());
     }
     // Storage requires the file field last. File is a Blob: the browser streams it from disk.
@@ -209,16 +245,6 @@ export class UploadQueue {
       );
   }
 
-  private isExternalHttpUrl(url: string): boolean {
-    try {
-      const own = this.document.location.origin;
-      const parsed = new URL(url, own);
-      return /^https?:$/.test(parsed.protocol) && parsed.origin !== own;
-    } catch {
-      return false;
-    }
-  }
-
   /** Best effort: remove the pending row the API created, so retries do not pile up duplicates. */
   private discardOrphan(id: string): void {
     const fileId = this.find(id)?.fileId;
@@ -226,8 +252,10 @@ export class UploadQueue {
       return;
     }
     this.patch(id, { fileId: null });
-    this.api
-      .discard(fileId)
+    const cleanup = this.multipartIds.delete(id)
+      ? this.api.abort(fileId)
+      : this.api.discard(fileId);
+    cleanup
       .pipe(
         catchError(() => EMPTY),
         takeUntilDestroyed(this.destroyRef),
