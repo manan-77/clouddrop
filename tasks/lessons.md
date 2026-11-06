@@ -154,3 +154,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 112. **A CSP header check by curl proves nothing about rendering**: remove the inline handlers the policy would block (Angular `inlineCritical: false`) and assert their absence in CI.
 113. **Run every container role as the real user in CI**, not only the API: beat needs a writable schedule path and failed only for a non-root user.
 114. **Use `^~` for proxied prefixes in nginx** so asset-extension regexes cannot capture API paths, and give missing files a real 404 instead of the SPA fallback.
+115. **Quote nginx regex locations that contain braces**; an unquoted `{8}` ends the directive and nginx refuses to start.

@@ -57,3 +57,6 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/ready)" = "502"
           curl -fsSI http://127.0.0.1:8080/ | grep -qi "no-store"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/v1/files)" = "502"
+      - name: Web container logs (on failure)
+        if: failure()
+        run: docker logs web || true

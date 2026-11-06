@@ -32,7 +32,7 @@ server {
   }
 
   # Hashed build files never change, so they can be cached for a year; the entry document never.
-  location ~* -[A-Z0-9]{8}\.(?:js|css)$ {
+  location ~* "-[A-Z0-9]{8}\.(?:js|css)$" {
     include /etc/nginx/conf.d/security-headers.inc;
     add_header Cache-Control "public, max-age=31536000, immutable";
     try_files $uri =404;
