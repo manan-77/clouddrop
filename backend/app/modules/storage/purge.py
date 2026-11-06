@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, exists, select
+from sqlalchemy import ColumnElement, CursorResult, delete, exists, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ServiceUnavailableError
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Expired tokens are kept a little longer so a late reuse of one is still recognised.
 REFRESH_TOKEN_GRACE = timedelta(days=1)
+MAX_TOKEN_BATCHES = 50
 
 
 @dataclass(frozen=True)
@@ -32,10 +34,26 @@ class PurgeResult:
     refresh_tokens: int = 0
 
 
-def _purge_files(session: Session, storage: S3Storage, file_ids: list[uuid.UUID]) -> int:
-    """Delete the objects first, then the rows; a storage failure keeps the rows for later."""
+def _purge_files(
+    session: Session,
+    storage: S3Storage,
+    file_ids: list[uuid.UUID],
+    conditions: list[ColumnElement[bool]],
+) -> int:
+    """Per file: lock it, re-check it is still purgeable, delete objects, then the row.
+
+    The lock is held across the storage calls on purpose: it blocks a concurrent
+    `complete_upload` (which locks the same row), so a file that just became live is never lost.
+    A storage failure keeps the row for the next run.
+    """
     removed = 0
     for file_id in file_ids:
+        locked = session.scalar(
+            select(File.id).where(File.id == file_id, *conditions).with_for_update(skip_locked=True)
+        )
+        if locked is None:
+            session.rollback()  # changed since it was selected, or another run has it
+            continue
         keys = list(
             session.scalars(select(FileVersion.s3_key).where(FileVersion.file_id == file_id))
         )
@@ -53,6 +71,28 @@ def _purge_files(session: Session, storage: S3Storage, file_ids: list[uuid.UUID]
     return removed
 
 
+def _purge_tokens(session: Session, now: datetime, batch: int) -> int:
+    """Rotation creates a token per refresh, so loop in batches (bounded) to keep up."""
+    total = 0
+    for _ in range(MAX_TOKEN_BATCHES):
+        ids = list(
+            session.scalars(
+                select(RefreshToken.id)
+                .where(RefreshToken.expires_at < now - REFRESH_TOKEN_GRACE)
+                .limit(batch)
+            )
+        )
+        if not ids:
+            break
+        total += cast(
+            CursorResult[Any], session.execute(delete(RefreshToken).where(RefreshToken.id.in_(ids)))
+        ).rowcount
+        session.commit()
+        if len(ids) < batch:
+            break
+    return total
+
+
 def purge_expired(
     session: Session,
     storage: S3Storage,
@@ -64,26 +104,20 @@ def purge_expired(
 ) -> PurgeResult:
     now = now or datetime.now(UTC)
 
-    def locked_ids(*conditions: object) -> list[uuid.UUID]:
-        # SKIP LOCKED lets two overlapping runs take different rows instead of waiting.
-        return list(
-            session.scalars(
-                select(File.id)
-                .where(*conditions)  # type: ignore[arg-type]
-                .order_by(File.created_at)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
-            )
+    def ids(conditions: list[ColumnElement[bool]]) -> list[uuid.UUID]:
+        rows = session.scalars(
+            select(File.id).where(*conditions).order_by(File.created_at).limit(limit)
         )
+        return list(rows)
 
-    deleted = locked_ids(File.deleted_at.is_not(None), File.deleted_at < now - retention)
-    files = _purge_files(session, storage, deleted)
-    stale = locked_ids(
+    deleted_conditions = [File.deleted_at.is_not(None), File.deleted_at < now - retention]
+    files = _purge_files(session, storage, ids(deleted_conditions), deleted_conditions)
+    stale_conditions = [
         File.status == FileStatus.PENDING_UPLOAD.value,
         File.deleted_at.is_(None),
         File.created_at < now - pending_upload_ttl,
-    )
-    stale_uploads = _purge_files(session, storage, stale)
+    ]
+    stale_uploads = _purge_files(session, storage, ids(stale_conditions), stale_conditions)
 
     # A folder can go once nothing refers to it; deeper trees clear over successive runs.
     child = Folder.__table__.alias("child")
@@ -102,23 +136,15 @@ def purge_expired(
     )
     folders = 0
     if folder_ids:
-        folders = cast(
-            CursorResult[Any], session.execute(delete(Folder).where(Folder.id.in_(folder_ids)))
-        ).rowcount
-    token_ids = list(
-        session.scalars(
-            select(RefreshToken.id)
-            .where(RefreshToken.expires_at < now - REFRESH_TOKEN_GRACE)
-            .limit(limit)
-        )
-    )
-    tokens = 0
-    if token_ids:
-        tokens = cast(
-            CursorResult[Any],
-            session.execute(delete(RefreshToken).where(RefreshToken.id.in_(token_ids))),
-        ).rowcount
-    session.commit()
+        try:
+            folders = cast(
+                CursorResult[Any], session.execute(delete(Folder).where(Folder.id.in_(folder_ids)))
+            ).rowcount
+            session.commit()
+        except IntegrityError:  # something started using the folder meanwhile; try next run
+            session.rollback()
+            logger.warning("Folder purge skipped: a folder is in use again")
+    tokens = _purge_tokens(session, now, limit)
     result = PurgeResult(files, stale_uploads, folders, tokens)
     if any((files, stale_uploads, folders, tokens)):
         logger.info(

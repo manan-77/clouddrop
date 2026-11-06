@@ -126,3 +126,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 84. **A "rerun" test must call the write twice and compare rows**, include a shrinking rerun and a failing insert; counting rows once proves nothing.
 85. **Delete the external object before the row, and stop on the first storage outage**; the row is the only record of what to clean next run.
 86. **Count only what can still become real in quota sums**: abandoned pending uploads must stop counting once past their presign window, not wait for the purge.
+87. **A batch lock is only as long as the transaction**: committing per item releases the rest, so lock and re-check each item inside the transaction that deletes it.
+88. **A rotation-driven table needs a drain that loops (bounded) and an index on the column the purge filters on**, not one fixed batch per interval.

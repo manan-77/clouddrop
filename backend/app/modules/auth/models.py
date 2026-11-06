@@ -25,6 +25,6 @@ class RefreshToken(UUIDPrimaryKeyMixin, Base):
     )
     family_id: Mapped[uuid.UUID] = mapped_column(index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    expires_at: Mapped[datetime]
+    expires_at: Mapped[datetime] = mapped_column(index=True)
     revoked_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

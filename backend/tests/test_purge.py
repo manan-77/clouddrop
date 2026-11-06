@@ -113,6 +113,85 @@ class TestPurgeFiles:
         assert _purge(session, storage, limit=2).files == 1
 
 
+class TestRaceAndScope:
+    def test_fileCompletedWhilePurgeIsRunning_isNotDeleted(
+        self,
+        client,
+        make_user,
+        s3_client,
+        session: Session,
+        storage: S3Storage,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        headers = make_user()
+        ids = []
+        for name in ("a.pdf", "b.pdf"):
+            init = client.post(
+                "/api/v1/files/uploads",
+                json={"name": name, "content_type": "application/pdf", "size_bytes": 10},
+                headers=headers,
+            ).json()
+            ids.append(uuid.UUID(init["file"]["id"]))
+        session.execute(update(File).values(created_at=text("now() - interval '2 hours'")))
+        session.commit()
+        real, calls = storage.delete, []
+
+        def delete_then_complete_other(key: str) -> None:
+            real(key)
+            if not calls:  # while the first file is being purged, the other one is completed
+                other = max(
+                    ids,
+                    key=lambda i: (
+                        i
+                        != session.scalar(
+                            select(FileVersion.file_id).where(FileVersion.s3_key == key)
+                        )
+                    ),
+                )
+                session.execute(update(File).where(File.id == other).values(status="uploaded"))
+                session.commit()
+            calls.append(key)
+
+        monkeypatch.setattr(storage, "delete", delete_then_complete_other)
+        assert _purge(session, storage).stale_uploads == 1
+        assert _count(session, File) == 1
+        survivor = session.scalar(select(File))
+        assert survivor is not None and survivor.status == "uploaded"
+
+    def test_nonPendingOldFiles_areNotTreatedAsStale(
+        self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
+    ) -> None:
+        file_id, key = _upload(client, make_user(), s3_client)
+        session.execute(update(File).values(created_at=text("now() - interval '2 hours'")))
+        session.commit()
+        assert _purge(session, storage).stale_uploads == 0
+        assert session.get(File, file_id) is not None and _exists(s3_client, key)
+
+    def test_storageDown_onTheStalePath_keepsTheRow(
+        self,
+        client,
+        make_user,
+        s3_client,
+        session: Session,
+        storage: S3Storage,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        init = client.post(
+            "/api/v1/files/uploads",
+            json={"name": "a.pdf", "content_type": "application/pdf", "size_bytes": 10},
+            headers=make_user(),
+        ).json()
+        session.execute(update(File).values(created_at=text("now() - interval '2 hours'")))
+        session.commit()
+
+        def down(_: str) -> None:
+            raise ServiceUnavailableError("down", code="storage_unavailable")
+
+        monkeypatch.setattr(storage, "delete", down)
+        assert _purge(session, storage).stale_uploads == 0
+        assert session.get(File, uuid.UUID(init["file"]["id"])) is not None
+
+
 class TestStaleUploads:
     def _age(self, session: Session, file_id: uuid.UUID, minutes: int) -> None:
         session.execute(
@@ -177,6 +256,30 @@ class TestOtherData:
         before = _count(session, RefreshToken)
         assert _purge(session, storage).refresh_tokens == 1
         assert _count(session, RefreshToken) == before - 1
+
+    def test_moreExpiredTokensThanTheBatch_areAllRemoved(
+        self, client, make_user, session: Session, storage: S3Storage
+    ) -> None:
+        make_user()
+        user_id = session.scalar(select(User.id))
+        assert user_id is not None
+        old = datetime.now(UTC) - timedelta(days=5)
+        session.add_all(
+            RefreshToken(
+                user_id=user_id, family_id=uuid.uuid4(), token_hash=f"{i:064d}", expires_at=old
+            )
+            for i in range(25)
+        )
+        session.commit()
+        live = _count(session, RefreshToken) - 25
+        assert _purge(session, storage, limit=10).refresh_tokens == 25
+        assert _count(session, RefreshToken) == live
+
+    def test_beatSchedule_includesThePurgeTask(self) -> None:
+        from app.worker.celery_app import celery_app
+
+        tasks = {entry["task"] for entry in celery_app.conf.beat_schedule.values()}
+        assert "storage.purge_expired" in tasks
 
     def test_deletedFolders_goOnceEmptyAndLeavesGoFirst(
         self, client, make_user, session: Session, storage: S3Storage
