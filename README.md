@@ -2,13 +2,13 @@
 
 AI-powered cloud storage: upload, organize, share, and search files by meaning.
 
-Status: backend foundation, authentication and file storage are built, and the Angular app shell is scaffolded (theme, error handling, shared UI). Sign-in and the file explorer, sharing, the processing pipeline and the AI features are planned. See `tasks/todo.md` for the full plan and `docs/` for the architecture.
+Status: built and tested locally: accounts and sessions, folders and files, direct-to-S3 uploads (single and multipart up to 1 GiB), the processing pipeline (verification, malware scan, type detection, text extraction and chunking), purge jobs, rate limiting, the Angular app (sign-in, file explorer, uploads), CI and container images. Not built yet: sharing and permissions, embeddings and semantic search, RAG chat and summaries (they wait on owner decisions and the AI gateway details). Real S3, real ClamAV, a real browser run and the cloud deploy have not been exercised. See `tasks/todo.md` for the plan and `docs/architecture.md` for the diagrams.
 
 ## Layout
-- `backend/` FastAPI, SQLAlchemy 2 (sync), Alembic, Celery (planned)
+- `backend/` FastAPI, SQLAlchemy 2 (sync), Alembic, Celery
 - `frontend/` Angular 21
 - `infra/` database init and deployment config
-- `docs/` ER diagram, API reference, architecture decision records
+- `docs/` architecture, ER diagram, API reference, security review, backup notes, architecture decision records
 - `tasks/` task plan and lessons learned
 - `CLAUDE.md` files hold the engineering standards for every tier
 
