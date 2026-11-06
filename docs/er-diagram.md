@@ -98,4 +98,4 @@ pending_upload -> uploaded -> scanning -> processing -> ready
                             infected      failed        needs_ocr
 ```
 
-The API sets `pending_upload`, `uploaded` and `failed` (size mismatch). The worker sets `scanning` and `processing` while its stages run and `failed` when a stage can never succeed. `ready`, `infected` and `needs_ocr` arrive with the scan, extraction and embedding stages; until then a file that passes every stage rests in `processing`.
+The API sets `pending_upload`, `uploaded` and `failed` (size mismatch). The worker sets `scanning` while it verifies and scans the object and `processing` for the later stages, `failed` when a stage can never succeed, and `infected` when the scanner finds malware (never downloadable). `ready` and `needs_ocr` arrive with the extraction and embedding stages; until then a file that passes every stage rests in `processing`.

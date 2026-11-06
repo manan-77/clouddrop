@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     processing_max_attempts: int = 8
     processing_job_stale_seconds: int = 600
     sweeper_interval_seconds: int = 300
+    # "off" skips malware scanning and is only accepted in local environments.
+    scanner_mode: Literal["clamav", "off"] = "clamav"
+    clamav_host: str = "localhost"
+    clamav_port: int = 3310
+    scanner_timeout_seconds: int = 30
+    # Raise clamd's StreamMaxLength to at least this too; a larger file fails instead of skipping.
+    scanner_max_stream_bytes: int = 100 * 1024 * 1024
+    scanner_chunk_bytes: int = 64 * 1024
     sweeper_stuck_after_seconds: int = 600
     sweeper_batch_size: int = 100
     s3_connect_timeout_seconds: int = 5
@@ -73,6 +81,12 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
         return value
+
+    @model_validator(mode="after")
+    def _scanning_stays_on_outside_local(self) -> Self:
+        if self.scanner_mode == "off" and not self.is_local:
+            raise ValueError("SCANNER_MODE=off is only allowed in development and test")
+        return self
 
     @model_validator(mode="after")
     def _worker_limits_are_consistent(self) -> Self:

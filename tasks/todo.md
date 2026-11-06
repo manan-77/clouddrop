@@ -250,12 +250,12 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [x] Documentation of how to run the worker and beat locally.
 
 ### 8.3 Branch: feat/malware-scan (OK-NOW with a fake scanner; real scanning needs ClamAV installed)
-- [ ] Scanner interface with two implementations: the real ClamAV one and a fake for tests.
-- [ ] Stream the object from storage to the scanner in chunks, never whole into memory.
-- [ ] Documented behaviour for files larger than the scanner stream limit (explicit fallback, never silent skip).
-- [ ] Status transitions: uploaded to scanning to processing, or to infected (quarantine, never downloadable) or failed.
-- [ ] Infected files cannot be downloaded or shared by anyone.
-- [ ] Tests: clean, infected, scanner down (retry then failed), oversize file path.
+- [x] Scanner interface with two implementations: the real ClamAV one and a fake for tests.
+- [x] Stream the object from storage to the scanner in chunks, never whole into memory.
+- [x] Documented behaviour for files larger than the scanner stream limit (explicit fallback, never silent skip).
+- [x] Status transitions: uploaded to scanning to processing, or to infected (quarantine, never downloadable) or failed.
+- [x] Infected files cannot be downloaded or shared by anyone.
+- [x] Tests: clean, infected, scanner down (retry then failed), oversize file path.
 
 ### 8.4 Branch: feat/extraction-chunking (OK-NOW)
 - [x] Before scanning, compare the object's current ETag with the ETag stored at upload completion; a mismatch fails the file (done in the pipeline's verify stage).
@@ -433,6 +433,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 11) The worker marks a file `failed` with no user-visible reason (the code lives in processing_jobs.error_code); add a reason field or endpoint. Files rest in `processing` until the scan, extraction and embedding stages exist, so the UI shows Processing for every upload. The worker has not run against a real bucket (BLOCKED-AWS). A test message for a random version id was left on the default Redis database 0 queue by a smoke test; it is a harmless no-op when consumed.
 - [ ] (PR 11) The request id is not yet propagated into task headers and worker logs (required by the backend standard); S3 access errors count as transient until the attempts cap fails them; `scanning` is set by the verify stage although no malware scan exists yet, and scanning/processing files are downloadable (existing policy); the sweeper scan of files by status has no dedicated index (check with real volumes); the generated migration boilerplate comments remain.
 - [ ] (PR 11) Tests still use `type: ignore` for the fake dispatcher and storage; give them a shared Protocol. No test runs two real concurrent workers or a real beat process.
+- [ ] (PR 12, NEEDS-YOU) Real ClamAV is not installed on this machine: the scanner client is tested against an in-test fake clamd that speaks the INSTREAM protocol, not against real clamd or a real EICAR file. Install ClamAV (see README) and run one real scan before relying on it. Until then local worker runs need `SCANNER_MODE=off` or the scan stage retries and then fails the file.
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

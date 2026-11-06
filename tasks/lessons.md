@@ -105,3 +105,10 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 66. **Make conditional reads conditional**: use the stored ETag as `IfMatch` so every read stage sees the object that was verified.
 67. **A test for ordering must observe state at the moment of the call** (use a hook), not only count calls.
 68. **Encode operational invariants as startup validation**, not just a test of the defaults (visibility timeout versus task limits).
+
+## From the malware scan work
+
+69. **A security control that can be switched off must be refused outside local environments** (validated in settings), and the off state must be loud in the logs.
+70. **Test a protocol client against a small fake server that records the bytes**, so framing, terminators and limits are asserted, not assumed.
+71. **Decide the oversize behaviour explicitly**: fail with a clear code, never skip silently.
+72. **Do not log scanner replies**: they can echo file content or names.

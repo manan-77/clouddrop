@@ -2,8 +2,10 @@ from collections.abc import Callable
 from typing import Protocol
 
 from app.core.errors import ServiceUnavailableError
+from app.modules.processing import scanner as scanner_module
 from app.modules.processing.constants import JobStage
 from app.modules.processing.filetype import matches_declared_type
+from app.modules.processing.scanner import ScannerUnavailableError, ScanTooLargeError
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion
 from app.modules.storage.s3 import ObjectChangedError, S3Storage
@@ -14,9 +16,11 @@ HEAD_BYTES = 4096
 class PermanentStageError(Exception):
     """The file can never pass this stage. `code` is a short machine value, safe to store."""
 
-    def __init__(self, code: str) -> None:
+    def __init__(self, code: str, file_status: FileStatus = FileStatus.FAILED) -> None:
         super().__init__(code)
         self.code = code
+        # The status the file ends in; a malware hit ends in `infected`, not `failed`.
+        self.file_status = file_status
 
 
 class TransientStageError(Exception):
@@ -49,6 +53,37 @@ class VerifyObjectStage:
             raise PermanentStageError("object_size_changed")
         if version.etag is None or info.etag != version.etag:
             raise PermanentStageError("object_changed")
+
+
+SCAN_CHUNK_BYTES = 64 * 1024
+
+
+class ScanStage:
+    """Streams the object through the malware scanner. Never skipped silently."""
+
+    name = JobStage.SCAN
+    file_status = FileStatus.SCANNING
+
+    def run(self, file: File, version: FileVersion, storage: S3Storage) -> None:
+        # Looked up at call time so tests can replace it.
+        scanner = scanner_module.get_scanner()
+        if not scanner.enabled:
+            return
+        try:
+            chunks = _call(
+                lambda: storage.iter_object(version.s3_key, SCAN_CHUNK_BYTES, if_match=version.etag)
+            )
+            if chunks is None:
+                raise PermanentStageError("object_missing")
+            result = _call(lambda: scanner.scan(chunks))
+        except ObjectChangedError as exc:
+            raise PermanentStageError("object_changed") from exc
+        except ScanTooLargeError as exc:
+            raise PermanentStageError("too_large_to_scan") from exc
+        except ScannerUnavailableError as exc:
+            raise TransientStageError("scanner unavailable") from exc
+        if result.infected:
+            raise PermanentStageError("infected", FileStatus.INFECTED)
 
 
 class DetectTypeStage:

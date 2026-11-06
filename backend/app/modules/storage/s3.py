@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -10,6 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.core.errors import ServiceUnavailableError
 
 if TYPE_CHECKING:
+    from botocore.response import StreamingBody
     from mypy_boto3_s3.client import S3Client
 
 logger = logging.getLogger(__name__)
@@ -107,6 +109,39 @@ class S3Storage:
             raise self._unavailable("read object", exc) from exc
         except BotoCoreError as exc:
             raise self._unavailable("read object", exc) from exc
+
+    def iter_object(
+        self, key: str, chunk_size: int, *, if_match: str | None = None
+    ) -> Iterator[bytes] | None:
+        """Streams an object in chunks, never whole into memory. None when it does not exist.
+
+        With `if_match` the stream fails with `ObjectChangedError` if the object is replaced.
+        """
+        try:
+            if if_match:
+                response = self.client.get_object(
+                    Bucket=self.bucket, Key=key, IfMatch=f'"{if_match}"'
+                )
+            else:
+                response = self.client.get_object(Bucket=self.bucket, Key=key)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in _NOT_FOUND_CODES:
+                return None
+            if code in {"PreconditionFailed", "412"}:
+                raise ObjectChangedError from exc
+            raise self._unavailable("read object", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("read object", exc) from exc
+        return self._stream(response["Body"], chunk_size)
+
+    def _stream(self, body: StreamingBody, chunk_size: int) -> Iterator[bytes]:
+        try:
+            yield from body.iter_chunks(chunk_size)
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("read object", exc) from exc
+        finally:
+            body.close()
 
     def delete(self, key: str) -> None:
         try:

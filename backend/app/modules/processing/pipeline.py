@@ -10,6 +10,7 @@ from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.stages import (
     DetectTypeStage,
     PermanentStageError,
+    ScanStage,
     Stage,
     TransientStageError,
     VerifyObjectStage,
@@ -21,7 +22,7 @@ from app.modules.storage.s3 import S3Storage
 logger = logging.getLogger(__name__)
 
 # Order matters. Later branches add the malware scan, text extraction, chunking and embedding.
-PIPELINE: tuple[Stage, ...] = (VerifyObjectStage(), DetectTypeStage())
+PIPELINE: tuple[Stage, ...] = (VerifyObjectStage(), ScanStage(), DetectTypeStage())
 
 # Set when the last stage exists. Until text extraction and embeddings are built a file rests in
 # `processing`: marking it `ready` now would claim it is searchable when it is not.
@@ -30,11 +31,17 @@ FINAL_STATUS: FileStatus | None = None
 RUNNABLE = (FileStatus.UPLOADED, FileStatus.SCANNING, FileStatus.PROCESSING)
 
 
-def _fail(session: Session, file: File, job: ProcessingJob, code: str) -> None:
+def _fail(
+    session: Session,
+    file: File,
+    job: ProcessingJob,
+    code: str,
+    status: FileStatus = FileStatus.FAILED,
+) -> None:
     job.status = JobStatus.FAILED
     job.error_code = code
     job.finished_at = datetime.now(UTC)
-    file.status = FileStatus.FAILED
+    file.status = status
     session.commit()
     logger.warning("Stage %s failed for file %s: %s", job.stage, file.id, code)
 
@@ -90,7 +97,7 @@ def run_pipeline(
             raise
         except PermanentStageError as exc:
             session.rollback()
-            _fail(session, file, job, exc.code)
+            _fail(session, file, job, exc.code, exc.file_status)
             return
         except Exception as exc:  # unknown failure (database, timeout, a bug): retry, but capped
             session.rollback()
