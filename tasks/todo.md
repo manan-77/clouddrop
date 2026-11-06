@@ -384,16 +384,16 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] Verify images build: not possible on this Mac (no Docker); the `containers` workflow builds and smoke-tests both images on GitHub's runners.
 
 ### 11.4 Branch: feat/observability (OK-NOW)
-- [ ] Error tracking integration that scrubs bodies, headers and query strings.
+- [ ] (NEEDS-YOU: choose the backend) Error tracking integration that scrubs bodies, headers and query strings.
 - [ ] Tracing and metrics for request latency, task duration, queue depth and AI call counts.
-- [ ] Security headers, strict CORS review, production settings review (docs disabled, secure cookies).
-- [ ] Log review: confirm no document text, prompts, tokens or presigned links appear.
+- [x] Security headers (nginx), CORS and production settings review (docs/security-review.md).
+- [x] Log review: confirm no document text, prompts, tokens or presigned links appear (docs/security-review.md).
 
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
-- [ ] Dependency audit and updates, including resolving the test-client deprecation warning.
+- [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
-- [ ] Backup and restore procedure for the database tested once.
-- [ ] Threat-model checklist walk-through against the CLAUDE.md security rules.
+- [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
+- [x] Threat-model checklist walk-through against the CLAUDE.md security rules (docs/security-review.md).
 
 ### 11.6 Branch: feat/deploy-azure (NEEDS-YOU: subscription and secrets)
 - [ ] Container Apps for API, worker and beat; managed Postgres with pgvector enabled; managed Redis.
@@ -461,4 +461,5 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 
 ## OWNER-DECISION log (wording conflicts to confirm; the standards files were not edited)
 - frontend/CLAUDE.md "Uploads" says multipart needs the part ETag and S3 CORS `ExposeHeaders: ETag`; the implementation has the server list the parts itself, so no ETag is read in the browser (CORS must still allow PUT).
+- backend/CLAUDE.md names `httpx` as the shared AI client; the backend dev group now uses `httpx2` (what Starlette's test client requires). Use `httpx2` for the AI client too so there is one HTTP library, or confirm otherwise.
 - frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.
