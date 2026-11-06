@@ -142,3 +142,9 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 100. **Retry the whole presign-and-send unit, not just the send**, and classify errors: network, 5xx and 429 retry; other 4xx never do.
 101. **After an abort is refused because the work finished, fall back to the delete that works in that state**; swallowing the refusal leaves a file the user cancelled.
 102. **A spec asserting "no Authorization header" must set a token first**, or it passes whether or not the interceptor leaks.
+103. **Run the exact CI commands locally before pushing a workflow**, including the audit export, so the first CI run is a confirmation, not a discovery.
+104. **Tests that build Settings must pin every field they assert on**; an environment variable set by CI or a developer's `.env` otherwise changes the result.
+105. **CI's npm must match the one that wrote the lock file**: use the Node line that ships the same npm major (Node 24 / npm 11), not an older LTS.
+106. **A lock file written on macOS can miss Linux-only optional peers** (`@emnapi/*` for the wasm runtime); pin them as dev dependencies, with the reason in the PR, so `npm ci` works on every platform.
+107. **Pin third-party actions to a commit SHA and audit tools to a version**; tags move and unpinned tools change behaviour without any code change.
+108. **Keep advisory checks out of the required set and give them a schedule**, so a new advisory neither blocks every merge nor waits for the next PR to be noticed.

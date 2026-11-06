@@ -1,0 +1,42 @@
+name: audit
+
+# Separate from the build checks: a new advisory can fail this without any code change, so do
+# not make these jobs required. A weekly run finds advisories published after a merge.
+on:
+  pull_request:
+    branches: [develop, main]
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081 # v5
+      - run: uv export --frozen --no-hashes --no-emit-project --no-dev -o "$RUNNER_TEMP/requirements.txt"
+      - run: uvx pip-audit==2.10.1 -r "$RUNNER_TEMP/requirements.txt" --no-deps --disable-pip
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # What ships to users.
+      - run: npm audit --omit=dev --audit-level=high
+      # Build tooling too (CLI, dev server); informational only.
+      - run: npm audit --audit-level=high
+        continue-on-error: true

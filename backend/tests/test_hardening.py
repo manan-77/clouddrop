@@ -58,7 +58,13 @@ def test_settings_unknownEnvironmentString_isRejected() -> None:
 def test_settings_environment_failsClosedForCookiesAndDocs(
     environment: str, secure: bool, docs: bool
 ) -> None:
-    settings = Settings(environment=environment, database_url="x", jwt_secret="a" * 32)  # type: ignore[arg-type]
+    # scanner_mode is explicit so an environment variable cannot change what this test checks.
+    settings = Settings(  # type: ignore[arg-type]
+        environment=environment,
+        database_url="x",
+        jwt_secret="a" * 32,
+        scanner_mode="clamav",
+    )
     assert settings.cookie_secure is secure
     assert settings.docs_enabled is docs
 
