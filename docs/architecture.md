@@ -30,13 +30,13 @@ sequenceDiagram
   participant S as S3
   participant W as Worker
   B->>A: POST /files/uploads (name, size, type, folder)
-  A->>A: validate size, type, quota, folder; create pending file; generate S3 key
+  A->>A: validate size, type, quota and folder, create the pending file, generate the S3 key
   A-->>B: file + presigned POST (exact size and type)
   B->>S: upload (no Authorization header)
   B->>A: POST /files/{id}/uploads/complete
   A->>S: HeadObject: verify size, record ETag
-  A->>A: status = uploaded, commit
-  A->>W: enqueue version id (after commit)
+  A->>A: status = uploaded, commit (a size mismatch deletes the object and fails the file; a repeat call changes nothing)
+  A->>W: enqueue version id via Redis (after commit)
   W->>W: verify, scan, detect type, extract + chunk
 ```
 
@@ -53,7 +53,7 @@ sequenceDiagram
   B->>A: API calls with Authorization: Bearer
   A-->>B: 401 when the access token expired
   B->>A: POST /auth/refresh (cookie + X-Requested-With), once, shared by concurrent 401s
-  A->>A: rotate refresh token; reuse of an old one revokes the whole family
+  A->>A: rotate the refresh token (reuse of an old one revokes the whole family)
   A-->>B: new access token + new cookie
 ```
 
@@ -63,7 +63,9 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> pending_upload
   pending_upload --> uploaded: complete verified
-  uploaded --> scanning
+  pending_upload --> failed: size mismatch on complete
+  uploaded --> scanning: worker claims verify_object
+  scanning --> failed: object missing or changed, scan unavailable, too large to scan
   scanning --> infected: malware (terminal)
   scanning --> processing: clean
   processing --> failed: corrupt, too large, type mismatch

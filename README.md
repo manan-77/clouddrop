@@ -2,7 +2,7 @@
 
 AI-powered cloud storage: upload, organize, share, and search files by meaning.
 
-Status: built and tested locally: accounts and sessions, folders and files, direct-to-S3 uploads (single and multipart up to 1 GiB), the processing pipeline (verification, malware scan, type detection, text extraction and chunking), purge jobs, rate limiting, the Angular app (sign-in, file explorer, uploads), CI and container images. Not built yet: sharing and permissions, embeddings and semantic search, RAG chat and summaries (they wait on owner decisions and the AI gateway details). Real S3, real ClamAV, a real browser run and the cloud deploy have not been exercised. See `tasks/todo.md` for the plan and `docs/architecture.md` for the diagrams.
+Status: built and tested locally: accounts and sessions, folders and files, direct-to-S3 uploads (single and multipart up to 1 GiB), the processing pipeline (verification, malware scan through ClamAV, type detection, text extraction and chunking; the scan is switched off in the optional local compose stack), purge jobs, rate limiting, the Angular app (sign-in, file explorer, uploads), CI and container images. Not built yet: sharing and permissions, embeddings and semantic search, RAG chat and summaries (they wait on owner decisions and the AI gateway details). Real S3, real ClamAV, a real browser run and the cloud deploy have not been exercised. See `tasks/todo.md` for the plan and `docs/architecture.md` for the diagrams.
 
 ## Layout
 - `backend/` FastAPI, SQLAlchemy 2 (sync), Alembic, Celery
