@@ -62,6 +62,31 @@ class UploadInitResponse(BaseModel):
     upload: UploadInstructions
 
 
+class MultipartInstructions(BaseModel):
+    part_size_bytes: int
+    part_count: int
+    expires_in: int
+
+
+class MultipartInitResponse(BaseModel):
+    file: FileRead
+    multipart: MultipartInstructions
+
+
+class PartUrlsRequest(BaseModel):
+    part_numbers: list[int] = Field(min_length=1, max_length=100)
+
+
+class PartUrl(BaseModel):
+    part_number: int
+    url: str
+
+
+class PartUrlsResponse(BaseModel):
+    parts: list[PartUrl]
+    expires_in: int
+
+
 class DownloadResponse(BaseModel):
     url: str
     expires_in: int

@@ -231,12 +231,12 @@ Goal: owners can share files and folders with other people at viewer or editor l
 Goal: after upload, files are scanned, text is extracted and chunked, and the file reaches a final status. Everything is idempotent and recoverable.
 
 ### 8.1 Branch: feat/multipart-upload (OK-NOW with fake S3; BLOCKED-AWS for real)
-- [ ] Endpoints to start a multipart upload, get signed part addresses, and complete it, with size and part-count limits.
-- [ ] Complete verifies the assembled object size and records the ETag.
-- [ ] Abort endpoint and a lifecycle expectation for abandoned uploads.
-- [ ] Raise the effective maximum size and document it.
-- [ ] Frontend: part slicing, limited concurrency, per-part retry, ETag capture (needs the bucket to expose the header).
-- [ ] Tests: happy path, missing part, wrong size, abort, stranger gets 404, repeated complete is safe.
+- [x] Endpoints to start a multipart upload, get signed part addresses, and complete it, with size and part-count limits.
+- [x] Complete verifies the assembled object size and records the ETag.
+- [x] Abort endpoint and a lifecycle expectation for abandoned uploads.
+- [x] Raise the effective maximum size and document it.
+- [ ] (next branch feat/frontend-multipart) Frontend: part slicing, limited concurrency, per-part retry, ETag capture (needs the bucket to expose the header).
+- [x] Tests: happy path, missing part, wrong size, abort, stranger gets 404, repeated complete is safe.
 
 ### 8.2 Branch: feat/celery-pipeline (OK-NOW, needs only local Redis)
 - [x] Celery application and a worker entry point, beat schedule, task base settings: late acknowledgement, reject on worker loss, time limits, bounded retries with backoff and jitter for transient errors only.

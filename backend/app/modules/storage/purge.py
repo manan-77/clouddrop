@@ -54,11 +54,17 @@ def _purge_files(
         if locked is None:
             session.rollback()  # changed since it was selected, or another run has it
             continue
-        keys = list(
-            session.scalars(select(FileVersion.s3_key).where(FileVersion.file_id == file_id))
+        versions = list(
+            session.execute(
+                select(FileVersion.s3_key, FileVersion.multipart_upload_id).where(
+                    FileVersion.file_id == file_id
+                )
+            )
         )
         try:
-            for key in keys:
+            for key, upload_id in versions:
+                if upload_id:
+                    storage.abort_multipart(key, upload_id)  # parts cost storage until aborted
                 storage.delete(key)  # deleting a missing object is not an error in S3
         except ServiceUnavailableError:
             session.rollback()
