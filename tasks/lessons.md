@@ -145,3 +145,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 103. **Run the exact CI commands locally before pushing a workflow**, including the audit export, so the first CI run is a confirmation, not a discovery.
 104. **Tests that build Settings must pin every field they assert on**; an environment variable set by CI or a developer's `.env` otherwise changes the result.
 105. **CI's npm must match the one that wrote the lock file**: use the Node line that ships the same npm major (Node 24 / npm 11), not an older LTS.
+106. **A lock file written on macOS can miss Linux-only optional peers** (`@emnapi/*` for the wasm runtime); pin them as dev dependencies, with the reason in the PR, so `npm ci` works on every platform.
