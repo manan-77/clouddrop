@@ -3,6 +3,7 @@ from enum import StrEnum
 
 class JobStage(StrEnum):
     VERIFY_OBJECT = "verify_object"
+    SCAN = "scan"
     DETECT_TYPE = "detect_type"
 
 

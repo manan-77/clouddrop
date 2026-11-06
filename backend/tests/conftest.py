@@ -1,5 +1,5 @@
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import TYPE_CHECKING
 
 import boto3
@@ -15,7 +15,9 @@ from alembic import command
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.main import create_app
+from app.modules.processing import scanner as scanner_module
 from app.modules.processing.dispatcher import get_dispatcher
+from app.modules.processing.scanner import ScanResult
 from app.modules.storage.deps import get_storage
 from app.modules.storage.s3 import S3Storage
 
@@ -74,6 +76,29 @@ class FakeDispatcher:
 @pytest.fixture
 def dispatcher() -> FakeDispatcher:
     return FakeDispatcher()
+
+
+class FakeScanner:
+    "Stands in for clamd: tests set `result` or `error` and read what was streamed to it."
+
+    def __init__(self) -> None:
+        self.enabled = True
+        self.result = ScanResult(infected=False)
+        self.error: Exception | None = None
+        self.scanned: list[bytes] = []
+
+    def scan(self, chunks: Iterable[bytes]) -> ScanResult:
+        self.scanned.append(b"".join(chunks))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+@pytest.fixture(autouse=True)
+def fake_scanner(monkeypatch: pytest.MonkeyPatch) -> FakeScanner:
+    scanner = FakeScanner()
+    monkeypatch.setattr(scanner_module, "get_scanner", lambda: scanner)
+    return scanner
 
 
 @pytest.fixture

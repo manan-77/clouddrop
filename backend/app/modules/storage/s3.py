@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -10,6 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from app.core.errors import ServiceUnavailableError
 
 if TYPE_CHECKING:
+    from botocore.response import StreamingBody
     from mypy_boto3_s3.client import S3Client
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,31 @@ class PresignedUpload:
 class ObjectInfo:
     size_bytes: int
     etag: str
+
+
+class ObjectStream:
+    """Chunked reader over an S3 body. Call `close()` on every path: a generator that never
+    started would never release the connection."""
+
+    def __init__(self, body: StreamingBody, chunk_size: int) -> None:
+        self._body = body
+        self._chunks = body.iter_chunks(chunk_size)
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __next__(self) -> bytes:
+        try:
+            return next(self._chunks)
+        except StopIteration:
+            self.close()
+            raise
+        except (BotoCoreError, ClientError) as exc:
+            self.close()
+            raise S3Storage._unavailable("read object", exc) from exc
+
+    def close(self) -> None:
+        self._body.close()
 
 
 class ObjectChangedError(Exception):
@@ -107,6 +134,31 @@ class S3Storage:
             raise self._unavailable("read object", exc) from exc
         except BotoCoreError as exc:
             raise self._unavailable("read object", exc) from exc
+
+    def iter_object(
+        self, key: str, chunk_size: int, *, if_match: str | None = None
+    ) -> ObjectStream | None:
+        """Streams an object in chunks, never whole into memory. None when it does not exist.
+
+        With `if_match` the stream fails with `ObjectChangedError` if the object is replaced.
+        """
+        try:
+            if if_match:
+                response = self.client.get_object(
+                    Bucket=self.bucket, Key=key, IfMatch=f'"{if_match}"'
+                )
+            else:
+                response = self.client.get_object(Bucket=self.bucket, Key=key)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in _NOT_FOUND_CODES:
+                return None
+            if code in {"PreconditionFailed", "412"}:
+                raise ObjectChangedError from exc
+            raise self._unavailable("read object", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("read object", exc) from exc
+        return ObjectStream(response["Body"], chunk_size)
 
     def delete(self, key: str) -> None:
         try:

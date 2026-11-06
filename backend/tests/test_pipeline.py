@@ -139,7 +139,7 @@ class TestPipeline:
         run_pipeline(session, storage, version_id)
         assert _status(session, file_id) == "processing"
         jobs = _jobs(session)
-        assert set(jobs) == {JobStage.VERIFY_OBJECT, JobStage.DETECT_TYPE}
+        assert set(jobs) == {JobStage.VERIFY_OBJECT, JobStage.SCAN, JobStage.DETECT_TYPE}
         assert {job.status for job in jobs.values()} == {JobStatus.SUCCEEDED}
         assert all(job.attempts == 1 and job.error_code is None for job in jobs.values())
 
