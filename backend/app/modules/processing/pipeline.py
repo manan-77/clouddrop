@@ -81,7 +81,7 @@ def run_pipeline(
         if job.status == JobStatus.FAILED:
             return
         if job.attempts >= max_attempts:
-            _fail(session, file, job, "too_many_attempts")
+            _fail(session, file, job, getattr(stage, "exhausted_code", "too_many_attempts"))
             return
         now = datetime.now(UTC)
         if not repo.claim(job.id, now, now - stale_after):

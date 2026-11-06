@@ -1,3 +1,4 @@
+import contextlib
 import socket
 import struct
 import threading
@@ -10,7 +11,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
+from app.core.errors import ServiceUnavailableError
 from app.modules.processing import scanner as scanner_module
 from app.modules.processing.constants import JobStage, JobStatus
 from app.modules.processing.pipeline import run_pipeline
@@ -35,11 +37,20 @@ Headers = dict[str, str]
 class FakeClamd:
     "A tiny clamd: speaks just enough of the INSTREAM protocol to be tested against."
 
-    def __init__(self, reply: bytes | None = b"stream: OK\0") -> None:
+    def __init__(
+        self,
+        reply: bytes | None = b"stream: OK\0",
+        *,
+        hold: bool = False,
+        split_at: int | None = None,
+    ) -> None:
         self.reply = reply
+        self.hold = hold  # no reply and the connection stays open: a stalled scanner
+        self.split_at = split_at  # send the reply in two packets
         self.command = b""
         self.payload = b""
         self.frames: list[int] = []
+        self.release = threading.Event()
         self.server = socket.socket()
         self.server.bind(("127.0.0.1", 0))
         self.server.listen(1)
@@ -76,20 +87,31 @@ class FakeClamd:
                 if size == 0:
                     break
                 self.payload += self._read(connection, size)
-            if self.reply is not None:
-                connection.sendall(self.reply)
+            if self.hold:
+                self.release.wait(10)
+            elif self.reply is not None:
+                if self.split_at:
+                    connection.sendall(self.reply[: self.split_at])
+                    time.sleep(0.2)
+                    connection.sendall(self.reply[self.split_at :])
+                else:
+                    connection.sendall(self.reply)
                 time.sleep(0.05)
 
     def close(self) -> None:
+        self.release.set()
         self.server.close()
 
 
+ClamdFactory = Callable[..., FakeClamd]
+
+
 @pytest.fixture
-def clamd() -> Iterator[Callable[[bytes | None], FakeClamd]]:
+def clamd() -> Iterator[ClamdFactory]:
     servers: list[FakeClamd] = []
 
-    def start(reply: bytes | None = b"stream: OK\0") -> FakeClamd:
-        servers.append(FakeClamd(reply))
+    def start(reply: bytes | None = b"stream: OK\0", **options: object) -> FakeClamd:
+        servers.append(FakeClamd(reply, **options))  # type: ignore[arg-type]
         return servers[-1]
 
     yield start
@@ -102,7 +124,7 @@ def _scanner(port: int, *, timeout: int = 5, max_bytes: int = 10_000) -> ClamAvS
 
 
 class TestClamAvScanner:
-    def test_cleanFile_isReportedCleanAndTheProtocolIsFollowed(self, clamd) -> None:  # type: ignore[no-untyped-def]
+    def test_cleanFile_isReportedCleanAndTheProtocolIsFollowed(self, clamd: ClamdFactory) -> None:
         server = clamd(b"stream: OK\0")
         result = _scanner(server.port).scan(iter([b"hello ", b"", b"world"]))
         assert result == ScanResult(infected=False)
@@ -111,23 +133,56 @@ class TestClamAvScanner:
         assert server.payload == b"hello world"
         assert server.frames == [6, 5, 0]  # empty chunks are skipped, a zero frame ends the stream
 
-    def test_infectedFile_reportsTheSignature(self, clamd) -> None:  # type: ignore[no-untyped-def]
+    def test_infectedFile_reportsTheSignature(self, clamd: ClamdFactory) -> None:
         server = clamd(b"stream: Eicar-Test-Signature FOUND\0")
         result = _scanner(server.port).scan([b"X5O!P%@AP"])
         assert result == ScanResult(infected=True, signature="Eicar-Test-Signature")
 
-    def test_scannerSizeLimitReply_isTooLargeNotAFailureToScan(self, clamd) -> None:  # type: ignore[no-untyped-def]
+    def test_signatureNameEndingInOk_isStillInfected(self, clamd: ClamdFactory) -> None:
+        server = clamd(b"stream: Win.Test.OK FOUND\0")
+        assert _scanner(server.port).scan([b"x"]) == ScanResult(
+            infected=True, signature="Win.Test.OK"
+        )
+
+    def test_replySplitAcrossPackets_isReassembled(self, clamd: ClamdFactory) -> None:
+        server = clamd(b"stream: OK\0", split_at=4)
+        assert _scanner(server.port).scan([b"x"]) == ScanResult(infected=False)
+
+    @pytest.mark.parametrize(
+        "reply",
+        [
+            b"stream: Foo.OK",  # a FOUND reply cut off after the signature: must not read as clean
+            b"stream: OK",  # no terminator: incomplete, never trusted
+            b"stream: Foo FOUND",
+            b"",
+        ],
+    )
+    def test_incompleteReply_isUnavailableNeverClean(
+        self, clamd: ClamdFactory, reply: bytes
+    ) -> None:
+        server = clamd(reply)
+        with pytest.raises(ScannerUnavailableError):
+            _scanner(server.port).scan([b"data"])
+
+    def test_scannerSizeLimitReply_isTooLargeNotAFailureToScan(self, clamd: ClamdFactory) -> None:
         server = clamd(b"INSTREAM size limit exceeded. ERROR\0")
         with pytest.raises(ScanTooLargeError):
             _scanner(server.port).scan([b"data"])
 
-    def test_ourOwnStreamLimit_stopsEarlyWithTooLarge(self, clamd) -> None:  # type: ignore[no-untyped-def]
+    def test_ourOwnStreamLimit_stopsEarlyWithTooLargeEvenAcrossChunks(
+        self, clamd: ClamdFactory
+    ) -> None:
         server = clamd(None)
         with pytest.raises(ScanTooLargeError):
             _scanner(server.port, max_bytes=10).scan([b"0123456", b"789abc"])
 
-    def test_unexpectedReply_isTreatedAsUnavailableSoItIsRetried(self, clamd) -> None:  # type: ignore[no-untyped-def]
+    def test_unexpectedReply_isTreatedAsUnavailableSoItIsRetried(self, clamd: ClamdFactory) -> None:
         server = clamd(b"stream: something odd ERROR\0")
+        with pytest.raises(ScannerUnavailableError):
+            _scanner(server.port).scan([b"data"])
+
+    def test_connectionClosedWithoutAReply_isUnavailable(self, clamd: ClamdFactory) -> None:
+        server = clamd(None)  # reads everything, then hangs up
         with pytest.raises(ScannerUnavailableError):
             _scanner(server.port).scan([b"data"])
 
@@ -139,12 +194,14 @@ class TestClamAvScanner:
         with pytest.raises(ScannerUnavailableError):
             _scanner(port).scan([b"data"])
 
-    def test_noAnswer_timesOutAsUnavailable(self, clamd) -> None:  # type: ignore[no-untyped-def]
-        server = clamd(None)
+    def test_scannerThatStallsWithoutAnswering_timesOutAsUnavailable(
+        self, clamd: ClamdFactory
+    ) -> None:
+        server = clamd(None, hold=True)  # the connection stays open and silent
         started = time.monotonic()
         with pytest.raises(ScannerUnavailableError):
             _scanner(server.port, timeout=1).scan([b"data"])
-        assert time.monotonic() - started < 5
+        assert 0.8 < time.monotonic() - started < 5
 
 
 def test_disabledScanner_doesNotReadAnythingAndReportsClean() -> None:
@@ -154,22 +211,24 @@ def test_disabledScanner_doesNotReadAnythingAndReportsClean() -> None:
 
 
 def test_settings_scanningCannotBeSwitchedOffOutsideLocalEnvironments() -> None:
-    Settings(database_url="x", jwt_secret="a" * 32, scanner_mode="off")  # type: ignore[arg-type]
+    Settings(  # type: ignore[arg-type]
+        database_url="x", jwt_secret="a" * 32, scanner_mode="off", environment="development"
+    )
     for environment in ("staging", "production"):
         with pytest.raises(ValidationError):
-            Settings(
-                database_url="x",  # type: ignore[arg-type]
+            Settings(  # type: ignore[arg-type]
+                database_url="x",
                 jwt_secret="a" * 32,
                 scanner_mode="off",
                 environment=environment,
             )
 
 
-def test_getScanner_buildsFromSettings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.undo()  # the autouse fake replaced get_scanner for the other tests
-    scanner = scanner_module.get_scanner()
-    assert isinstance(scanner, ClamAvScanner)
-    assert (scanner.host, scanner.port) == (get_settings().clamav_host, get_settings().clamav_port)
+def test_build_clamavModeCreatesTheNetworkScannerAndOffModeTheDisabledOne() -> None:
+    build = scanner_module._build.__wrapped__  # bypass the cache so no test shares state
+    real = build("clamav", "scan-host", 3310, 7, 99)
+    assert isinstance(real, ClamAvScanner) and real.host == "scan-host" and real.enabled
+    assert isinstance(build("off", "h", 1, 1, 1), DisabledScanner)
 
 
 class TestScanStage:
@@ -337,3 +396,102 @@ class TestIterObject:
         s3_client.put_object(Bucket=BUCKET, Key="k", Body=b"first")
         with pytest.raises(ObjectChangedError):
             storage.iter_object("k", 100, if_match="0" * 32)
+
+
+class FlakyStream:
+    "A storage stream that records being closed and can fail part way through."
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.closed = False
+        self._sent = False
+
+    def __iter__(self) -> "FlakyStream":
+        return self
+
+    def __next__(self) -> bytes:
+        if not self._sent:
+            self._sent = True
+            return b"first chunk"
+        if self.error:
+            raise self.error
+        raise StopIteration
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class StorageWithStream:
+    def __init__(self, real: S3Storage, stream: FlakyStream) -> None:
+        self.real = real
+        self.stream = stream
+
+    def head(self, key: str):  # type: ignore[no-untyped-def]
+        return self.real.head(key)
+
+    def iter_object(self, *_: object, **__: object) -> FlakyStream:
+        return self.stream
+
+
+class TestScanStageResources:
+    def _file(self, client, make_user, s3_client, dispatcher):  # type: ignore[no-untyped-def]
+        file_id, _ = _upload(client, make_user(), s3_client)
+        return file_id, dispatcher.calls[-1]
+
+    def test_storageFailingMidStream_isTransientAndTheStreamIsClosed(
+        self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
+    ) -> None:
+        file_id, version_id = self._file(client, make_user, s3_client, dispatcher)
+        stream = FlakyStream(ServiceUnavailableError("down", code="storage_unavailable"))
+        with pytest.raises(TransientStageError):
+            run_pipeline(
+                session,
+                StorageWithStream(storage, stream),  # type: ignore[arg-type]
+                version_id,
+                stages=(ScanStage(),),
+            )
+        assert stream.closed is True
+        assert _jobs(session)[JobStage.SCAN].status == JobStatus.PENDING
+
+    @pytest.mark.parametrize("error", [ScanTooLargeError(), ScannerUnavailableError()])
+    def test_scannerStoppingEarly_stillClosesTheStream(
+        self,
+        client,
+        make_user,
+        s3_client,
+        dispatcher,
+        session: Session,
+        storage: S3Storage,
+        fake_scanner: FakeScanner,
+        error: Exception,
+    ) -> None:
+        _, version_id = self._file(client, make_user, s3_client, dispatcher)
+        fake_scanner.error = error
+        stream = FlakyStream()
+        with contextlib.suppress(TransientStageError):
+            run_pipeline(
+                session,
+                StorageWithStream(storage, stream),  # type: ignore[arg-type]
+                version_id,
+                stages=(ScanStage(),),
+            )
+        assert stream.closed is True
+
+    def test_scannerDownUntilTheAttemptsCap_endsWithAClearScanUnavailableCode(
+        self,
+        client,
+        make_user,
+        s3_client,
+        dispatcher,
+        session: Session,
+        storage: S3Storage,
+        fake_scanner: FakeScanner,
+    ) -> None:
+        file_id, version_id = self._file(client, make_user, s3_client, dispatcher)
+        fake_scanner.error = ScannerUnavailableError()
+        for _ in range(2):
+            with pytest.raises(TransientStageError):
+                run_pipeline(session, storage, version_id, max_attempts=2)
+        run_pipeline(session, storage, version_id, max_attempts=2)
+        assert _jobs(session)[JobStage.SCAN].error_code == "scan_unavailable"
+        assert _status(session, file_id) == "failed"

@@ -112,3 +112,7 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 70. **Test a protocol client against a small fake server that records the bytes**, so framing, terminators and limits are asserted, not assumed.
 71. **Decide the oversize behaviour explicitly**: fail with a clear code, never skip silently.
 72. **Do not log scanner replies**: they can echo file content or names.
+73. **Parse protocol replies strictly and require the terminator**: a reply cut short must never be interpreted (a signature name can end in "OK"), and an unrecognised reply is "unavailable", never "clean".
+74. **A fake server must be able to stall, drop and split replies**, otherwise timeout and truncation tests pass for the wrong reason.
+75. **A generator that never started never runs its `finally`**; return a small object with an explicit `close()` and call it in a `finally` around the consumer.
+76. **Give an exhausted retry its own error code** when the cause matters (`scan_unavailable`), so a file that was never scanned is not reported as a generic failure.

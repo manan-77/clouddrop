@@ -1,6 +1,7 @@
 """Malware scanning through clamd's INSTREAM protocol (plain TCP, no extra dependency)."""
 
 import logging
+import re
 import socket
 import struct
 from collections.abc import Iterable
@@ -11,6 +12,10 @@ from typing import Protocol
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+_CLEAN_REPLY = "stream: OK"
+_FOUND_REPLY = re.compile(r"^stream: (?P<signature>.+) FOUND$")
+_MAX_REPLY_BYTES = 4096
 
 
 @dataclass(frozen=True)
@@ -72,26 +77,31 @@ class ClamAvScanner:
 
     @staticmethod
     def _read_reply(sock: socket.socket) -> str:
+        """A complete NUL-terminated reply, or ScannerUnavailableError: never a partial one.
+
+        A reply cut short must not be interpreted at all (a signature name can end in "OK").
+        """
         data = b""
-        while not data.endswith(b"\0") and len(data) < 4096:
+        while len(data) < _MAX_REPLY_BYTES:
             part = sock.recv(1024)
-            if not part:
-                break
+            if not part:  # closed before the reply was complete
+                raise ScannerUnavailableError
             data += part
-        return data.rstrip(b"\0").decode("utf-8", errors="replace").strip()
+            if data.endswith(b"\0"):
+                return data.rstrip(b"\0").decode("utf-8", errors="replace").strip()
+        raise ScannerUnavailableError
 
     @staticmethod
     def _interpret(reply: str) -> ScanResult:
-        if reply.endswith("OK"):
+        # Exact matches only: anything unrecognised is "unavailable", never "clean".
+        if reply == _CLEAN_REPLY:
             return ScanResult(infected=False)
-        if reply.endswith("FOUND"):
-            signature = reply.removeprefix("stream:").removesuffix("FOUND").strip()
-            return ScanResult(infected=True, signature=signature or None)
+        found = _FOUND_REPLY.match(reply)
+        if found:
+            return ScanResult(infected=True, signature=found.group("signature"))
         if "size limit exceeded" in reply.lower():
             raise ScanTooLargeError
-        logger.warning(
-            "clamd returned an unexpected reply"
-        )  # the reply is not logged: it may echo data
+        logger.warning("clamd returned an unexpected reply")  # not logged: it may echo data
         raise ScannerUnavailableError
 
 
