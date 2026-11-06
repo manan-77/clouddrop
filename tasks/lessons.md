@@ -157,3 +157,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 115. **Quote nginx regex locations that contain braces**; an unquoted `{8}` ends the directive and nginx refuses to start.
 116. **Match the Postgres client tools to the server major version** before trusting a backup; `pg_dump` refuses a newer server, and a restore check needs a role that may create a database.
 117. **A doc that claims "done" must be checked sentence by sentence against the code**; say "done with residual risk" and name the exact sites instead of a blanket claim.
+118. **Diagrams must say what is built and what is planned**; mark unbuilt flows explicitly so the docs do not promise features that do not exist.
+119. **Mermaid sequence messages cannot contain semicolons** (they separate statements); use commas or parentheses, and list every real failure edge in state diagrams.

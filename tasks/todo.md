@@ -403,9 +403,9 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Smoke test checklist after deploy.
 
 ### 11.7 Branch: docs/final
-- [ ] README with architecture overview, setup, run, test and deploy instructions.
-- [ ] Architecture diagram, ER diagram, upload flow, auth flow and RAG flow, kept in docs.
-- [ ] API reference list and an ADR index.
+- [x] README with architecture overview, setup, run, test and deploy instructions.
+- [x] Architecture, upload, auth and pipeline diagrams in docs/architecture.md (RAG flow described as planned); ER diagram exists.
+- [x] API reference list and an ADR index (docs/api.md, docs/adr/README.md).
 - [ ] Demo script or short recording notes.
 
 ### 11.8 Release
