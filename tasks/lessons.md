@@ -124,3 +124,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 82. **Cap each parsed XML part, not only the archive total**, and apply ratio checks to parsed parts only so media does not cause false rejections.
 83. **A broad `except Exception` around a parser must re-raise the task time-limit exception** so a slow valid file is retried, not marked corrupt.
 84. **A "rerun" test must call the write twice and compare rows**, include a shrinking rerun and a failing insert; counting rows once proves nothing.
+85. **Delete the external object before the row, and stop on the first storage outage**; the row is the only record of what to clean next run.
+86. **Count only what can still become real in quota sums**: abandoned pending uploads must stop counting once past their presign window, not wait for the purge.

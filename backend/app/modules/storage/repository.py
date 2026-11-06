@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
 from typing import Literal
 
-from sqlalchemy import ColumnElement, func, literal, select
+from sqlalchemy import ColumnElement, func, literal, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.db.soft_delete import only_active
@@ -120,13 +121,22 @@ class FileRepository:
         )
         return list(rows), total
 
-    def sum_size(self, workspace_id: uuid.UUID) -> int:
-        total = self.session.scalar(
-            select(func.coalesce(func.sum(File.size_bytes), 0)).where(
-                File.workspace_id == workspace_id,
-                only_active(File),
-                File.status != FileStatus.FAILED.value,
+    def sum_size(self, workspace_id: uuid.UUID, pending_since: datetime | None = None) -> int:
+        """`pending_since`: pending uploads created before it no longer count (abandoned)."""
+        conditions = [
+            File.workspace_id == workspace_id,
+            only_active(File),
+            File.status != FileStatus.FAILED.value,
+        ]
+        if pending_since is not None:
+            conditions.append(
+                or_(
+                    File.status != FileStatus.PENDING_UPLOAD.value,
+                    File.created_at >= pending_since,
+                )
             )
+        total = self.session.scalar(
+            select(func.coalesce(func.sum(File.size_bytes), 0)).where(*conditions)
         )
         return int(total or 0)
 

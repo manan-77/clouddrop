@@ -13,6 +13,7 @@ from app.modules.processing.pipeline import run_pipeline
 from app.modules.processing.stages import TransientStageError
 from app.modules.processing.sweeper import sweep_stuck_files as sweep
 from app.modules.storage.factory import build_storage
+from app.modules.storage.purge import purge_expired
 from app.modules.storage.s3 import S3Storage
 from app.worker.celery_app import celery_app
 
@@ -50,6 +51,20 @@ def process_file_version(self: Task, file_version_id: str) -> None:
             stale_after=timedelta(seconds=settings.processing_job_stale_seconds),
             max_attempts=settings.processing_max_attempts,
         )
+
+
+@celery_app.task(name="storage.purge_expired")
+def purge_expired_data() -> int:
+    settings = get_settings()
+    with open_session() as session:
+        result = purge_expired(
+            session,
+            storage_for_worker(),
+            retention=timedelta(days=settings.purge_retention_days),
+            pending_upload_ttl=timedelta(seconds=settings.presigned_upload_ttl_seconds * 2),
+            limit=settings.purge_batch_size,
+        )
+    return result.files + result.stale_uploads + result.folders + result.refresh_tokens
 
 
 @celery_app.task(name="processing.sweep_stuck_files")
