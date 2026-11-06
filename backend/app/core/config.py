@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 100 * 1024 * 1024
     multipart_max_upload_bytes: int = 1024 * 1024 * 1024
     multipart_part_size_bytes: int = 16 * 1024 * 1024
-    multipart_max_parts_per_request: int = 100
+    multipart_upload_max_age_seconds: int = 6 * 3600
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 300
     user_quota_bytes: int = 5 * 1024 * 1024 * 1024
@@ -114,8 +114,8 @@ class Settings(BaseSettings):
             and self.multipart_max_upload_bytes > self.scanner_max_stream_bytes
         ):
             raise ValueError("MULTIPART_MAX_UPLOAD_BYTES must not exceed SCANNER_MAX_STREAM_BYTES")
-        if not 5 * 1024 * 1024 <= self.multipart_part_size_bytes <= 5 * 1024**3:
-            raise ValueError("MULTIPART_PART_SIZE_BYTES must be between 5 MiB and 5 GiB")
+        if not 5 * 1024 * 1024 <= self.multipart_part_size_bytes <= 2 * 1024**3:
+            raise ValueError("MULTIPART_PART_SIZE_BYTES must be between 5 MiB and 2 GiB")
         return self
 
     @model_validator(mode="after")

@@ -1,8 +1,11 @@
 import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING
+from urllib.parse import parse_qs, urlparse
 
+import boto3
 import pytest
+from botocore.config import Config
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import select, text, update
@@ -12,7 +15,7 @@ from app.core.config import Settings, get_settings
 from app.modules.storage.file_service import FileService
 from app.modules.storage.models import File, FileVersion
 from app.modules.storage.purge import purge_expired
-from app.modules.storage.s3 import S3Storage
+from app.modules.storage.s3 import MultipartPartsInvalidError, S3Storage
 from tests.conftest import BUCKET, FakeDispatcher
 
 if TYPE_CHECKING:
@@ -193,6 +196,74 @@ class TestMultipart:
         assert bad_type.json()["error"]["code"] == "unsupported_file_type"
 
 
+class TestEdges:
+    def test_partUrls_signContentLengthAndCarryNoChecksumParameters(self, s3_client) -> None:
+        # Built like the production client (factory.py): SigV4, which is what signs the length.
+        signed = S3Storage(
+            boto3.client("s3", region_name="us-east-1", config=Config(signature_version="s3v4")),
+            BUCKET,
+            upload_ttl_seconds=900,
+            download_ttl_seconds=300,
+        )
+        url = signed.presign_part("workspaces/x/files/y/v1", "upload-id", 1, 1234)
+        query = parse_qs(urlparse(url).query)
+        assert "content-length" in query["X-Amz-SignedHeaders"][0].split(";")
+        assert not [name for name in query if "checksum" in name.lower()]
+        assert query["X-Amz-Expires"] == ["900"]
+
+    def test_abortOnAnUploadThatIsNoLongerPending_isRefused(
+        self, client, make_user, s3_client, session: Session
+    ) -> None:
+        headers = make_user()
+        file_id = _init(client, headers).json()["file"]["id"]
+        _put(s3_client, session, file_id, 1, PART)
+        _put(s3_client, session, file_id, 2, 10)
+        client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=headers)
+        response = client.delete(f"/api/v1/files/{file_id}/uploads", headers=headers)
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "upload_not_pending"
+
+    def test_lostResponseButNoObject_staysIncompleteAndIsNotACrash(
+        self, client, make_user, s3_client, session: Session
+    ) -> None:
+        headers = make_user()
+        file_id = _init(client, headers).json()["file"]["id"]
+        version = _version(session, file_id)
+        s3_client.abort_multipart_upload(
+            Bucket=BUCKET, Key=version.s3_key, UploadId=str(version.multipart_upload_id)
+        )
+        response = client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=headers)
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "upload_incomplete"
+
+    def test_abortingTwice_isHarmless(self, storage: S3Storage, s3_client) -> None:
+        upload_id = storage.create_multipart("workspaces/x/files/y/v1", "text/plain")
+        storage.abort_multipart("workspaces/x/files/y/v1", upload_id)
+        storage.abort_multipart("workspaces/x/files/y/v1", upload_id)
+        assert _open_uploads(s3_client) == 0
+
+    def test_partInvalidAtCompletion_isReportedAsIncomplete(
+        self,
+        client,
+        make_user,
+        s3_client,
+        session: Session,
+        storage: S3Storage,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        headers = make_user()
+        file_id = _init(client, headers).json()["file"]["id"]
+        _put(s3_client, session, file_id, 1, PART)
+        _put(s3_client, session, file_id, 2, 10)
+
+        def invalid(*_: object) -> None:
+            raise MultipartPartsInvalidError
+
+        monkeypatch.setattr(storage, "complete_multipart", invalid)
+        response = client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=headers)
+        assert response.status_code == 409
+
+
 class TestLayoutAndConfig:
     def test_hugeFiles_growThePartSizeToStayWithinTenThousandParts(
         self, session: Session, dispatcher: FakeDispatcher
@@ -214,6 +285,8 @@ class TestLayoutAndConfig:
     def test_partSizeBelowTheS3Minimum_isRejected(self) -> None:
         with pytest.raises(ValidationError):
             Settings(_env_file=None, multipart_part_size_bytes=1024)  # type: ignore[call-arg]
+        with pytest.raises(ValidationError):
+            Settings(_env_file=None, multipart_part_size_bytes=3 * 1024**3)  # type: ignore[call-arg]
 
 
 def test_purge_abortsAbandonedMultipartUploads(
@@ -224,11 +297,23 @@ def test_purge_abortsAbandonedMultipartUploads(
     _put(s3_client, session, file_id, 1, PART)
     session.execute(update(File).values(created_at=text("now() - interval '2 hours'")))
     session.commit()
+    kwargs = {
+        "retention": timedelta(days=30),
+        "pending_upload_ttl": timedelta(minutes=30),
+        "multipart_max_age": timedelta(hours=6),
+        "limit": 10,
+    }
+    # Two hours old is long past a single upload's deadline but a multipart upload may take hours.
+    assert purge_expired(session, storage, **kwargs).stale_uploads == 0  # type: ignore[arg-type]
+    assert _open_uploads(s3_client) == 1
+    session.execute(update(File).values(created_at=text("now() - interval '7 hours'")))
+    session.commit()
     result = purge_expired(
         session,
         storage,
         retention=timedelta(days=30),
         pending_upload_ttl=timedelta(minutes=30),
+        multipart_max_age=timedelta(hours=6),
         limit=10,
     )
     assert result.stale_uploads == 1 and _open_uploads(s3_client) == 0

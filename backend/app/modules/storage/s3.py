@@ -68,6 +68,10 @@ class MultipartGoneError(Exception):
     """The multipart upload no longer exists (completed, aborted or expired)."""
 
 
+class MultipartPartsInvalidError(Exception):
+    """S3 rejected the part list (a part changed or is missing)."""
+
+
 class ObjectChangedError(Exception):
     """The object no longer has the ETag the caller expected."""
 
@@ -167,8 +171,11 @@ class S3Storage:
                 },
             )
         except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") == "NoSuchUpload":
+            code = exc.response.get("Error", {}).get("Code")
+            if code == "NoSuchUpload":
                 raise MultipartGoneError from exc
+            if code in {"InvalidPart", "InvalidPartOrder", "EntityTooSmall"}:
+                raise MultipartPartsInvalidError from exc
             raise self._unavailable("complete multipart upload", exc) from exc
         except BotoCoreError as exc:
             raise self._unavailable("complete multipart upload", exc) from exc

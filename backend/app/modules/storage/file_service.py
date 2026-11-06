@@ -5,7 +5,13 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnprocessableError,
+)
 from app.core.pagination import PageParams
 from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.sharing.service import AccessService, Action
@@ -13,7 +19,12 @@ from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
 from app.modules.storage.models import File, FileVersion
 from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FileVersionRepository, FolderRepository
-from app.modules.storage.s3 import MultipartGoneError, PresignedUpload, S3Storage
+from app.modules.storage.s3 import (
+    MultipartGoneError,
+    MultipartPartsInvalidError,
+    PresignedUpload,
+    S3Storage,
+)
 from app.modules.workspaces.service import WorkspaceService
 
 
@@ -31,9 +42,9 @@ class FileService:
         self.access = AccessService(session)
 
     def _pending_cutoff(self) -> datetime:
-        # An upload still pending after twice its presign lifetime is abandoned (the purge job
-        # removes it); it must not keep counting against the quota meanwhile.
-        return datetime.now(UTC) - timedelta(seconds=self.settings.presigned_upload_ttl_seconds * 2)
+        # A pending upload past its allowed age is abandoned (the purge job removes it) and must
+        # not keep counting against the quota. Multipart uploads may legitimately take hours.
+        return datetime.now(UTC) - timedelta(seconds=self.settings.multipart_upload_max_age_seconds)
 
     def _create_pending(
         self,
@@ -125,13 +136,17 @@ class FileService:
         )
         part_size, part_count = self.part_layout(size_bytes)
         version.part_size_bytes = part_size
-        version.multipart_upload_id = storage.create_multipart(version.s3_key, file.content_type)
+        upload_key = version.s3_key
+        upload_id = storage.create_multipart(upload_key, file.content_type)
+        version.multipart_upload_id = upload_id
         try:
             self.session.commit()
         except Exception:
-            # Do not leave an orphan upload accruing storage if the rows could not be saved.
+            # Do not leave an orphan upload accruing storage if the rows could not be saved; the
+            # lifecycle rule is the backstop if this abort fails too.
             self.session.rollback()
-            storage.abort_multipart(version.s3_key, str(version.multipart_upload_id))
+            with contextlib.suppress(ServiceUnavailableError):
+                storage.abort_multipart(upload_key, upload_id)
             raise
         return file, part_size, part_count
 
@@ -185,8 +200,9 @@ class FileService:
         version = self.versions.get_current(file.id)
         if version is not None:
             if version.multipart_upload_id:
+                # The id stays so the purge job aborts once more: a part still in flight during
+                # this abort can survive it.
                 storage.abort_multipart(version.s3_key, version.multipart_upload_id)
-                version.multipart_upload_id = None
             storage.delete(version.s3_key)  # a single-request upload may already have landed
         file.deleted_at = datetime.now(UTC)
         self.session.commit()
@@ -215,14 +231,19 @@ class FileService:
         )
         if wrong:
             storage.abort_multipart(version.s3_key, version.multipart_upload_id)
-            version.multipart_upload_id = None
             file.status = FileStatus.FAILED
             self.session.commit()
             raise UnprocessableError(
                 "Uploaded file size does not match", code="upload_size_mismatch"
             )
-        with contextlib.suppress(MultipartGoneError):  # completed by an earlier attempt
+        try:
             storage.complete_multipart(version.s3_key, version.multipart_upload_id, parts)
+        except MultipartGoneError:
+            pass  # completed by an earlier attempt; the HEAD that follows verifies it
+        except MultipartPartsInvalidError as exc:  # a part changed after we listed it
+            raise ConflictError(
+                "The file has not been fully uploaded yet", code="upload_incomplete"
+            ) from exc
 
     def complete_upload(self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage) -> File:
         workspace_id = self._scope(user_id, Action.WRITE)

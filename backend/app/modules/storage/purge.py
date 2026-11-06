@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, CursorResult, delete, exists, select
+from sqlalchemy import ColumnElement, CursorResult, delete, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -105,6 +105,7 @@ def purge_expired(
     *,
     retention: timedelta,
     pending_upload_ttl: timedelta,
+    multipart_max_age: timedelta,
     limit: int,
     now: datetime | None = None,
 ) -> PurgeResult:
@@ -122,6 +123,13 @@ def purge_expired(
         File.status == FileStatus.PENDING_UPLOAD.value,
         File.deleted_at.is_(None),
         File.created_at < now - pending_upload_ttl,
+        # A multipart upload may take hours; it is stale only past its own, longer deadline.
+        or_(
+            File.created_at < now - multipart_max_age,
+            ~exists().where(
+                FileVersion.file_id == File.id, FileVersion.multipart_upload_id.is_not(None)
+            ),
+        ),
     ]
     stale_uploads = _purge_files(session, storage, ids(stale_conditions), stale_conditions)
 

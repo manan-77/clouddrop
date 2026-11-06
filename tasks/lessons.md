@@ -135,3 +135,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 93. **A limiter that reads the socket peer needs the proxy configuration written down in the same PR**, or every user shares one budget in production.
 94. **When a feature raises a size limit, trace every later stage that has its own cap** (scanner, extraction) and validate the caps against each other at startup.
 95. **Let the server list uploaded parts itself instead of trusting a client part list**; it removes ETag capture from the browser and the trust problem together.
+96. **A cleanup deadline must fit the slowest legitimate flow**: multipart uploads need their own, longer deadline than single uploads, and the quota cutoff must follow it.
+97. **Test the presigned URL with a client built like production** (SigV4); the default test client signs differently and hides what is or is not signed.
