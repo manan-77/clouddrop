@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 # NUL breaks Postgres text columns; the other control characters are extraction noise.
-_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f\x7f]")
+_SEPARATORS = re.compile(r"[\x0b\x0c]")
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,8 @@ class Chunk:
 
 
 def clean_text(text: str) -> str:
-    text = _CONTROL.sub("", text.replace("\r\n", "\n").replace("\r", "\n"))
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = _CONTROL.sub("", _SEPARATORS.sub(" ", text))
     # Lone surrogates (seen in extracted PDF text) cannot be stored as UTF-8.
     return text.encode("utf-8", errors="replace").decode("utf-8")
 

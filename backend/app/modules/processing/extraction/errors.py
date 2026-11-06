@@ -18,6 +18,7 @@ class ExtractionLimits:
     max_uncompressed_bytes: int
     max_ratio: int
     max_zip_entries: int
+    max_xml_part_bytes: int
     max_sheets: int
     max_cells: int
 
@@ -29,6 +30,7 @@ class ExtractionLimits:
             max_uncompressed_bytes=settings.extract_max_uncompressed_bytes,
             max_ratio=settings.extract_max_compression_ratio,
             max_zip_entries=settings.extract_max_zip_entries,
+            max_xml_part_bytes=settings.extract_max_xml_part_bytes,
             max_sheets=settings.extract_max_sheets,
             max_cells=settings.extract_max_cells,
         )

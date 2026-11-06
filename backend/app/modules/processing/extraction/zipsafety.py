@@ -22,9 +22,16 @@ def check_zip(fileobj: IO[bytes], limits: ExtractionLimits, required_member: str
             total += entry.file_size
             if total > limits.max_uncompressed_bytes:
                 raise ExtractionError("too_large_to_extract")
-            # A tiny compressed size that expands enormously is the signature of a zip bomb.
-            if entry.file_size > 0 and (
-                entry.compress_size == 0 or entry.file_size / entry.compress_size > limits.max_ratio
+            if not entry.filename.endswith((".xml", ".rels")):
+                continue  # media may legitimately compress well; only parsed parts are bounded
+            # Parsed parts are loaded into memory, so each is capped, and a tiny compressed size
+            # that expands enormously is the signature of a zip bomb.
+            if entry.file_size > limits.max_xml_part_bytes or (
+                entry.file_size > 0
+                and (
+                    entry.compress_size == 0
+                    or entry.file_size / entry.compress_size > limits.max_ratio
+                )
             ):
                 raise ExtractionError("too_large_to_extract")
         if required_member not in {entry.filename for entry in entries}:

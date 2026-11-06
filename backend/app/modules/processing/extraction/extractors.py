@@ -4,9 +4,12 @@ import logging
 from collections.abc import Callable
 from typing import IO
 
+from celery.exceptions import SoftTimeLimitExceeded
 from docx import Document
+from docx.table import Table, _Cell
 from openpyxl import load_workbook
 from pypdf import PdfReader
+from pypdf.errors import DependencyError
 
 from app.modules.processing.extraction.chunking import Section
 from app.modules.processing.extraction.errors import ExtractionError, ExtractionLimits
@@ -23,8 +26,11 @@ IMAGE_TYPES = frozenset({"image/png", "image/jpeg"})
 
 def _pdf(fileobj: IO[bytes], limits: ExtractionLimits) -> list[Section]:
     reader = PdfReader(fileobj)
-    if reader.is_encrypted and not reader.decrypt(""):
-        raise ExtractionError("encrypted_file")
+    try:
+        if reader.is_encrypted and not reader.decrypt(""):
+            raise ExtractionError("encrypted_file")
+    except DependencyError as exc:  # AES needs a package we do not ship; treat as unreadable
+        raise ExtractionError("encrypted_file") from exc
     if len(reader.pages) > limits.max_pages:
         raise ExtractionError("too_large_to_extract")
     sections: list[Section] = []
@@ -42,12 +48,20 @@ def _docx(fileobj: IO[bytes], limits: ExtractionLimits) -> list[Section]:
     check_zip(fileobj, limits, "word/document.xml")
     fileobj.seek(0)
     document = Document(fileobj)
-    parts = [paragraph.text for paragraph in document.paragraphs]
+    parts: list[str] = [paragraph.text for paragraph in document.paragraphs]
+    total = sum(len(part) for part in parts)
     for table in document.tables:
-        parts.extend("\t".join(cell.text for cell in row.cells) for row in table.rows)
-    text = "\n".join(parts)
-    if len(text) > limits.max_chars:
+        # One cell per w:tc: `row.cells` expands gridSpan and can blow up from a tiny file.
+        for row in table._tbl.tr_lst:
+            cells = [_Cell(tc, Table(table._tbl, document)).text for tc in row.tc_lst]
+            line = "\t".join(cells)
+            total += len(line)
+            if total > limits.max_chars:
+                raise ExtractionError("too_large_to_extract")
+            parts.append(line)
+    if total > limits.max_chars:
         raise ExtractionError("too_large_to_extract")
+    text = "\n".join(parts)
     return [Section(None, text)]
 
 
@@ -59,7 +73,9 @@ def _xlsx(fileobj: IO[bytes], limits: ExtractionLimits) -> list[Section]:
         sections: list[Section] = []
         cells = 0
         chars = 0
-        for number, sheet in enumerate(workbook.worksheets[: limits.max_sheets], start=1):
+        if len(workbook.worksheets) > limits.max_sheets:
+            raise ExtractionError("too_large_to_extract")
+        for number, sheet in enumerate(workbook.worksheets, start=1):
             lines: list[str] = []
             for row in sheet.iter_rows(values_only=True):
                 cells += len(row)
@@ -101,8 +117,8 @@ def extract(content_type: str, fileobj: IO[bytes], limits: ExtractionLimits) -> 
         raise ExtractionError("unsupported_type")
     try:
         return extractor(fileobj, limits)
-    except ExtractionError:
-        raise
+    except (ExtractionError, SoftTimeLimitExceeded):
+        raise  # a time-limit hit is transient, not a corrupt file
     except (
         Exception
     ) as exc:  # a parser fed untrusted bytes can fail in any way; same input, same failure

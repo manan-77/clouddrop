@@ -14,6 +14,7 @@ def get_engine() -> Engine:
     settings = get_settings()
     return create_engine(
         settings.database_url,
+        hide_parameters=True,  # bound values (document text, names) must never reach an error log
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
         pool_timeout=settings.db_pool_timeout_seconds,

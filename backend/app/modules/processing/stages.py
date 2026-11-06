@@ -143,23 +143,23 @@ class ExtractStage:
         if file.content_type in IMAGE_TYPES:
             raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
         settings = get_settings()
-        chunks: ObjectStream | None = None
+        body: ObjectStream | None = None
         with tempfile.TemporaryFile() as spool:
             try:
-                chunks = _call(
+                body = _call(
                     lambda: storage.iter_object(
                         version.s3_key, settings.scanner_chunk_bytes, if_match=version.etag
                     )
                 )
-                if chunks is None:
+                if body is None:
                     raise PermanentStageError("object_missing")
-                stream = chunks
+                stream = body
                 _call(lambda: _spool(stream, spool))
             except ObjectChangedError as exc:
                 raise PermanentStageError("object_changed") from exc
             finally:
-                if chunks is not None:
-                    chunks.close()
+                if body is not None:
+                    body.close()
             spool.seek(0)
             try:
                 sections = extract(

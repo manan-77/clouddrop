@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     extract_max_uncompressed_bytes: int = 500 * 1024 * 1024
     extract_max_compression_ratio: int = 100
     extract_max_zip_entries: int = 5000
+    extract_max_xml_part_bytes: int = 50 * 1024 * 1024
     extract_max_sheets: int = 50
     extract_max_cells: int = 2_000_000
     chunk_size_chars: int = 1000

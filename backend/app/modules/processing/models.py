@@ -39,7 +39,10 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     __tablename__ = "document_chunks"
     # The unique constraint also indexes file_version_id for the foreign key.
-    __table_args__ = (UniqueConstraint("file_version_id", "chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("file_version_id", "chunk_index"),
+        CheckConstraint("chunk_index >= 0", name="chunk_index_non_negative"),
+    )
 
     file_version_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("file_versions.id", ondelete="CASCADE")

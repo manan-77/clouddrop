@@ -48,6 +48,9 @@ def upgrade() -> None:
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_document_chunks")),
+        sa.CheckConstraint(
+            "chunk_index >= 0", name=op.f("ck_document_chunks_chunk_index_non_negative")
+        ),
         sa.UniqueConstraint(
             "file_version_id", "chunk_index", name=op.f("uq_document_chunks_file_version_id")
         ),
