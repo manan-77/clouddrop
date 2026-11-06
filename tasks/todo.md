@@ -461,4 +461,5 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 
 ## OWNER-DECISION log (wording conflicts to confirm; the standards files were not edited)
 - frontend/CLAUDE.md "Uploads" says multipart needs the part ETag and S3 CORS `ExposeHeaders: ETag`; the implementation has the server list the parts itself, so no ETag is read in the browser (CORS must still allow PUT).
+- backend/CLAUDE.md names `httpx` as the shared AI client; the backend dev group now uses `httpx2` (what Starlette's test client requires). Use `httpx2` for the AI client too so there is one HTTP library, or confirm otherwise.
 - frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.

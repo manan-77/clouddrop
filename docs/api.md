@@ -57,5 +57,5 @@ While no bucket is configured (`S3_BUCKET` empty), only the routes that talk to 
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.
 - **Required:** a lifecycle rule `AbortIncompleteMultipartUpload` after 7 days. The purge job aborts abandoned uploads (after `MULTIPART_UPLOAD_MAX_AGE_SECONDS`, 6 hours), but a part still in flight during an abort, or a crash between creating the upload and saving the row, can leave parts that only this rule cleans up.
-- Browser CORS for part uploads must allow `PUT` from the app origin.
+- Block all public access on the bucket. Browser CORS must list only the app origin and allow `POST` (single uploads) and `PUT` (parts); `ETag` need not be exposed (ADR 0009).
 - The effective maximum is `MAX_UPLOAD_BYTES` (single request, 100 MiB) or `MULTIPART_MAX_UPLOAD_BYTES` (1 GiB, multipart). The settings refuse a multipart maximum above `SCANNER_MAX_STREAM_BYTES` while scanning is on, so a file is never accepted and then failed for being too large to scan.
