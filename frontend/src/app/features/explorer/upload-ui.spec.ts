@@ -8,7 +8,6 @@ import { UploadPanelComponent } from './upload-panel.component';
 
 const item = (patch: Partial<UploadItem>): UploadItem => ({
   id: 'u1',
-  file: new File(['x'], 'a.pdf'),
   name: 'a.pdf',
   size: 1536,
   folderId: null,
@@ -34,6 +33,24 @@ describe('UploadPanelComponent', () => {
   it('noItems_rendersNothing', async () => {
     const { root } = await setup([]);
     expect(root.querySelector('section')).toBeNull();
+    expect(root.querySelector('ul')).toBeNull();
+  });
+
+  it('summary_isOnePersistentPoliteLiveRegion', async () => {
+    const { root } = await setup([
+      item({ status: 'done' }),
+      item({ id: 'u2', status: 'failed', error: 'x' }),
+      item({ id: 'u3' }),
+    ]);
+    const regions = root.querySelectorAll('[aria-live="polite"]');
+    expect(regions.length).toBe(1);
+    expect(regions[0].textContent?.trim()).toBe('1 of 3 uploads finished, 1 failed');
+    expect(root.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('noItems_stillKeepsTheEmptyLiveRegionInTheDom', async () => {
+    const { root } = await setup([]);
+    expect(root.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe('');
   });
 
   it('uploading_showsNameSizeAccessibleProgressAndCancel', async () => {
@@ -121,6 +138,7 @@ describe('DropZoneDirective', () => {
   it('dragOverFiles_allowsTheDropAndHighlightsTheZone', async () => {
     const { fixture, zone } = await setup();
     const over = drag('dragover', ['Files']);
+    zone.dispatchEvent(drag('dragenter', ['Files']));
     zone.dispatchEvent(over);
     await fixture.whenStable();
     expect(over.defaultPrevented).toBe(true);
@@ -137,6 +155,18 @@ describe('DropZoneDirective', () => {
     zone.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
     expect(fixture.componentInstance.dropped).toEqual(files);
+  });
+
+  it('dragLeaveFromAChildElement_doesNotClearTheHighlight', async () => {
+    const { fixture, zone } = await setup();
+    zone.dispatchEvent(drag('dragenter', ['Files']));
+    zone.dispatchEvent(drag('dragenter', ['Files']));
+    zone.dispatchEvent(drag('dragleave', ['Files']));
+    await fixture.whenStable();
+    expect(zone.classList.contains('cd-dropzone--active')).toBe(true);
+    zone.dispatchEvent(drag('dragleave', ['Files']));
+    await fixture.whenStable();
+    expect(zone.classList.contains('cd-dropzone--active')).toBe(false);
   });
 
   it('dragOfTextOrLinks_isIgnored', async () => {

@@ -2,7 +2,7 @@
   <div class="cd-toolbar">
     <h1>Files</h1>
     <div class="cd-actions">
-      <cd-upload-button [folderId]="store.folderId()" />
+      <cd-upload-button [folderId]="currentFolderId()" />
       <button cd-button type="button" (click)="show({ kind: 'create-folder' })">New folder</button>
     </div>
   </div>

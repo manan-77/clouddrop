@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   signal,
@@ -74,15 +75,17 @@ export class ExplorerPage {
     { initialValue: this.route.snapshot.paramMap.get('folderId') },
   );
 
+  protected readonly currentFolderId = computed(() => this.folderId() ?? null);
+
   constructor() {
     // A finished upload into the folder on screen refreshes the listing.
     this.uploads.completed$.pipe(takeUntilDestroyed()).subscribe((item) => {
-      if (item.folderId === (this.folderId() ?? null)) {
+      if (item.folderId === this.currentFolderId()) {
         this.store.reload();
       }
     });
     effect(() => {
-      this.store.open(this.folderId() ?? null);
+      this.store.open(this.currentFolderId());
       // A dialog or message belongs to the folder it was opened in.
       this.dialog.set(null);
       this.dialogError.set(null);
@@ -91,7 +94,7 @@ export class ExplorerPage {
   }
 
   protected addFiles(files: File[]): void {
-    this.uploads.add(files, this.folderId() ?? null);
+    this.uploads.add(files, this.currentFolderId());
   }
 
   protected show(dialog: Dialog): void {

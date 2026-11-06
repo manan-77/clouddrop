@@ -14,6 +14,11 @@ export class UploadsApi {
     return this.http.post<UploadInitResponse>(`${API_BASE}/files/uploads`, body);
   }
 
+  /** Soft-deletes the row an abandoned upload left behind (best effort, safe to repeat). */
+  discard(fileId: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/files/${encodeURIComponent(fileId)}`);
+  }
+
   complete(fileId: string): Observable<FileRead> {
     return this.http.post<FileRead>(
       `${API_BASE}/files/${encodeURIComponent(fileId)}/uploads/complete`,

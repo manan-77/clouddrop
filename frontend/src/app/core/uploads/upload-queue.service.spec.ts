@@ -103,7 +103,13 @@ describe('UploadQueue', () => {
     );
     const initial = backend.match(isInit);
     expect(initial.length).toBe(MAX_PARALLEL_UPLOADS);
-    expect(queue.items().filter((i) => i.status === 'queued').length).toBe(2);
+    expect(queue.items().map((i) => i.status)).toEqual([
+      'requesting',
+      'requesting',
+      'requesting',
+      'queued',
+      'queued',
+    ]);
 
     initial[0].flush(initResponse('a'));
     backend.expectOne(STORAGE).flush(null, { status: 204, statusText: 'No Content' });
@@ -122,6 +128,7 @@ describe('UploadQueue', () => {
     expect(storage.cancelled).toBe(true);
     expect(only(queue).status).toBe('cancelled');
     backend.expectNone('/api/v1/files/f1/uploads/complete');
+    backend.expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f1').flush(null);
   });
 
   it('cancel_whileQueued_neverStarts', () => {
@@ -151,6 +158,7 @@ describe('UploadQueue', () => {
     });
     expect(only(queue).status).toBe('failed');
     expect(only(queue).error).toBe(STORAGE_FAILED_MESSAGE);
+    backend.expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f1').flush(null);
     backend.expectNone('/api/v1/files/f1/uploads/complete');
   });
 
@@ -173,6 +181,7 @@ describe('UploadQueue', () => {
       .expectOne('/api/v1/files/f1/uploads/complete')
       .flush(ENVELOPE('upload_size_mismatch'), { status: 422, statusText: 'Unprocessable' });
     expect(only(queue).error).toContain('did not match the expected size');
+    backend.expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f1').flush(null);
   });
 
   it('emptyAndOversizeFiles_failImmediatelyWithoutAnyRequest', () => {
@@ -221,6 +230,103 @@ describe('UploadQueue', () => {
     retry.flush(initResponse('f1'));
     backend.expectOne(STORAGE).flush(null, { status: 204, statusText: 'No Content' });
     backend.expectOne('/api/v1/files/f1/uploads/complete').flush(fileRead('f1'));
+    expect(only(queue).status).toBe('done');
+  });
+
+  const isDelete = (id: string) => (r: { method: string; url: string }) =>
+    r.method === 'DELETE' && r.url === `/api/v1/files/${id}`;
+
+  it('failureAfterInit_removesTheOrphanRowSoRetriesDoNotPileUp', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).flush(null, { status: 403, statusText: 'Forbidden' });
+    backend.expectOne(isDelete('f1')).flush(null);
+    expect(only(queue).fileId).toBeNull();
+    queue.retry(only(queue).id);
+    backend.expectOne(isInit).flush(initResponse('f2'));
+    backend.expectOne(STORAGE).flush(null, { status: 204, statusText: 'No Content' });
+    backend.expectOne('/api/v1/files/f2/uploads/complete').flush(fileRead('f2'));
+    expect(only(queue).status).toBe('done');
+  });
+
+  it('orphanCleanupFailing_isIgnoredAndTheItemStaysFailed', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).flush(null, { status: 403, statusText: 'Forbidden' });
+    backend.expectOne(isDelete('f1')).flush(null, { status: 500, statusText: 'x' });
+    expect(only(queue).status).toBe('failed');
+  });
+
+  it('cancel_whileTheInitRequestIsInFlight_abortsItAndSendsNothingElse', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    const init = backend.expectOne(isInit);
+    queue.cancel(only(queue).id);
+    expect(init.cancelled).toBe(true);
+    expect(only(queue).status).toBe('cancelled');
+    backend.expectNone(STORAGE);
+  });
+
+  it('cancel_whileCompleting_abortsTheCallAndRemovesTheFile', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).flush(null, { status: 204, statusText: 'No Content' });
+    const complete = backend.expectOne('/api/v1/files/f1/uploads/complete');
+    queue.cancel(only(queue).id);
+    expect(complete.cancelled).toBe(true);
+    backend.expectOne(isDelete('f1')).flush(null);
+    expect(only(queue).status).toBe('cancelled');
+  });
+
+  const own = () => document.location.origin;
+  it.each([
+    ['relativePath', () => '/api/v1/files'],
+    ['absoluteSameOrigin', () => `${own()}/api/v1/files`],
+    ['protocolRelativeSameOrigin', () => `//${document.location.host}/api/v1/files`],
+    ['javascriptUrl', () => 'javascript:alert(1)'],
+    ['garbage', () => 'not a url'],
+  ])('storageUrl_%s_isRefusedSoTheTokenCannotLeakToTheApi', (_label, makeUrl) => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    const url = makeUrl();
+    const init = initResponse('f1');
+    init.upload.url = url;
+    backend.expectOne(isInit).flush(init);
+    backend.expectNone((r) => r.url === url);
+    expect(only(queue).status).toBe('failed');
+    expect(only(queue).error).toBe(STORAGE_FAILED_MESSAGE);
+    backend.expectOne(isDelete('f1')).flush(null);
+  });
+
+  it('storageNetworkError_marksFailedWithTheFriendlyMessage', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).error(new ProgressEvent('error'));
+    expect(only(queue).error).toBe(STORAGE_FAILED_MESSAGE);
+    backend.expectOne(isDelete('f1')).flush(null);
+  });
+
+  it('storageSuccessWithAnXmlBody_isStillSuccess', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).flush('<PostResponse/>', { status: 201, statusText: 'Created' });
+    backend.expectOne('/api/v1/files/f1/uploads/complete').flush(fileRead('f1'));
+    expect(only(queue).status).toBe('done');
+  });
+
+  it('afterSuccess_theRetryOfThatItemDoesNothing', () => {
+    const { queue, backend } = setup();
+    queue.add([pdf()], null);
+    backend.expectOne(isInit).flush(initResponse('f1'));
+    backend.expectOne(STORAGE).flush(null, { status: 204, statusText: 'No Content' });
+    backend.expectOne('/api/v1/files/f1/uploads/complete').flush(fileRead('f1'));
+    queue.retry(only(queue).id);
+    backend.expectNone(isInit);
     expect(only(queue).status).toBe('done');
   });
 });
