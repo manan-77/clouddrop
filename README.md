@@ -26,6 +26,14 @@ Needs PostgreSQL 17 with the pgvector extension, Redis, Python 3.12 and [uv](htt
 4. File uploads need an S3 bucket (`S3_BUCKET` and AWS credentials in `.env`). Without one, the file endpoints return 503 `storage_not_configured`.
 5. AI features need the Azure APIM details; verify them with `bash scripts/check_apim.sh`.
 
+## Background worker
+Processing runs in a Celery worker (Redis is the broker; pipeline state lives in Postgres). From `backend/`, in separate terminals:
+
+- `uv run celery -A app.worker.celery_app worker -l info`
+- `uv run celery -A app.worker.celery_app beat -l info` (schedules the sweeper that re-enqueues stuck files)
+
+The worker needs the same `.env` as the API, including the S3 settings. Use a dedicated Redis database number in `REDIS_URL` if the default one is shared with other projects.
+
 ## Checks
 Backend, from `backend/`: `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`, `uv run pytest`.
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
+from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
 from app.modules.storage.models import File, FileVersion
@@ -16,7 +17,10 @@ from app.modules.workspaces.service import WorkspaceService
 
 
 class FileService:
-    def __init__(self, session: Session, settings: Settings) -> None:
+    def __init__(
+        self, session: Session, settings: Settings, dispatcher: ProcessingDispatcher
+    ) -> None:
+        self.dispatcher = dispatcher
         self.session = session
         self.settings = settings
         self.files = FileRepository(session)
@@ -98,8 +102,12 @@ class FileService:
             )
 
         version.etag = info.etag
+        version.enqueued_at = datetime.now(UTC)
         file.status = FileStatus.UPLOADED
         self.session.commit()
+        # After the commit, never before: the worker must see the row. If the broker is down the
+        # sweeper picks the file up later, so a failed enqueue never fails the upload.
+        self.dispatcher.enqueue(version.id)
         return file
 
     def list_files(

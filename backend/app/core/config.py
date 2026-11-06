@@ -1,10 +1,13 @@
 "Application settings: the only place environment variables are read."
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Longest wait between task retries; part of the visibility-timeout rule enforced below.
+CELERY_RETRY_BACKOFF_MAX_SECONDS = 600
 
 
 class Settings(BaseSettings):
@@ -29,6 +32,19 @@ class Settings(BaseSettings):
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 300
     user_quota_bytes: int = 5 * 1024 * 1024 * 1024
+
+    redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
+    celery_task_soft_time_limit_seconds: int = 300
+    celery_task_time_limit_seconds: int = 330
+    # Must exceed the longest task including retry back-off, or Redis redelivers a running task.
+    celery_visibility_timeout_seconds: int = 1800
+    processing_max_retries: int = 5
+    # A stage that has been claimed this many times is failed instead of retried forever.
+    processing_max_attempts: int = 8
+    processing_job_stale_seconds: int = 600
+    sweeper_interval_seconds: int = 300
+    sweeper_stuck_after_seconds: int = 600
+    sweeper_batch_size: int = 100
     s3_connect_timeout_seconds: int = 5
     s3_read_timeout_seconds: int = 30
     s3_max_attempts: int = 3
@@ -57,6 +73,17 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
         return value
+
+    @model_validator(mode="after")
+    def _worker_limits_are_consistent(self) -> Self:
+        if self.celery_task_soft_time_limit_seconds >= self.celery_task_time_limit_seconds:
+            raise ValueError("The soft time limit must be below the hard time limit")
+        # If the broker's visibility timeout is shorter than a running task plus its retry delay,
+        # Redis hands the same task to a second worker while the first is still running.
+        longest = self.celery_task_time_limit_seconds + CELERY_RETRY_BACKOFF_MAX_SECONDS
+        if self.celery_visibility_timeout_seconds <= longest:
+            raise ValueError(f"CELERY_VISIBILITY_TIMEOUT_SECONDS must exceed {longest}")
+        return self
 
     @property
     def is_local(self) -> bool:

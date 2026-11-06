@@ -87,3 +87,21 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 54. **Keep one persistent live region for progress and status summaries**, not one `role=status` per row.
 55. **Do not keep `File` handles in visible state**; hold them privately and release them when the upload is done or cancelled.
 56. **Tests that use `match()` consume requests**; assert state (statuses, counts) too, or a following `expectNone` proves nothing. Test URLs must be derived from the runtime origin, not hardcoded.
+
+## From the pipeline work
+
+57. **Never run a destructive Redis or database command against a shared instance for convenience** (I tried `flushdb` to get a clean smoke test). Use a dedicated database number and leave shared data alone.
+58. **A subquery over the same table as the outer query must use an alias**, or it auto-correlates and loses its FROM clause.
+59. **A periodic sweeper must be able to tell finished work from stuck work.** A file resting in a non-terminal status after all stages ran would be re-enqueued forever unless the sweep also checks the stage rows.
+60. **Do not set `ready` before the stage that makes it true exists**; leave the file in `processing` and say so.
+61. **macOS has no `timeout` command**; wait loops belong in a small script.
+
+## From the PR 11 review (pipeline)
+
+62. **Catch the unknown exception around every stage.** Only handling the two expected error types leaves jobs stuck `running` for a whole stale period; roll back, release the job, and retry with a cap.
+63. **Every retry loop needs an attempts cap** (counted in the database, because redelivery and sweeping bypass Celery's own counter), or one poison file retries forever.
+64. **A sweeper must order by when work was last handed over**, not by when the file last changed, and record that moment before sending, or it resends the same oldest files and starves the rest.
+65. **Publishing from a request thread must fail fast**: set short broker timeouts and a one-retry publish policy, and test with an unreachable broker.
+66. **Make conditional reads conditional**: use the stored ETag as `IfMatch` so every read stage sees the object that was verified.
+67. **A test for ordering must observe state at the moment of the call** (use a hook), not only count calls.
+68. **Encode operational invariants as startup validation**, not just a test of the defaults (visibility timeout versus task limits).

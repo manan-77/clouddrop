@@ -11,6 +11,7 @@ erDiagram
     folders ||--o{ folders : "parent of"
     folders |o--o{ files : "holds (null = workspace root)"
     files ||--o{ file_versions : "has"
+    file_versions ||--o{ processing_jobs : "has one per stage"
 
     users {
         uuid id PK
@@ -66,13 +67,26 @@ erDiagram
         bigint size_bytes
         string content_type
         string etag
+        timestamptz enqueued_at "when processing was last handed to the worker"
         timestamptz created_at
+    }
+    processing_jobs {
+        uuid id PK
+        uuid file_version_id FK
+        string stage "unique with file_version_id"
+        string status "pending, running, succeeded, failed"
+        int attempts
+        string error_code "short machine code, never a raw message"
+        timestamptz started_at
+        timestamptz finished_at
+        timestamptz created_at
+        timestamptz updated_at
     }
 ```
 
 ## Delete rules
 
-- `refresh_tokens.user_id`, `workspaces.owner_id`, `folders.workspace_id`, `files.workspace_id` and `file_versions.file_id` cascade from their parent.
+- `refresh_tokens.user_id`, `workspaces.owner_id`, `folders.workspace_id`, `files.workspace_id`, `file_versions.file_id` and `processing_jobs.file_version_id` cascade from their parent.
 - `folders.parent_id` and `files.folder_id` are RESTRICT: a folder row with children cannot be hard-deleted. The API only soft-deletes, and refuses to delete a non-empty folder.
 - Nullable columns: `refresh_tokens.revoked_at`, `file_versions.etag`, `folders.deleted_at`, `files.deleted_at`, `folders.parent_id`, `files.folder_id`.
 
@@ -84,4 +98,4 @@ pending_upload -> uploaded -> scanning -> processing -> ready
                             infected      failed        needs_ocr
 ```
 
-Today the API sets `pending_upload`, `uploaded` and `failed`. The remaining states are set by the Phase 5 worker.
+The API sets `pending_upload`, `uploaded` and `failed` (size mismatch). The worker sets `scanning` and `processing` while its stages run and `failed` when a stage can never succeed. `ready`, `infected` and `needs_ocr` arrive with the scan, extraction and embedding stages; until then a file that passes every stage rests in `processing`.
