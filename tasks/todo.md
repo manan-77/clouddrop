@@ -260,13 +260,13 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 ### 8.4 Branch: feat/extraction-chunking (OK-NOW)
 - [x] Before scanning, compare the object's current ETag with the ETag stored at upload completion; a mismatch fails the file (done in the pipeline's verify stage).
 - [x] Detect the real file type by content (magic bytes), not by name or the declared type; mismatch fails the file (done in the pipeline's detect stage; DOCX versus XLSX is told apart at extraction).
-- [ ] Extractors for PDF, Word and Excel with hard limits: input size, page count, decompressed size, sheet and cell counts. Excel opened read-only.
-- [ ] Empty extraction becomes needs_ocr, never ready.
-- [ ] Remove NUL characters from all extracted text before storing.
-- [ ] Deterministic chunking with chunk index, page or section, content hash and a stable size and overlap.
-- [ ] Chunks table migration and the replace-in-one-transaction write so re-processing is idempotent.
-- [ ] Final status ready only after chunks are stored.
-- [ ] Tests: each format, zip bomb sample, corrupt file, empty file, NUL bytes, deterministic output, re-run gives identical chunks.
+- [x] Extractors for PDF, Word and Excel with hard limits: input size, page count, decompressed size, sheet and cell counts. Excel opened read-only.
+- [x] Empty extraction becomes needs_ocr, never ready.
+- [x] Remove NUL characters from all extracted text before storing.
+- [x] Deterministic chunking with chunk index, page or section, content hash and a stable size and overlap.
+- [x] Chunks table migration and the replace-in-one-transaction write so re-processing is idempotent.
+- [ ] Final status ready only after chunks are stored. (Deferred: files stay in `processing` until embeddings exist in Phase 6; `ready` needs both.)
+- [x] Tests: each format, zip bomb sample, corrupt file, empty file, NUL bytes, deterministic output, re-run gives identical chunks.
 
 ### 8.5 Branch: feat/purge-job (OK-NOW)
 - [ ] Scheduled task that permanently removes soft-deleted files past a retention period: delete the S3 objects, then versions, chunks and rows.

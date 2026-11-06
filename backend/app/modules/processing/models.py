@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, ForeignKey, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -32,3 +32,19 @@ class ProcessingJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(50))
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
+
+
+class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A piece of extracted text. Rewritten as a whole for a version, so re-running is safe."""
+
+    __tablename__ = "document_chunks"
+    # The unique constraint also indexes file_version_id for the foreign key.
+    __table_args__ = (UniqueConstraint("file_version_id", "chunk_index"),)
+
+    file_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("file_versions.id", ondelete="CASCADE")
+    )
+    chunk_index: Mapped[int]
+    page: Mapped[int | None]
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))

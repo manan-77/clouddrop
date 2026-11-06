@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # Raise clamd's StreamMaxLength to at least this too; a larger file fails instead of skipping.
     scanner_max_stream_bytes: int = 100 * 1024 * 1024
     scanner_chunk_bytes: int = 64 * 1024
+    # Limits for reading untrusted documents (page, size and zip-bomb caps).
+    extract_max_pages: int = 500
+    extract_max_chars: int = 5_000_000
+    extract_max_uncompressed_bytes: int = 500 * 1024 * 1024
+    extract_max_compression_ratio: int = 100
+    extract_max_zip_entries: int = 5000
+    extract_max_sheets: int = 50
+    extract_max_cells: int = 2_000_000
+    chunk_size_chars: int = 1000
+    chunk_overlap_chars: int = 150
     sweeper_stuck_after_seconds: int = 600
     sweeper_batch_size: int = 100
     s3_connect_timeout_seconds: int = 5
@@ -81,6 +91,12 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
         return value
+
+    @model_validator(mode="after")
+    def _chunk_overlap_is_smaller_than_the_chunk(self) -> Self:
+        if not 0 <= self.chunk_overlap_chars < self.chunk_size_chars // 2:
+            raise ValueError("CHUNK_OVERLAP_CHARS must be below half of CHUNK_SIZE_CHARS")
+        return self
 
     @model_validator(mode="after")
     def _scanning_stays_on_outside_local(self) -> Self:

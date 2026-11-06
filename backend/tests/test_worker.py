@@ -104,7 +104,7 @@ def test_storageUnavailable_isATransientErrorForTheWorker() -> None:
             raise ServiceUnavailableError("down", code="storage_unavailable")
 
     with pytest.raises(TransientStageError):
-        VerifyObjectStage().run(object(), type("V", (), {"s3_key": "k"})(), Down())  # type: ignore[arg-type]
+        VerifyObjectStage().run(object(), type("V", (), {"s3_key": "k"})(), Down(), object())  # type: ignore[arg-type]
 
 
 def test_processTask_transientFailure_isRetriedUntilTheLimitThenGivesUp(

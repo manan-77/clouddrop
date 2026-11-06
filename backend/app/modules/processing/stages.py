@@ -1,11 +1,18 @@
+import tempfile
 from collections.abc import Callable
-from typing import Protocol
+from typing import IO, Protocol
+
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ServiceUnavailableError
 from app.modules.processing import scanner as scanner_module
 from app.modules.processing.constants import JobStage
+from app.modules.processing.extraction.chunking import chunk_sections
+from app.modules.processing.extraction.errors import ExtractionError, ExtractionLimits
+from app.modules.processing.extraction.extractors import IMAGE_TYPES, extract
 from app.modules.processing.filetype import matches_declared_type
+from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.scanner import ScannerUnavailableError, ScanTooLargeError
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion
@@ -33,7 +40,9 @@ class Stage(Protocol):
     # The file's status while this stage runs.
     file_status: FileStatus
 
-    def run(self, file: File, version: FileVersion, storage: S3Storage) -> None: ...
+    def run(
+        self, file: File, version: FileVersion, storage: S3Storage, session: Session
+    ) -> None: ...
 
 
 class VerifyObjectStage:
@@ -46,7 +55,7 @@ class VerifyObjectStage:
     name = JobStage.VERIFY_OBJECT
     file_status = FileStatus.SCANNING
 
-    def run(self, file: File, version: FileVersion, storage: S3Storage) -> None:
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
         info = _call(lambda: storage.head(version.s3_key))
         if info is None:
             raise PermanentStageError("object_missing")
@@ -64,7 +73,7 @@ class ScanStage:
     # If the scanner stays unreachable until the attempts cap, say so instead of a generic code.
     exhausted_code = "scan_unavailable"
 
-    def run(self, file: File, version: FileVersion, storage: S3Storage) -> None:
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
         # Looked up at call time so tests can replace it.
         scanner = scanner_module.get_scanner()
         if not scanner.enabled:
@@ -98,7 +107,7 @@ class DetectTypeStage:
     name = JobStage.DETECT_TYPE
     file_status = FileStatus.PROCESSING
 
-    def run(self, file: File, version: FileVersion, storage: S3Storage) -> None:
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
         try:
             # IfMatch: the bytes must come from the very object that verify_object approved.
             head: bytes | None = _call(
@@ -117,3 +126,53 @@ def _call[T](operation: Callable[[], T]) -> T:
         return operation()
     except ServiceUnavailableError as exc:
         raise TransientStageError("storage unavailable") from exc
+
+
+class ExtractStage:
+    """Reads the text out of the document, chunks it, and stores the chunks.
+
+    The object is spooled to a temporary file in chunks (never held whole in memory), then parsed
+    under the size, page and zip-bomb limits. An image or a document with no text ends the file in
+    `needs_ocr`; text recognition is not built.
+    """
+
+    name = JobStage.EXTRACT
+    file_status = FileStatus.PROCESSING
+
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
+        if file.content_type in IMAGE_TYPES:
+            raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
+        settings = get_settings()
+        chunks: ObjectStream | None = None
+        with tempfile.TemporaryFile() as spool:
+            try:
+                chunks = _call(
+                    lambda: storage.iter_object(
+                        version.s3_key, settings.scanner_chunk_bytes, if_match=version.etag
+                    )
+                )
+                if chunks is None:
+                    raise PermanentStageError("object_missing")
+                stream = chunks
+                _call(lambda: _spool(stream, spool))
+            except ObjectChangedError as exc:
+                raise PermanentStageError("object_changed") from exc
+            finally:
+                if chunks is not None:
+                    chunks.close()
+            spool.seek(0)
+            try:
+                sections = extract(
+                    file.content_type, spool, ExtractionLimits.from_settings(settings)
+                )
+            except ExtractionError as exc:
+                raise PermanentStageError(exc.code) from exc
+        pieces = chunk_sections(sections, settings.chunk_size_chars, settings.chunk_overlap_chars)
+        if not pieces:
+            raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
+        PipelineRepository(session).replace_chunks(version.id, pieces)
+
+
+def _spool(stream: ObjectStream, target: IO[bytes]) -> None:
+    for part in stream:
+        target.write(part)

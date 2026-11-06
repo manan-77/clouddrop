@@ -116,3 +116,6 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 74. **A fake server must be able to stall, drop and split replies**, otherwise timeout and truncation tests pass for the wrong reason.
 75. **A generator that never started never runs its `finally`**; return a small object with an explicit `close()` and call it in a `finally` around the consumer.
 76. **Give an exhausted retry its own error code** when the cause matters (`scan_unavailable`), so a file that was never scanned is not reported as a generic failure.
+77. **Adding a stage changes every test that asserts the end state or reads the object**; grep the tests for stage names, `stage.run(` and storage patches before running the suite.
+78. **Test fixtures that stand in for documents must be real documents** once a parser reads them; build tiny valid ones in `tests/documents.py` instead of faking magic bytes.
+79. **NUL bytes are a binary signal at type detection**, so test NUL stripping at the cleaning function and use other control characters in end-to-end tests.
