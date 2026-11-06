@@ -150,3 +150,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 108. **Keep advisory checks out of the required set and give them a schedule**, so a new advisory neither blocks every merge nor waits for the next PR to be noticed.
 109. **When a tool is missing locally, make CI the verifier** (a workflow that builds and smoke-tests) instead of shipping unverified config and saying so.
 110. **The proxy must overwrite, not append, X-Forwarded-For**, and the API must trust only the proxy's address.
+111. **nginx `add_header` inside a location drops every inherited one**; share security headers through an include in each such location and assert the header on the real response in CI.

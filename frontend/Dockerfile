@@ -8,6 +8,7 @@ RUN npm run build
 # Static files plus a same-origin proxy to the API: no hostname is baked into the build.
 FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx/security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist/clouddrop-web/browser /usr/share/nginx/html
 # The template reads this at start-up; the API service name inside the compose network.
 ENV API_UPSTREAM=http://api:8000
