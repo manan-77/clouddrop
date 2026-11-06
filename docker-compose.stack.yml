@@ -1,0 +1,61 @@
+# Optional full local stack for people who use Docker (the default dev setup is native Postgres
+# and Redis). Not exercised in CI; CI only builds the two images.
+#   docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
+# Needs .env (see .env.example). DATABASE_URL and REDIS_URL are overridden below to use the
+# compose service names.
+x-api-env: &api-env
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clouddrop}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clouddrop}
+    REDIS_URL: redis://redis:6379/0
+    FORWARDED_ALLOW_IPS: "*"  # only the web container can reach the API on this network
+
+services:
+  migrate:
+    build: ./backend
+    <<: *api-env
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    <<: *api-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    <<: *api-env
+    command: ["celery", "-A", "app.worker.celery_app", "worker", "-l", "info"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    <<: *api-env
+    command: ["celery", "-A", "app.worker.celery_app", "beat", "-l", "info"]
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - api

@@ -43,3 +43,12 @@ Frontend, from `frontend/` (after `npm install`): `npm run lint`, `npm run forma
 
 ## Branches and pull requests
 `main` (protected) <- `develop` <- `feat/*` | `fix/*` | `docs/*` | `chore/*` | `refactor/*`. Every change goes through a pull request into `develop`, is reviewed against the CLAUDE.md standards, and is squash merged; the branch is then deleted. Commits follow Conventional Commits: `type(scope): description`.
+
+## Containers
+
+- `backend/Dockerfile` builds one image for the API, the worker and beat (non-root, health check on `/health`); the command picks the role: `uvicorn app.main:app` (default), `celery -A app.worker.celery_app worker`, `celery -A app.worker.celery_app beat`.
+- `frontend/Dockerfile` builds the static app and serves it with nginx, which proxies `/api/` and `/health` to `API_UPSTREAM` (default `http://api:8000`), so the browser stays same-origin and no host is baked into the build.
+- **Migrations** are a controlled step: run `alembic upgrade head` once per deploy with the API image before starting new API and worker containers (`docker-compose.stack.yml` has a `migrate` service doing this).
+- **Client addresses for rate limits:** set `FORWARDED_ALLOW_IPS` on the API to the proxy's address (never `*` on a network clients can reach). The proxy overwrites `X-Forwarded-For`, so a client-sent value is ignored.
+- Environment variables are those in `.env.example`; pass secrets from the platform's secret store, never bake them into an image. `docker-compose.stack.yml` is an optional full local stack and is not exercised in CI; the `containers` workflow builds both images and smoke-tests them.
+

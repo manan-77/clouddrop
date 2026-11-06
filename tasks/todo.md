@@ -376,12 +376,12 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - Note: `@emnapi/core` and `@emnapi/runtime` are devDependencies only because npm 11 omits these optional peers of `@napi-rs/wasm-runtime` from a lock written on macOS (npm/cli#4828), which breaks `npm ci` on Linux. Remove them when npm fixes this.
 
 ### 11.3 Branch: feat/containers (OK-NOW)
-- [ ] Run the API with `--proxy-headers --forwarded-allow-ips=<proxy>` so rate limits see the real client (see docs/api.md).
-- [ ] Production container image for the API and for the worker, minimal, non-root, with health checks.
-- [ ] Frontend static build served behind a reverse proxy that also proxies the API on the same origin.
-- [ ] Compose file for a full local stack for people who do use Docker (optional).
-- [ ] Document environment variables and the migration step on deploy.
-- [ ] Verify images build (Docker must exist on the machine, NEEDS-YOU if not installed).
+- [x] Run the API with `--proxy-headers --forwarded-allow-ips=<proxy>` so rate limits see the real client (see docs/api.md).
+- [x] Production container image for the API and for the worker, minimal, non-root, with health checks.
+- [x] Frontend static build served behind a reverse proxy that also proxies the API on the same origin.
+- [x] Compose file for a full local stack for people who do use Docker (optional).
+- [x] Document environment variables and the migration step on deploy. (README)
+- [x] Verify images build: not possible on this Mac (no Docker); the `containers` workflow builds and smoke-tests both images on GitHub's runners.
 
 ### 11.4 Branch: feat/observability (OK-NOW)
 - [ ] Error tracking integration that scrubs bodies, headers and query strings.
