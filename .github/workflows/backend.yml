@@ -42,7 +42,6 @@ jobs:
       DATABASE_URL: postgresql+psycopg://clouddrop:ci-only-password@localhost:5432/clouddrop
       REDIS_URL: redis://localhost:6379/0
       JWT_SECRET: ci-only-secret-ci-only-secret-ci-only-secret
-      SCANNER_MODE: "off" # tests use a fake scanner; real clamd is not part of CI
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
