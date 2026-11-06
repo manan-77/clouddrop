@@ -87,3 +87,11 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 54. **Keep one persistent live region for progress and status summaries**, not one `role=status` per row.
 55. **Do not keep `File` handles in visible state**; hold them privately and release them when the upload is done or cancelled.
 56. **Tests that use `match()` consume requests**; assert state (statuses, counts) too, or a following `expectNone` proves nothing. Test URLs must be derived from the runtime origin, not hardcoded.
+
+## From the pipeline work
+
+57. **Never run a destructive Redis or database command against a shared instance for convenience** (I tried `flushdb` to get a clean smoke test). Use a dedicated database number and leave shared data alone.
+58. **A subquery over the same table as the outer query must use an alias**, or it auto-correlates and loses its FROM clause.
+59. **A periodic sweeper must be able to tell finished work from stuck work.** A file resting in a non-terminal status after all stages ran would be re-enqueued forever unless the sweep also checks the stage rows.
+60. **Do not set `ready` before the stage that makes it true exists**; leave the file in `processing` and say so.
+61. **macOS has no `timeout` command**; wait loops belong in a small script.

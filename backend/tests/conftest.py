@@ -15,6 +15,7 @@ from alembic import command
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.main import create_app
+from app.modules.processing.dispatcher import get_dispatcher
 from app.modules.storage.deps import get_storage
 from app.modules.storage.s3 import S3Storage
 
@@ -57,6 +58,21 @@ def session(engine: Engine) -> Iterator[Session]:
 BUCKET = "test-bucket"
 
 
+class FakeDispatcher:
+    "Records what would be sent to the worker; tests never touch a broker."
+
+    def __init__(self) -> None:
+        self.calls: list[uuid.UUID] = []
+
+    def enqueue(self, file_version_id: uuid.UUID) -> None:
+        self.calls.append(file_version_id)
+
+
+@pytest.fixture
+def dispatcher() -> FakeDispatcher:
+    return FakeDispatcher()
+
+
 @pytest.fixture
 def s3_client(monkeypatch: pytest.MonkeyPatch) -> Iterator["S3Client"]:
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
@@ -73,7 +89,9 @@ def storage(s3_client: "S3Client") -> S3Storage:
 
 
 @pytest.fixture
-def client(session: Session, storage: S3Storage) -> Iterator[TestClient]:
+def client(
+    session: Session, storage: S3Storage, dispatcher: FakeDispatcher
+) -> Iterator[TestClient]:
     app = create_app()
 
     def _request_session() -> Iterator[Session]:
@@ -85,6 +103,7 @@ def client(session: Session, storage: S3Storage) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_session] = _request_session
     app.dependency_overrides[get_storage] = lambda: storage
+    app.dependency_overrides[get_dispatcher] = lambda: dispatcher
     with TestClient(app) as test_client:
         yield test_client
 

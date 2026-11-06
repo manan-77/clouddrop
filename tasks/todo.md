@@ -239,15 +239,15 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [ ] Tests: happy path, missing part, wrong size, abort, stranger gets 404, repeated complete is safe.
 
 ### 8.2 Branch: feat/celery-pipeline (OK-NOW, needs only local Redis)
-- [ ] Celery application and a worker entry point, beat schedule, task base settings: late acknowledgement, reject on worker loss, time limits, bounded retries with backoff and jitter for transient errors only.
-- [ ] Processing jobs table: one row per stage per file version with status, attempt count, last user-safe error.
-- [ ] Enqueue only after the database commit.
-- [ ] Sweeper task that re-queues files stuck in uploaded, scanning or processing past a threshold.
-- [ ] Broker visibility timeout set longer than the longest task.
-- [ ] Request id carried into task logs.
-- [ ] Tasks take ids only and re-read state; running twice gives the same result.
-- [ ] Tests: task replay is a no-op, retry on transient error, no retry on permanent error, sweeper behaviour, enqueue-after-commit.
-- [ ] Documentation of how to run the worker and beat locally.
+- [x] Celery application and a worker entry point, beat schedule, task base settings: late acknowledgement, reject on worker loss, time limits, bounded retries with backoff and jitter for transient errors only.
+- [x] Processing jobs table: one row per stage per file version with status, attempt count, last user-safe error.
+- [x] Enqueue only after the database commit.
+- [x] Sweeper task that re-queues files stuck in uploaded, scanning or processing past a threshold.
+- [x] Broker visibility timeout set longer than the longest task.
+- [x] Request id carried into task logs.
+- [x] Tasks take ids only and re-read state; running twice gives the same result.
+- [x] Tests: task replay is a no-op, retry on transient error, no retry on permanent error, sweeper behaviour, enqueue-after-commit.
+- [x] Documentation of how to run the worker and beat locally.
 
 ### 8.3 Branch: feat/malware-scan (OK-NOW with a fake scanner; real scanning needs ClamAV installed)
 - [ ] Scanner interface with two implementations: the real ClamAV one and a fake for tests.
@@ -258,8 +258,8 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [ ] Tests: clean, infected, scanner down (retry then failed), oversize file path.
 
 ### 8.4 Branch: feat/extraction-chunking (OK-NOW)
-- [ ] Before scanning, compare the object's current ETag with the ETag stored at upload completion; a mismatch fails the file (the signed upload stays valid for its lifetime and could overwrite the object).
-- [ ] Detect the real file type by content (magic bytes), not by name or the declared type; mismatch fails the file.
+- [x] Before scanning, compare the object's current ETag with the ETag stored at upload completion; a mismatch fails the file (done in the pipeline's verify stage).
+- [x] Detect the real file type by content (magic bytes), not by name or the declared type; mismatch fails the file (done in the pipeline's detect stage; DOCX versus XLSX is told apart at extraction).
 - [ ] Extractors for PDF, Word and Excel with hard limits: input size, page count, decompressed size, sheet and cell counts. Excel opened read-only.
 - [ ] Empty extraction becomes needs_ocr, never ready.
 - [ ] Remove NUL characters from all extracted text before storing.
@@ -429,6 +429,8 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] (PR 7) The permission matrix has only owner and stranger so far; editor, viewer and revoked arrive with sharing (Phase 4). Folder moves need cycle prevention before they exist.
 - [ ] (PR 9) Explorer: the whole view is swapped for a skeleton on every reload (keep previous data while refreshing and restore focus); the pager text is not a live region; dialog error blocks are not persistent live regions; file move needs a folder picker; no route titles or focus management on folder navigation; hostile-name rendering is covered by a test but no visual check in a real browser; the dialog does not close on backdrop click.
 - [ ] (PR 10) Upload: cancelling while the init call is still in flight can leave a pending_upload row the client never learns about (Phase 5 sweeper); orphan rows from failures after init are deleted best-effort from the client; dropped folders are not filtered out (the server rejects them); no real-browser or real-bucket check (CORS must allow POST from the app origin).
+- [ ] (PR 11, NEEDS-YOU) backend/CLAUDE.md says modules reach each other only through services; ADR 0008 records the worker-side exception (processing reads the storage tables). Owner to confirm or reword.
+- [ ] (PR 11) The worker marks a file `failed` with no user-visible reason (the code lives in processing_jobs.error_code); add a reason field or endpoint. Files rest in `processing` until the scan, extraction and embedding stages exist, so the UI shows Processing for every upload. The worker has not run against a real bucket (BLOCKED-AWS). A test message for a random version id was left on the default Redis database 0 queue by a smoke test; it is a harmless no-op when consumed.
 - [ ] (PR 4) Route titles and focus management on navigation are not built; add with the explorer (6.4).
 - [ ] (PR 4) Folders have no index.ts public surfaces yet; add when the first cross-folder API grows.
 - [ ] (PR 4) No automated accessibility checks and no real-browser light/dark/phone check yet.

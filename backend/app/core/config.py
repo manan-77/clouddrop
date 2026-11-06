@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 300
     user_quota_bytes: int = 5 * 1024 * 1024 * 1024
+
+    redis_url: str = "redis://localhost:6379/0"
+    celery_task_soft_time_limit_seconds: int = 300
+    celery_task_time_limit_seconds: int = 330
+    # Must exceed the longest task including retry back-off, or Redis redelivers a running task.
+    celery_visibility_timeout_seconds: int = 1800
+    processing_max_retries: int = 5
+    processing_job_stale_seconds: int = 900
+    sweeper_interval_seconds: int = 300
+    sweeper_stuck_after_seconds: int = 600
+    sweeper_batch_size: int = 100
     s3_connect_timeout_seconds: int = 5
     s3_read_timeout_seconds: int = 30
     s3_max_attempts: int = 3

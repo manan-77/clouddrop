@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
     "boto3>=1.43.124",
+    "celery[redis]>=5.7.0",
     "email-validator>=2.3.0",
     "fastapi>=0.162.0",
     "psycopg[binary]>=3.3.8",
@@ -43,3 +44,12 @@ packages = ["app"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[[tool.mypy.overrides]]
+module = ["celery", "celery.*", "kombu", "kombu.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Celery ships no type information, so its decorators are untyped.
+module = "app.worker.tasks"
+disallow_untyped_decorators = false

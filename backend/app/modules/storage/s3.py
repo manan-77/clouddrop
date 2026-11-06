@@ -73,6 +73,27 @@ class S3Storage:
             raise self._unavailable("head object", exc) from exc
         return ObjectInfo(response["ContentLength"], response["ETag"].strip('"'))
 
+    def read_head(self, key: str, length: int) -> bytes | None:
+        """The first `length` bytes of an object (ranged read), or None when it does not exist."""
+        try:
+            response = self.client.get_object(
+                Bucket=self.bucket, Key=key, Range=f"bytes=0-{length - 1}"
+            )
+            body = response["Body"]
+            try:
+                return bytes(body.read(length))
+            finally:
+                body.close()
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code in _NOT_FOUND_CODES:
+                return None
+            if code == "InvalidRange":  # an empty object has no first byte
+                return b""
+            raise self._unavailable("read object", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("read object", exc) from exc
+
     def delete(self, key: str) -> None:
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
