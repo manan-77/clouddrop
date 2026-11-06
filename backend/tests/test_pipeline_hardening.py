@@ -151,7 +151,7 @@ def test_objectSwappedBetweenVerifyAndRead_isRejectedByTheEtagCondition(
     assert file is not None and version is not None
     s3_client.put_object(Bucket=BUCKET, Key=key, Body=b"%PDF-9.9 swapped bytes of any size")
     with pytest.raises(PermanentStageError) as raised:
-        DetectTypeStage().run(file, version, storage)
+        DetectTypeStage().run(file, version, storage, session)
     assert raised.value.code == "object_changed"
 
 

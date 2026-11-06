@@ -12,6 +12,7 @@ erDiagram
     folders |o--o{ files : "holds (null = workspace root)"
     files ||--o{ file_versions : "has"
     file_versions ||--o{ processing_jobs : "has one per stage"
+    file_versions ||--o{ document_chunks : "has many"
 
     users {
         uuid id PK
@@ -82,11 +83,21 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+    document_chunks {
+        uuid id PK
+        uuid file_version_id FK
+        int chunk_index "unique with file_version_id"
+        int page "page or sheet number, null when none"
+        text content "extracted text, untrusted, never logged"
+        string content_hash "sha256 hex"
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
 
 ## Delete rules
 
-- `refresh_tokens.user_id`, `workspaces.owner_id`, `folders.workspace_id`, `files.workspace_id`, `file_versions.file_id` and `processing_jobs.file_version_id` cascade from their parent.
+- `refresh_tokens.user_id`, `workspaces.owner_id`, `folders.workspace_id`, `files.workspace_id`, `file_versions.file_id`, `processing_jobs.file_version_id` and `document_chunks.file_version_id` cascade from their parent.
 - `folders.parent_id` and `files.folder_id` are RESTRICT: a folder row with children cannot be hard-deleted. The API only soft-deletes, and refuses to delete a non-empty folder.
 - Nullable columns: `refresh_tokens.revoked_at`, `file_versions.etag`, `folders.deleted_at`, `files.deleted_at`, `folders.parent_id`, `files.folder_id`.
 

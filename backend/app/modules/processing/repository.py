@@ -6,17 +6,19 @@ worker has no user and needs rows that are not scoped to a workspace. Only the s
 """
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
 
 from app.db.soft_delete import only_active
 from app.modules.processing.constants import JobStatus
-from app.modules.processing.models import ProcessingJob
+from app.modules.processing.extraction.chunking import Chunk
+from app.modules.processing.models import DocumentChunk, ProcessingJob
 from app.modules.storage.models import File, FileVersion
 
 
@@ -115,3 +117,21 @@ class PipelineRepository:
             self.session.execute(
                 update(FileVersion).where(FileVersion.id.in_(version_ids)).values(enqueued_at=when)
             )
+
+    def replace_chunks(self, version_id: uuid.UUID, chunks: Sequence[Chunk]) -> None:
+        """Delete and insert in the caller's transaction: a rerun yields exactly the same rows."""
+        self.session.execute(
+            delete(DocumentChunk).where(DocumentChunk.file_version_id == version_id)
+        )
+        rows = [
+            {
+                "file_version_id": version_id,
+                "chunk_index": chunk.index,
+                "page": chunk.page,
+                "content": chunk.content,
+                "content_hash": chunk.content_hash,
+            }
+            for chunk in chunks
+        ]
+        for start in range(0, len(rows), 500):
+            self.session.execute(insert(DocumentChunk), rows[start : start + 500])

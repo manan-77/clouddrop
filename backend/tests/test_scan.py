@@ -26,7 +26,7 @@ from app.modules.processing.scanner import (
 from app.modules.processing.stages import ScanStage, TransientStageError
 from app.modules.storage.s3 import ObjectChangedError, S3Storage
 from tests.conftest import BUCKET, FakeDispatcher, FakeScanner
-from tests.test_pipeline import _jobs, _status, _upload
+from tests.test_pipeline import PDF, _jobs, _status, _upload
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
@@ -256,7 +256,7 @@ class TestScanStage:
     ) -> None:
         _, file_id, version_id, _ = self._uploaded(client, make_user, s3_client, dispatcher)
         run_pipeline(session, storage, version_id)
-        assert fake_scanner.scanned == [b"%PDF-1.7\nrest of a document"]
+        assert fake_scanner.scanned == [PDF]
         assert {j.status for j in _jobs(session).values()} == {JobStatus.SUCCEEDED}
         assert _status(session, file_id) == "processing"
 
@@ -336,11 +336,16 @@ class TestScanStage:
         _, file_id, version_id, _ = self._uploaded(client, make_user, s3_client, dispatcher)
         fake_scanner.enabled = False
 
-        def never(*_: object, **__: object) -> None:
-            raise AssertionError("the object must not be read when scanning is off")
+        reads: list[str] = []
+        real = storage.iter_object
 
-        monkeypatch.setattr(storage, "iter_object", never)
+        def counting(key: str, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+            reads.append(key)
+            return real(key, *args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(storage, "iter_object", counting)
         run_pipeline(session, storage, version_id)
+        assert len(reads) == 1, "only the extract stage may read the object when scanning is off"
         assert _jobs(session)[JobStage.SCAN].status == JobStatus.SUCCEEDED
         assert fake_scanner.scanned == []
         assert _status(session, file_id) == "processing"

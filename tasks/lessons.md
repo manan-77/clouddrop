@@ -116,3 +116,11 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 74. **A fake server must be able to stall, drop and split replies**, otherwise timeout and truncation tests pass for the wrong reason.
 75. **A generator that never started never runs its `finally`**; return a small object with an explicit `close()` and call it in a `finally` around the consumer.
 76. **Give an exhausted retry its own error code** when the cause matters (`scan_unavailable`), so a file that was never scanned is not reported as a generic failure.
+77. **Adding a stage changes every test that asserts the end state or reads the object**; grep the tests for stage names, `stage.run(` and storage patches before running the suite.
+78. **Test fixtures that stand in for documents must be real documents** once a parser reads them; build tiny valid ones in `tests/documents.py` instead of faking magic bytes.
+79. **NUL bytes are a binary signal at type detection**, so test NUL stripping at the cleaning function and use other control characters in end-to-end tests.
+80. **Hide bound SQL parameters on the engine** (`hide_parameters=True`); any bulk insert of document text otherwise lands in error logs.
+81. **Never use library helpers that expand input-controlled structure** (python-docx `row.cells` with `gridSpan`); walk the raw elements and count against the cap as you go.
+82. **Cap each parsed XML part, not only the archive total**, and apply ratio checks to parsed parts only so media does not cause false rejections.
+83. **A broad `except Exception` around a parser must re-raise the task time-limit exception** so a slow valid file is retried, not marked corrupt.
+84. **A "rerun" test must call the write twice and compare rows**, include a shrinking rerun and a failing insert; counting rows once proves nothing.

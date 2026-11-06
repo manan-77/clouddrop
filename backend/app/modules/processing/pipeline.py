@@ -9,6 +9,7 @@ from app.modules.processing.models import ProcessingJob
 from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.stages import (
     DetectTypeStage,
+    ExtractStage,
     PermanentStageError,
     ScanStage,
     Stage,
@@ -22,7 +23,12 @@ from app.modules.storage.s3 import S3Storage
 logger = logging.getLogger(__name__)
 
 # Order matters. Later branches add the malware scan, text extraction, chunking and embedding.
-PIPELINE: tuple[Stage, ...] = (VerifyObjectStage(), ScanStage(), DetectTypeStage())
+PIPELINE: tuple[Stage, ...] = (
+    VerifyObjectStage(),
+    ScanStage(),
+    DetectTypeStage(),
+    ExtractStage(),
+)
 
 # Set when the last stage exists. Until text extraction and embeddings are built a file rests in
 # `processing`: marking it `ready` now would claim it is searchable when it is not.
@@ -90,7 +96,7 @@ def run_pipeline(
         file.status = stage.file_status
         session.commit()
         try:
-            stage.run(file, version, storage)
+            stage.run(file, version, storage, session)
         except TransientStageError:
             session.rollback()
             _release(session, job)

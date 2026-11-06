@@ -22,12 +22,13 @@ from app.modules.processing.sweeper import sweep_stuck_files
 from app.modules.storage.models import File, FileVersion
 from app.modules.storage.s3 import S3Storage
 from tests.conftest import BUCKET, FakeDispatcher
+from tests.documents import make_pdf
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
 
 Headers = dict[str, str]
-PDF = b"%PDF-1.7\nrest of a document"
+PDF = make_pdf(["hello extraction"])
 PDF_TYPE = "application/pdf"
 
 
@@ -139,7 +140,12 @@ class TestPipeline:
         run_pipeline(session, storage, version_id)
         assert _status(session, file_id) == "processing"
         jobs = _jobs(session)
-        assert set(jobs) == {JobStage.VERIFY_OBJECT, JobStage.SCAN, JobStage.DETECT_TYPE}
+        assert set(jobs) == {
+            JobStage.VERIFY_OBJECT,
+            JobStage.SCAN,
+            JobStage.DETECT_TYPE,
+            JobStage.EXTRACT,
+        }
         assert {job.status for job in jobs.values()} == {JobStatus.SUCCEEDED}
         assert all(job.attempts == 1 and job.error_code is None for job in jobs.values())
 
@@ -172,8 +178,8 @@ class TestPipeline:
         self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
     ) -> None:
         file_id, version_id, key = self._setup(client, make_user, s3_client, dispatcher)
-        s3_client.put_object(Bucket=BUCKET, Key=key, Body=b"%PDF-1.7\nREST OF A DOCUMENT")
-        assert len(b"%PDF-1.7\nREST OF A DOCUMENT") == len(PDF)
+        s3_client.put_object(Bucket=BUCKET, Key=key, Body=PDF.upper())
+        assert len(PDF.upper()) == len(PDF)
         run_pipeline(session, storage, version_id)
         assert _jobs(session)[JobStage.VERIFY_OBJECT].error_code == "object_changed"
         assert _status(session, file_id) == "failed"
@@ -215,7 +221,10 @@ class TestPipeline:
             client, make_user, s3_client, dispatcher, body=body, content_type=content_type
         )
         run_pipeline(session, storage, version_id)
-        assert _status(session, file_id) == ("processing" if ok else "failed")
+        expected = (
+            "needs_ocr" if ok and content_type == "image/png" else "processing" if ok else "failed"
+        )
+        assert _status(session, file_id) == expected
         if not ok:
             assert _jobs(session)[JobStage.DETECT_TYPE].error_code == "type_mismatch"
 
