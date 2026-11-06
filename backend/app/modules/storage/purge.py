@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, CursorResult, delete, exists, select
+from sqlalchemy import ColumnElement, CursorResult, delete, exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -54,11 +54,17 @@ def _purge_files(
         if locked is None:
             session.rollback()  # changed since it was selected, or another run has it
             continue
-        keys = list(
-            session.scalars(select(FileVersion.s3_key).where(FileVersion.file_id == file_id))
+        versions = list(
+            session.execute(
+                select(FileVersion.s3_key, FileVersion.multipart_upload_id).where(
+                    FileVersion.file_id == file_id
+                )
+            )
         )
         try:
-            for key in keys:
+            for key, upload_id in versions:
+                if upload_id:
+                    storage.abort_multipart(key, upload_id)  # parts cost storage until aborted
                 storage.delete(key)  # deleting a missing object is not an error in S3
         except ServiceUnavailableError:
             session.rollback()
@@ -99,6 +105,7 @@ def purge_expired(
     *,
     retention: timedelta,
     pending_upload_ttl: timedelta,
+    multipart_max_age: timedelta,
     limit: int,
     now: datetime | None = None,
 ) -> PurgeResult:
@@ -116,6 +123,13 @@ def purge_expired(
         File.status == FileStatus.PENDING_UPLOAD.value,
         File.deleted_at.is_(None),
         File.created_at < now - pending_upload_ttl,
+        # A multipart upload may take hours; it is stale only past its own, longer deadline.
+        or_(
+            File.created_at < now - multipart_max_age,
+            ~exists().where(
+                FileVersion.file_id == File.id, FileVersion.multipart_upload_id.is_not(None)
+            ),
+        ),
     ]
     stale_uploads = _purge_files(session, storage, ids(stale_conditions), stale_conditions)
 

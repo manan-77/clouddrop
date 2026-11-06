@@ -23,11 +23,17 @@ if TYPE_CHECKING:
 
 RETENTION = timedelta(days=30)
 PENDING_TTL = timedelta(minutes=30)
+MULTIPART_AGE = timedelta(hours=6)
 
 
 def _purge(session: Session, storage: S3Storage, limit: int = 100):  # type: ignore[no-untyped-def]
     return purge_expired(
-        session, storage, retention=RETENTION, pending_upload_ttl=PENDING_TTL, limit=limit
+        session,
+        storage,
+        retention=RETENTION,
+        pending_upload_ttl=PENDING_TTL,
+        multipart_max_age=MULTIPART_AGE,
+        limit=limit,
     )
 
 

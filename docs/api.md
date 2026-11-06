@@ -42,10 +42,20 @@ Rate limits (fixed window, Redis, per IP and for login also per account; default
 |---|---|---|---|
 | GET | `` | 200 page | Filters `folder_id` (omitted = root) and `status` |
 | POST | `/uploads` | 201 + `Location` | Body `name`, `content_type`, `size_bytes`, optional `folder_id`. Returns the file and a presigned POST (`url`, `fields`, `expires_in`). 422 `file_too_large`, `unsupported_file_type`, `quota_exceeded` |
-| POST | `/{file_id}/uploads/complete` | 200 | Verifies the stored object size. Safe to repeat: a repeat on a file that is no longer pending returns it unchanged (a failed file returns 200 with status `failed`). 409 `upload_incomplete`, 422 `upload_size_mismatch` |
+| POST | `/uploads/multipart` | 201 + `Location` | Same body as `/uploads`; size up to `MULTIPART_MAX_UPLOAD_BYTES` (1 GiB). Returns the file and `multipart` (`part_size_bytes`, `part_count`, `expires_in`); the server chooses the part layout and keeps the S3 upload id in the database (the signed part URLs necessarily contain it, scoped to one part and a short lifetime). Same 422 codes as `/uploads` |
+| POST | `/{file_id}/uploads/parts` | 200 | Body `part_numbers` (1-100 numbers). Returns a presigned PUT URL per part with the exact part size signed in. 409 `not_multipart_upload`, 422 `invalid_part_number`. Presign again to retry a part |
+| DELETE | `/{file_id}/uploads` | 204 | Aborts a pending upload (multipart or single), deletes what was uploaded and removes the file. 409 `upload_not_pending` |
+| POST | `/{file_id}/uploads/complete` | 200 | Verifies the stored object size. For a multipart upload the server lists the uploaded parts itself (the client sends no part list or ETags), checks every part against the layout it chose, assembles them, then verifies the final size; a missing part is 409 `upload_incomplete` and wrong part sizes fail the file with 422 `upload_size_mismatch`. Safe to repeat: a repeat on a file that is no longer pending returns it unchanged (a failed file returns 200 with status `failed`). 409 `upload_incomplete`, 422 `upload_size_mismatch` |
 | GET | `/{file_id}` | 200 | |
 | PATCH | `/{file_id}` | 200 | `name` and/or `folder_id` (explicit null moves to root). 422 `empty_update` |
 | DELETE | `/{file_id}` | 204 | Soft delete; the stored object is purged later |
 | GET | `/{file_id}/download` | 200 `{url, expires_in}` | Short-lived link forced to download. 409 `file_not_ready`, 403 `file_infected` |
 
 While no bucket is configured (`S3_BUCKET` empty), only the routes that talk to S3 return 503 `storage_not_configured`: upload init, upload completion and download. Listing, reading, renaming and deleting files, folders, auth and health are unaffected.
+
+## Storage setup notes (S3)
+
+- The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.
+- **Required:** a lifecycle rule `AbortIncompleteMultipartUpload` after 7 days. The purge job aborts abandoned uploads (after `MULTIPART_UPLOAD_MAX_AGE_SECONDS`, 6 hours), but a part still in flight during an abort, or a crash between creating the upload and saving the row, can leave parts that only this rule cleans up.
+- Browser CORS for part uploads must allow `PUT` from the app origin.
+- The effective maximum is `MAX_UPLOAD_BYTES` (single request, 100 MiB) or `MULTIPART_MAX_UPLOAD_BYTES` (1 GiB, multipart). The settings refuse a multipart maximum above `SCANNER_MAX_STREAM_BYTES` while scanning is on, so a file is never accepted and then failed for being too large to scan.

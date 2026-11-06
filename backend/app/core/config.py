@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     s3_bucket: str | None = None
     s3_endpoint_url: str | None = None
     max_upload_bytes: int = 100 * 1024 * 1024
+    multipart_max_upload_bytes: int = 1024 * 1024 * 1024
+    multipart_part_size_bytes: int = 16 * 1024 * 1024
+    multipart_upload_max_age_seconds: int = 6 * 3600
     presigned_upload_ttl_seconds: int = 900
     presigned_download_ttl_seconds: int = 300
     user_quota_bytes: int = 5 * 1024 * 1024 * 1024
@@ -49,7 +52,7 @@ class Settings(BaseSettings):
     clamav_port: int = 3310
     scanner_timeout_seconds: int = 30
     # Raise clamd's StreamMaxLength to at least this too; a larger file fails instead of skipping.
-    scanner_max_stream_bytes: int = 100 * 1024 * 1024
+    scanner_max_stream_bytes: int = 1024 * 1024 * 1024
     scanner_chunk_bytes: int = 64 * 1024
     # Limits for reading untrusted documents (page, size and zip-bomb caps).
     extract_max_pages: int = 500
@@ -102,6 +105,18 @@ class Settings(BaseSettings):
         if len(value.get_secret_value()) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
         return value
+
+    @model_validator(mode="after")
+    def _multipart_files_can_be_scanned(self) -> Self:
+        # Otherwise a file would upload fine and then fail the scan for being too large.
+        if (
+            self.scanner_mode == "clamav"
+            and self.multipart_max_upload_bytes > self.scanner_max_stream_bytes
+        ):
+            raise ValueError("MULTIPART_MAX_UPLOAD_BYTES must not exceed SCANNER_MAX_STREAM_BYTES")
+        if not 5 * 1024 * 1024 <= self.multipart_part_size_bytes <= 2 * 1024**3:
+            raise ValueError("MULTIPART_PART_SIZE_BYTES must be between 5 MiB and 2 GiB")
+        return self
 
     @model_validator(mode="after")
     def _chunk_overlap_is_smaller_than_the_chunk(self) -> Self:

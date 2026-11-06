@@ -32,7 +32,7 @@ Processing runs in a Celery worker (Redis is the broker; pipeline state lives in
 - `uv run celery -A app.worker.celery_app worker -l info`
 - `uv run celery -A app.worker.celery_app beat -l info` (schedules the sweeper that re-enqueues stuck files)
 
-Malware scanning uses ClamAV (clamd) over TCP. Install and start it with `brew install clamav`, create `clamd.conf` from the sample, set `StreamMaxLength` to at least `SCANNER_MAX_STREAM_BYTES` (default 100 MiB, matching the largest upload) and `TCPSocket 3310`, then run `clamd`. A file larger than the scanner accepts is failed with `too_large_to_scan`; it is never skipped. If clamd is unreachable the scan is retried, and the file is failed after the attempts cap. For local development without ClamAV set `SCANNER_MODE=off`; the settings refuse that value in staging and production.
+Malware scanning uses ClamAV (clamd) over TCP. Install and start it with `brew install clamav`, create `clamd.conf` from the sample, set `StreamMaxLength` to at least `SCANNER_MAX_STREAM_BYTES` (default 1 GiB, matching the largest multipart upload) and `TCPSocket 3310`, then run `clamd`. A file larger than the scanner accepts is failed with `too_large_to_scan`; it is never skipped. If clamd is unreachable the scan is retried, and the file is failed after the attempts cap. For local development without ClamAV set `SCANNER_MODE=off`; the settings refuse that value in staging and production.
 
 The worker needs the same `.env` as the API, including the S3 settings. Use a dedicated Redis database number in `REDIS_URL` if the default one is shared with other projects.
 

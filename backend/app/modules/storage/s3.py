@@ -57,6 +57,21 @@ class ObjectStream:
         self._body.close()
 
 
+@dataclass(frozen=True)
+class UploadedPart:
+    part_number: int
+    size_bytes: int
+    etag: str
+
+
+class MultipartGoneError(Exception):
+    """The multipart upload no longer exists (completed, aborted or expired)."""
+
+
+class MultipartPartsInvalidError(Exception):
+    """S3 rejected the part list (a part changed or is missing)."""
+
+
 class ObjectChangedError(Exception):
     """The object no longer has the ETag the caller expected."""
 
@@ -92,6 +107,89 @@ class S3Storage:
         except (BotoCoreError, ClientError) as exc:
             raise self._unavailable("presign upload", exc) from exc
         return PresignedUpload(post["url"], dict(post["fields"]), self.upload_ttl_seconds)
+
+    def create_multipart(self, key: str, content_type: str) -> str:
+        try:
+            response = self.client.create_multipart_upload(
+                Bucket=self.bucket, Key=key, ContentType=content_type
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("create multipart upload", exc) from exc
+        return str(response["UploadId"])
+
+    def presign_part(self, key: str, upload_id: str, part_number: int, size_bytes: int) -> str:
+        # ContentLength is signed, so S3 rejects a part of any other size.
+        try:
+            return self.client.generate_presigned_url(
+                "upload_part",
+                Params={
+                    "Bucket": self.bucket,
+                    "Key": key,
+                    "UploadId": upload_id,
+                    "PartNumber": part_number,
+                    "ContentLength": size_bytes,
+                },
+                ExpiresIn=self.upload_ttl_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise self._unavailable("presign part", exc) from exc
+
+    def list_parts(self, key: str, upload_id: str) -> list[UploadedPart]:
+        parts: list[UploadedPart] = []
+        marker = 0
+        try:
+            while True:
+                response = self.client.list_parts(
+                    Bucket=self.bucket,
+                    Key=key,
+                    UploadId=upload_id,
+                    PartNumberMarker=marker,
+                    MaxParts=1000,
+                )
+                parts.extend(
+                    UploadedPart(p["PartNumber"], p["Size"], p["ETag"])
+                    for p in response.get("Parts", [])
+                )
+                if not response.get("IsTruncated"):
+                    return parts
+                marker = response["NextPartNumberMarker"]
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "NoSuchUpload":
+                raise MultipartGoneError from exc
+            raise self._unavailable("list parts", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("list parts", exc) from exc
+
+    def complete_multipart(self, key: str, upload_id: str, parts: list[UploadedPart]) -> None:
+        try:
+            self.client.complete_multipart_upload(
+                Bucket=self.bucket,
+                Key=key,
+                UploadId=upload_id,
+                MultipartUpload={
+                    "Parts": [{"PartNumber": p.part_number, "ETag": p.etag} for p in parts]
+                },
+            )
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code")
+            if code == "NoSuchUpload":
+                raise MultipartGoneError from exc
+            if code in {"InvalidPart", "InvalidPartOrder", "EntityTooSmall"}:
+                raise MultipartPartsInvalidError from exc
+            raise self._unavailable("complete multipart upload", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("complete multipart upload", exc) from exc
+
+    def abort_multipart(self, key: str, upload_id: str) -> None:
+        """Safe to repeat: an upload that is already gone is not an error."""
+        try:
+            self.client.abort_multipart_upload(Bucket=self.bucket, Key=key, UploadId=upload_id)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "NoSuchUpload":
+                return
+            raise self._unavailable("abort multipart upload", exc) from exc
+        except BotoCoreError as exc:
+            raise self._unavailable("abort multipart upload", exc) from exc
 
     def head(self, key: str) -> ObjectInfo | None:
         try:

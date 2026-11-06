@@ -62,6 +62,7 @@ def purge_expired_data() -> int:
             storage_for_worker(),
             retention=timedelta(days=settings.purge_retention_days),
             pending_upload_ttl=timedelta(seconds=settings.presigned_upload_ttl_seconds * 2),
+            multipart_max_age=timedelta(seconds=settings.multipart_upload_max_age_seconds),
             limit=settings.purge_batch_size,
         )
     return result.files + result.stale_uploads + result.folders + result.refresh_tokens

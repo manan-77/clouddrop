@@ -69,6 +69,8 @@ erDiagram
         string content_type
         string etag
         timestamptz enqueued_at "when processing was last handed to the worker"
+        string multipart_upload_id "only while a multipart upload is in progress; never sent to clients"
+        int part_size_bytes "set for multipart uploads"
         timestamptz created_at
     }
     processing_jobs {
