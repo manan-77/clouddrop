@@ -368,10 +368,10 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] Tests: limits trigger, reset after the window, one user cannot exhaust another's budget.
 
 ### 11.2 Branch: feat/ci (OK-NOW)
-- [ ] GitHub Actions workflows: backend (lint, format check, types, tests with a Postgres service that has the vector extension, and Redis), frontend (build, test, lint, format check).
-- [ ] Cache dependencies. Require the workflows to pass before merge.
-- [ ] Dependency vulnerability scan jobs for both tiers.
-- [ ] Update the PR checklist docs. Enable branch protection (NEEDS-YOU in GitHub settings).
+- [x] GitHub Actions workflows (first real run happens on its PR): backend (lint, format check, types, tests with a Postgres service that has the vector extension, and Redis), frontend (build, test, lint, format check).
+- [x] Cache dependencies. (Requiring the workflows to pass is a GitHub setting: NEEDS-YOU.)
+- [x] Dependency vulnerability scan jobs for both tiers.
+- [x] PR template added. Enable branch protection and required checks `backend / checks` and `frontend / checks` (NEEDS-YOU in GitHub settings).
 
 ### 11.3 Branch: feat/containers (OK-NOW)
 - [ ] Run the API with `--proxy-headers --forwarded-allow-ips=<proxy>` so rate limits see the real client (see docs/api.md).

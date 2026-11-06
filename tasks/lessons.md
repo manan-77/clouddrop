@@ -142,3 +142,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 100. **Retry the whole presign-and-send unit, not just the send**, and classify errors: network, 5xx and 429 retry; other 4xx never do.
 101. **After an abort is refused because the work finished, fall back to the delete that works in that state**; swallowing the refusal leaves a file the user cancelled.
 102. **A spec asserting "no Authorization header" must set a token first**, or it passes whether or not the interceptor leaks.
+103. **Run the exact CI commands locally before pushing a workflow**, including the audit export, so the first CI run is a confirmation, not a discovery.
