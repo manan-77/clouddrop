@@ -269,11 +269,11 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [x] Tests: each format, zip bomb sample, corrupt file, empty file, NUL bytes, deterministic output, re-run gives identical chunks.
 
 ### 8.5 Branch: feat/purge-job (OK-NOW)
-- [ ] Scheduled task that permanently removes soft-deleted files past a retention period: delete the S3 objects, then versions, chunks and rows.
-- [ ] Also removes stale pending uploads and abandoned multiparts. Until it exists, abandoned pending_upload rows still count toward the storage quota (consider excluding pending rows older than the presign lifetime from the quota sum).
-- [ ] Cleanup of expired refresh tokens and share links.
-- [ ] Safe to run twice, bounded per run, logs counts only.
-- [ ] Tests: retention boundary, partial failure leaves consistent state, repeat run is a no-op.
+- [x] Scheduled task that permanently removes soft-deleted files past a retention period: delete the S3 objects, then versions, chunks and rows.
+- [x] Also removes stale pending uploads (abandoned multiparts wait for 8.1). Until it exists, abandoned pending_upload rows still count toward the storage quota (consider excluding pending rows older than the presign lifetime from the quota sum).
+- [x] Cleanup of expired refresh tokens (share links wait for Phase 4).
+- [x] Safe to run twice, bounded per run, logs counts only.
+- [x] Tests: retention boundary, partial failure leaves consistent state, repeat run is a no-op.
 
 ### 8.6 Phase 5 exit criteria
 - [ ] A clean uploaded document reaches ready with chunks stored. An infected sample is quarantined. A scanned image-only PDF becomes needs_ocr. Killing a worker mid-task recovers via retry or the sweeper.

@@ -42,7 +42,12 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
                 # A beat message that waits longer than one interval is dropped, so a stopped
                 # worker does not come back to a pile of identical sweeps.
                 "options": {"expires": settings.sweeper_interval_seconds},
-            }
+            },
+            "purge-expired-data": {
+                "task": "storage.purge_expired",
+                "schedule": settings.purge_interval_seconds,
+                "options": {"expires": settings.purge_interval_seconds},
+            },
         },
     )
     return app

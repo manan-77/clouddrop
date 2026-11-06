@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     chunk_overlap_chars: int = 150
     sweeper_stuck_after_seconds: int = 600
     sweeper_batch_size: int = 100
+    purge_interval_seconds: int = 3600
+    purge_retention_days: int = 30
+    purge_batch_size: int = 100
     s3_connect_timeout_seconds: int = 5
     s3_read_timeout_seconds: int = 30
     s3_max_attempts: int = 3

@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,11 @@ class FileService:
         self.workspaces = WorkspaceService(session)
         self.access = AccessService(session)
 
+    def _pending_cutoff(self) -> datetime:
+        # An upload still pending after twice its presign lifetime is abandoned (the purge job
+        # removes it); it must not keep counting against the quota meanwhile.
+        return datetime.now(UTC) - timedelta(seconds=self.settings.presigned_upload_ttl_seconds * 2)
+
     def init_upload(
         self,
         user_id: uuid.UUID,
@@ -47,7 +52,10 @@ class FileService:
                 "This file type is not supported", code="unsupported_file_type"
             )
         # Soft limit: two simultaneous inits may overshoot by one file.
-        if self.files.sum_size(workspace_id) + size_bytes > self.settings.user_quota_bytes:
+        if (
+            self.files.sum_size(workspace_id, self._pending_cutoff()) + size_bytes
+            > self.settings.user_quota_bytes
+        ):
             raise UnprocessableError("Storage quota exceeded", code="quota_exceeded")
         if (
             folder_id is not None
