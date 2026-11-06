@@ -8,13 +8,19 @@ import { DialogComponent } from '@shared/ui/dialog/dialog.component';
   imports: [ButtonComponent, DialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <cd-dialog [title]="title()" (dismissed)="dismissed.emit()">
+    <cd-dialog [heading]="heading()" [dismissible]="!busy()" (dismissed)="dismissed.emit()">
       <p>{{ message() }}</p>
       @if (error(); as text) {
         <p class="cd-form-error" role="alert">{{ text }}</p>
       }
       <div class="cd-actions">
-        <button cd-button variant="secondary" type="button" (click)="dismissed.emit()">
+        <button
+          cd-button
+          variant="secondary"
+          type="button"
+          [disabled]="busy()"
+          (click)="dismissed.emit()"
+        >
           Cancel
         </button>
         <button cd-button variant="danger" type="button" [busy]="busy()" (click)="confirmed.emit()">
@@ -25,7 +31,7 @@ import { DialogComponent } from '@shared/ui/dialog/dialog.component';
   `,
 })
 export class ConfirmDialogComponent {
-  readonly title = input.required<string>();
+  readonly heading = input.required<string>();
   readonly message = input.required<string>();
   readonly confirmLabel = input.required<string>();
   readonly busy = input(false);

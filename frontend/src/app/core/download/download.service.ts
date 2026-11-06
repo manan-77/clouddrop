@@ -10,6 +10,10 @@ export class DownloadService {
   private readonly document = inject(DOCUMENT);
 
   start(url: string): void {
+    // The link comes from our own API, but never hand a script or data URL to the browser.
+    if (!/^https?:$/.test(new URL(url).protocol)) {
+      throw new Error('Refusing to download from a non-http link');
+    }
     const anchor = this.document.createElement('a');
     anchor.href = url;
     anchor.rel = 'noopener noreferrer';

@@ -21,7 +21,7 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
   imports: [ReactiveFormsModule, ButtonComponent, DialogComponent, FieldErrorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <cd-dialog [title]="title()" (dismissed)="dismissed.emit()">
+    <cd-dialog [heading]="heading()" [dismissible]="!busy()" (dismissed)="dismissed.emit()">
       <form class="cd-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <div class="cd-field">
           <label for="name-dialog-input">{{ label() }}</label>
@@ -33,7 +33,8 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
             aria-describedby="name-dialog-error"
             formControlName="name"
             [attr.aria-invalid]="message() ? 'true' : null"
-            (input)="message.set(null)"
+            [readOnly]="busy()"
+            (input)="onInput()"
           />
           <cd-field-error fieldId="name-dialog-error" [message]="message()" />
         </div>
@@ -41,7 +42,13 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
           <p class="cd-form-error" role="alert">{{ text }}</p>
         }
         <div class="cd-actions">
-          <button cd-button variant="secondary" type="button" (click)="dismissed.emit()">
+          <button
+            cd-button
+            variant="secondary"
+            type="button"
+            [disabled]="busy()"
+            (click)="dismissed.emit()"
+          >
             Cancel
           </button>
           <button cd-button type="submit" [busy]="busy()">{{ submitLabel() }}</button>
@@ -51,7 +58,7 @@ import { FieldErrorComponent } from '@shared/ui/field-error/field-error.componen
   `,
 })
 export class NameDialogComponent implements OnInit {
-  readonly title = input.required<string>();
+  readonly heading = input.required<string>();
   readonly label = input.required<string>();
   readonly submitLabel = input.required<string>();
   readonly initialValue = input('');
@@ -59,6 +66,8 @@ export class NameDialogComponent implements OnInit {
   readonly error = input<string | null>(null);
   readonly submitted = output<string>();
   readonly dismissed = output<void>();
+  /** The user typed again, so the parent can drop a stale server message. */
+  readonly edited = output<void>();
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     name: ['', [Validators.required, notBlank, Validators.maxLength(255)]],
@@ -67,6 +76,11 @@ export class NameDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.form.controls.name.setValue(this.initialValue());
+  }
+
+  protected onInput(): void {
+    this.message.set(null);
+    this.edited.emit();
   }
 
   protected submit(): void {

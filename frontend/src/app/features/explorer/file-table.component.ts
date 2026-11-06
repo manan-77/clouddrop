@@ -4,12 +4,20 @@ import { type FileRead } from '@core/api/models';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
 import { DownloadablePipe } from '@shared/pipes/downloadable.pipe';
 import { FileSizePipe } from '@shared/pipes/file-size.pipe';
+import { IsInPipe } from '@shared/pipes/is-in.pipe';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.component';
 
 @Component({
   selector: 'cd-file-table',
-  imports: [DateTimePipe, DownloadablePipe, FileSizePipe, ButtonComponent, StatusBadgeComponent],
+  imports: [
+    DateTimePipe,
+    DownloadablePipe,
+    FileSizePipe,
+    IsInPipe,
+    ButtonComponent,
+    StatusBadgeComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="cd-table-wrap">
@@ -38,6 +46,7 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                   cd-button
                   variant="secondary"
                   type="button"
+                  [busy]="file.id | isIn: downloading()"
                   [disabled]="!(file.status | downloadable)"
                   [attr.aria-label]="'Download ' + file.name"
                   (click)="download.emit(file)"
@@ -72,6 +81,7 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
 })
 export class FileTableComponent {
   readonly files = input.required<readonly FileRead[]>();
+  readonly downloading = input<readonly string[]>([]);
   readonly download = output<FileRead>();
   readonly rename = output<FileRead>();
   readonly remove = output<FileRead>();

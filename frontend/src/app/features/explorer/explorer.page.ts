@@ -4,12 +4,11 @@ import {
   DestroyRef,
   effect,
   inject,
-  input,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
-import { finalize, type Observable } from 'rxjs';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { finalize, map, type Observable } from 'rxjs';
 
 import { type FileRead, type FolderRead } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
@@ -50,29 +49,45 @@ type Dialog =
   templateUrl: './explorer.page.html',
 })
 export class ExplorerPage {
-  /** Bound from the route (`folders/:folderId`); absent at the root. */
-  readonly folderId = input<string | undefined>();
-
   protected readonly store = inject(ExplorerStore);
   protected readonly dialog = signal<Dialog | null>(null);
   protected readonly busy = signal(false);
   protected readonly dialogError = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
+  protected readonly downloading = signal<readonly string[]>([]);
 
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
+
+  // Read from the route path only (never a query string), so /?folderId=x cannot open a folder.
+  private readonly folderId = toSignal(
+    this.route.paramMap.pipe(map((params) => params.get('folderId'))),
+    { initialValue: this.route.snapshot.paramMap.get('folderId') },
+  );
 
   constructor() {
-    effect(() => this.store.open(this.folderId() ?? null));
+    effect(() => {
+      this.store.open(this.folderId() ?? null);
+      // A dialog or message belongs to the folder it was opened in.
+      this.dialog.set(null);
+      this.dialogError.set(null);
+      this.notice.set(null);
+    });
   }
 
   protected show(dialog: Dialog): void {
+    if (this.busy()) {
+      return;
+    }
     this.dialogError.set(null);
     this.dialog.set(dialog);
   }
 
   protected closeDialog(): void {
-    this.dialog.set(null);
+    if (!this.busy()) {
+      this.dialog.set(null);
+    }
   }
 
   protected submitName(name: string): void {
@@ -102,10 +117,17 @@ export class ExplorerPage {
   }
 
   protected download(file: FileRead): void {
+    if (this.downloading().includes(file.id)) {
+      return;
+    }
     this.notice.set(null);
+    this.downloading.update((ids) => [...ids, file.id]);
     this.store
       .downloadFile(file.id)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        finalize(() => this.downloading.update((ids) => ids.filter((id) => id !== file.id))),
+        takeUntilDestroyed(this.destroyRef),
+      )
       .subscribe({
         error: (error: unknown) => this.notice.set(this.resolver.resolve(error).message),
       });

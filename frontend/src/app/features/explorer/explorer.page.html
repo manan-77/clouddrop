@@ -3,9 +3,11 @@
   <button cd-button type="button" (click)="show({ kind: 'create-folder' })">New folder</button>
 </div>
 
-@if (notice(); as message) {
-  <p class="cd-form-error" role="alert">{{ message }}</p>
-}
+<p class="cd-form-error" role="alert">
+  @if (notice(); as message) {
+    {{ message }}
+  }
+</p>
 
 @let current = store.view();
 
@@ -36,13 +38,16 @@
   }
   @case ('error') {
     <cd-error-state [message]="current.error ?? ''" (retry)="store.reload()" />
+    @if (store.folderId()) {
+      <p><a routerLink="/">Go to all files</a></p>
+    }
   }
   @default {
     @if (current.folders && current.files) {
       @if (current.folders.total === 0 && current.files.total === 0) {
         <cd-empty-state
           title="This folder is empty"
-          description="Create a folder to get started. File uploads arrive in the next step."
+          description="Create a folder to get started."
         />
       }
       @if (current.folders.total > 0) {
@@ -67,6 +72,7 @@
           <h2 id="files-heading">Files</h2>
           <cd-file-table
             [files]="current.files.items"
+            [downloading]="downloading()"
             (download)="download($event)"
             (rename)="show({ kind: 'rename-file', file: $event })"
             (remove)="show({ kind: 'delete-file', file: $event })"
@@ -87,39 +93,42 @@
 @let open = dialog();
 @if (open && open.kind === 'create-folder') {
   <cd-name-dialog
-    title="New folder"
+    heading="New folder"
     label="Folder name"
     submitLabel="Create"
     [busy]="busy()"
     [error]="dialogError()"
     (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
     (dismissed)="closeDialog()"
   />
 } @else if (open && open.kind === 'rename-folder') {
   <cd-name-dialog
-    title="Rename folder"
+    heading="Rename folder"
     label="Folder name"
     submitLabel="Rename"
     [initialValue]="open.folder.name"
     [busy]="busy()"
     [error]="dialogError()"
     (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
     (dismissed)="closeDialog()"
   />
 } @else if (open && open.kind === 'rename-file') {
   <cd-name-dialog
-    title="Rename file"
+    heading="Rename file"
     label="File name"
     submitLabel="Rename"
     [initialValue]="open.file.name"
     [busy]="busy()"
     [error]="dialogError()"
     (submitted)="submitName($event)"
+    (edited)="dialogError.set(null)"
     (dismissed)="closeDialog()"
   />
 } @else if (open && open.kind === 'delete-folder') {
   <cd-confirm-dialog
-    title="Delete folder"
+    heading="Delete folder"
     [message]="'Delete the folder ' + open.folder.name + '? It must be empty.'"
     confirmLabel="Delete"
     [busy]="busy()"
@@ -129,7 +138,7 @@
   />
 } @else if (open && open.kind === 'delete-file') {
   <cd-confirm-dialog
-    title="Delete file"
+    heading="Delete file"
     [message]="'Delete the file ' + open.file.name + '?'"
     confirmLabel="Delete"
     [busy]="busy()"

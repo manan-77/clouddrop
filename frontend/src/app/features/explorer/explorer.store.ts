@@ -77,11 +77,11 @@ export class ExplorerStore {
   }
 
   setFolderPage(page: number): void {
-    this.query.update((q) => (q ? { ...q, folderPage: page } : q));
+    this.query.update((q) => (q && q.folderPage !== page ? { ...q, folderPage: page } : q));
   }
 
   setFilePage(page: number): void {
-    this.query.update((q) => (q ? { ...q, filePage: page } : q));
+    this.query.update((q) => (q && q.filePage !== page ? { ...q, filePage: page } : q));
   }
 
   reload(): void {
@@ -130,15 +130,26 @@ export class ExplorerStore {
     );
   }
 
-  /** After deleting the last item on a page, show the previous page instead of an empty one. */
+  /**
+   * After deleting the last item on a page, show the last page that still exists. Only steps back
+   * when the last page is genuinely earlier, so inconsistent counts can never cause a reload loop.
+   */
   private stepBackFromEmptyPage(view: ExplorerView): void {
     if (view.status !== 'ready' || !view.folders || !view.files) {
       return;
     }
-    if (view.folders.items.length === 0 && view.folders.total > 0) {
+    if (
+      view.folders.items.length === 0 &&
+      view.folders.total > 0 &&
+      lastPage(view.folders) < view.folders.page
+    ) {
       this.setFolderPage(lastPage(view.folders));
     }
-    if (view.files.items.length === 0 && view.files.total > 0) {
+    if (
+      view.files.items.length === 0 &&
+      view.files.total > 0 &&
+      lastPage(view.files) < view.files.page
+    ) {
       this.setFilePage(lastPage(view.files));
     }
   }

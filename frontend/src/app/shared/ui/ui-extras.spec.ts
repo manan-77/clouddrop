@@ -55,7 +55,7 @@ describe('StatusBadgeComponent', () => {
 describe('DialogComponent', () => {
   it('open_marksTheDialogOpenAndLabelsItWithTheTitle', async () => {
     const fixture = TestBed.createComponent(DialogComponent);
-    fixture.componentRef.setInput('title', 'Delete file');
+    fixture.componentRef.setInput('heading', 'Delete file');
     await fixture.whenStable();
     const dialog = (fixture.nativeElement as HTMLElement).querySelector(
       'dialog',
@@ -69,7 +69,7 @@ describe('DialogComponent', () => {
 
   it('closeEvent_emitsDismissedButDestroyingDoesNot', async () => {
     const fixture = TestBed.createComponent(DialogComponent);
-    fixture.componentRef.setInput('title', 'Title');
+    fixture.componentRef.setInput('heading', 'Title');
     const dismissed = vi.fn();
     fixture.componentInstance.dismissed.subscribe(dismissed);
     await fixture.whenStable();
@@ -98,4 +98,28 @@ describe('DownloadService', () => {
     expect(clicked).toEqual(['https://files.example/a?sig=1|noopener noreferrer']);
     expect(document.body.querySelector('a[href^="https://files.example"]')).toBeNull();
   });
+});
+
+describe('DialogComponent dismissal', () => {
+  it.each([
+    [true, false],
+    [false, true],
+  ])('dismissible_%s_cancelEventPrevented_%s', async (dismissible, prevented) => {
+    const fixture = TestBed.createComponent(DialogComponent);
+    fixture.componentRef.setInput('heading', 'Busy');
+    fixture.componentRef.setInput('dismissible', dismissible);
+    await fixture.whenStable();
+    const cancel = new Event('cancel', { cancelable: true });
+    (fixture.nativeElement as HTMLElement).querySelector('dialog')?.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(prevented);
+  });
+});
+
+describe('DownloadService safety', () => {
+  it.each(['javascript:alert(1)', 'data:text/html,<b>x</b>', 'file:///etc/passwd'])(
+    'start_%s_isRefused',
+    (url) => {
+      expect(() => TestBed.inject(DownloadService).start(url)).toThrow();
+    },
+  );
 });

@@ -1,5 +1,7 @@
 import { HttpTestingController, type TestRequest } from '@angular/common/http/testing';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
 import { type FileRead, type FileStatus, type FolderRead, type Page } from '@core/api/models';
@@ -38,20 +40,25 @@ describe('ExplorerPage', () => {
   const download = { start: vi.fn() };
 
   const setup = async (folderId?: string) => {
+    const params$ = new BehaviorSubject(convertToParamMap(folderId ? { folderId } : {}));
     TestBed.configureTestingModule({
-      providers: [...provideAuthTesting(), { provide: DownloadService, useValue: download }],
+      providers: [
+        ...provideAuthTesting(),
+        { provide: DownloadService, useValue: download },
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: params$.value }, paramMap: params$ },
+        },
+      ],
     });
     const fixture: ComponentFixture<ExplorerPage> = TestBed.createComponent(ExplorerPage);
-    if (folderId) {
-      fixture.componentRef.setInput('folderId', folderId);
-    }
     const backend = TestBed.inject(HttpTestingController);
     const settle = async () => {
       await fixture.whenStable();
       await fixture.whenStable();
     };
     await settle();
-    return { fixture, backend, settle, root: fixture.nativeElement as HTMLElement };
+    return { fixture, backend, settle, params$, root: fixture.nativeElement as HTMLElement };
   };
 
   const loadRoot = (
@@ -346,5 +353,130 @@ describe('ExplorerPage', () => {
     expect(files.request.params.get('page')).toBe('1');
     folders.flush(page([]));
     files.flush(page([file('a', 'one.pdf')], 20, 1, 20));
+  });
+
+  it('emptyPageThatIsAlreadyTheLastPossible_doesNotReloadForever', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([file('a', 'one.pdf')], 40, 1, 20));
+    await settle();
+    click(root, 'nav[aria-label="Files pagination"] button:last-child');
+    await settle();
+    backend.expectOne(isList('folders')).flush(page([]));
+    backend.expectOne(isList('files')).flush(page([], 40, 2, 20));
+    await settle();
+    backend.expectNone(isList('files'));
+    backend.expectNone(isList('folders'));
+  });
+
+  it('dialog_whileTheRequestRuns_cannotBeDismissedAndIsAfterwards', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    click(root, '.cd-toolbar button');
+    await settle();
+    const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
+    input.value = 'Reports';
+    input.dispatchEvent(new Event('input'));
+    (root.querySelector('cd-name-dialog form') as HTMLFormElement).dispatchEvent(
+      new Event('submit'),
+    );
+    await settle();
+    const dialog = root.querySelector('cd-name-dialog dialog') as HTMLDialogElement;
+    const whileBusy = new Event('cancel', { cancelable: true });
+    dialog.dispatchEvent(whileBusy);
+    expect(whileBusy.defaultPrevented).toBe(true);
+    const cancelButton = root.querySelector('cd-name-dialog button[data-variant="secondary"]');
+    expect((cancelButton as HTMLButtonElement).disabled).toBe(true);
+    expect((root.querySelector('#name-dialog-input') as HTMLInputElement).readOnly).toBe(true);
+
+    backend
+      .expectOne((r) => r.method === 'POST' && r.url === '/api/v1/folders')
+      .flush(ENVELOPE('folder_name_taken'), { status: 409, statusText: 'Conflict' });
+    await settle();
+    const afterwards = new Event('cancel', { cancelable: true });
+    root.querySelector('cd-name-dialog dialog')?.dispatchEvent(afterwards);
+    expect(afterwards.defaultPrevented).toBe(false);
+  });
+
+  it('editingTheName_clearsTheServerMessageInTheDialog', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    click(root, '.cd-toolbar button');
+    await settle();
+    const input = root.querySelector('#name-dialog-input') as HTMLInputElement;
+    input.value = 'Reports';
+    input.dispatchEvent(new Event('input'));
+    (root.querySelector('cd-name-dialog form') as HTMLFormElement).dispatchEvent(
+      new Event('submit'),
+    );
+    backend
+      .expectOne((r) => r.method === 'POST' && r.url === '/api/v1/folders')
+      .flush(ENVELOPE('folder_name_taken'), { status: 409, statusText: 'Conflict' });
+    await settle();
+    expect(root.querySelector('cd-name-dialog [role="alert"]')).not.toBeNull();
+    input.value = 'Reports 2';
+    input.dispatchEvent(new Event('input'));
+    await settle();
+    expect(root.querySelector('cd-name-dialog [role="alert"]')).toBeNull();
+  });
+
+  it('download_doubleClick_sendsOneRequestAndShowsBusyUntilItFinishes', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([file('a', 'report.pdf')]));
+    await settle();
+    const button = root.querySelector(
+      'button[aria-label="Download report.pdf"]',
+    ) as HTMLButtonElement;
+    button.click();
+    button.click();
+    await settle();
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    expect(button.disabled).toBe(true);
+    backend
+      .expectOne('/api/v1/files/a/download')
+      .flush({ url: 'https://files.example/x', expires_in: 300 });
+    await settle();
+    expect(download.start).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(false);
+  });
+
+  it('routeChange_closesAnOpenDialogAndLoadsTheNewFolder', async () => {
+    const { root, backend, settle, params$ } = await setup('f1');
+    backend.expectOne('/api/v1/folders/f1/path').flush([folder('f1', 'Work')]);
+    backend.expectOne(isList('folders')).flush(page([folder('x', 'Old')]));
+    backend.expectOne(isList('files')).flush(page([]));
+    await settle();
+    click(root, 'button[aria-label="Delete folder Old"]');
+    await settle();
+    expect(root.querySelector('cd-confirm-dialog')).not.toBeNull();
+
+    params$.next(convertToParamMap({ folderId: 'f2' }));
+    await settle();
+    expect(root.querySelector('cd-confirm-dialog')).toBeNull();
+    backend.expectOne('/api/v1/folders/f2/path').flush([folder('f2', 'Other')]);
+    backend.expectOne(isList('folders')).flush(page([]));
+    backend.expectOne(isList('files')).flush(page([]));
+  });
+
+  it('folderNotFound_errorStateOffersAWayBackToAllFiles', async () => {
+    const { root, backend, settle } = await setup('gone');
+    backend
+      .expectOne('/api/v1/folders/gone/path')
+      .flush(ENVELOPE('not_found'), { status: 404, statusText: 'Not Found' });
+    backend.match(isList('folders'));
+    backend.match(isList('files'));
+    await settle();
+    expect(text(root, 'cd-error-state [role="alert"] p')).toBe('We could not find that.');
+    expect(root.querySelector('a[href="/"]')?.textContent).toContain('Go to all files');
+  });
+
+  it('notice_isAPersistentLiveRegionThatIsEmptyWhenThereIsNothingToSay', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([]));
+    await settle();
+    const region = root.querySelector('.cd-toolbar + p[role="alert"]') as HTMLElement;
+    expect(region).not.toBeNull();
+    expect(region.textContent?.trim()).toBe('');
   });
 });
