@@ -1,5 +1,5 @@
 import { DOCUMENT } from '@angular/common';
-import { HttpClient, HttpEventType } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpEventType } from '@angular/common/http';
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -20,11 +20,7 @@ import {
 import { type UploadInitRequest, type UploadInstructions } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { MultipartTransfer } from './multipart-transfer.service';
-import {
-  isExternalHttpUrl,
-  SINGLE_UPLOAD_MAX_BYTES,
-  StorageUploadError,
-} from './storage-upload-error';
+import { isExternalHttpUrl, StorageUploadError } from './storage-upload-error';
 import { UploadsApi } from './uploads-api.service';
 
 export type UploadStatus =
@@ -44,6 +40,8 @@ export interface UploadItem {
 export const MAX_PARALLEL_UPLOADS = 3;
 /** Mirrors the server default for a quick message only; the server stays the authority. */
 export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
+/** Above this a file goes up in parts; mirrors the server's single-request limit. */
+export const SINGLE_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
 export const STORAGE_FAILED_MESSAGE = 'The upload to storage failed. Please try again.';
 export const EMPTY_FILE_MESSAGE = 'This file is empty.';
 export const TOO_LARGE_MESSAGE = 'This file is too large to upload.';
@@ -253,7 +251,16 @@ export class UploadQueue {
     }
     this.patch(id, { fileId: null });
     const cleanup = this.multipartIds.delete(id)
-      ? this.api.abort(fileId)
+      ? // Once the server has assembled the file an abort is refused (409); soft-delete it then.
+        this.api
+          .abort(fileId)
+          .pipe(
+            catchError((error: unknown) =>
+              error instanceof HttpErrorResponse && error.status === 409
+                ? this.api.discard(fileId)
+                : EMPTY,
+            ),
+          )
       : this.api.discard(fileId);
     cleanup
       .pipe(

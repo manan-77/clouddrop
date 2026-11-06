@@ -1,7 +1,7 @@
 import { HttpEventType } from '@angular/common/http';
 import { HttpTestingController, type TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { of, throwError } from 'rxjs';
+import { NEVER, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 
 import { ENVELOPE, provideAuthTesting, TOKENS } from '@core/auth/auth-testing';
@@ -367,6 +367,32 @@ describe('UploadQueue', () => {
       backend.expectOne(isInit).flush(initResponse('f1'));
       backend.expectNone('/api/v1/files/uploads/multipart');
       backend.expectOne(STORAGE);
+    });
+
+    it('cancel_duringAMultipartTransfer_abortsTheUpload', () => {
+      const { queue, backend } = setup();
+      vi.spyOn(TestBed.inject(MultipartTransfer), 'send').mockReturnValue(NEVER);
+      queue.add([big()], null);
+      backend.expectOne('/api/v1/files/uploads/multipart').flush(multipartInit('f9'));
+      queue.cancel(only(queue).id);
+      backend
+        .expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f9/uploads')
+        .flush(null);
+      expect(only(queue).status).toBe('cancelled');
+    });
+
+    it('abortRefusedBecauseTheFileIsAlreadyAssembled_fallsBackToSoftDelete', () => {
+      const { queue, backend } = setup();
+      vi.spyOn(TestBed.inject(MultipartTransfer), 'send').mockReturnValue(of(undefined));
+      queue.add([big()], null);
+      backend.expectOne('/api/v1/files/uploads/multipart').flush(multipartInit('f9'));
+      backend
+        .expectOne('/api/v1/files/f9/uploads/complete')
+        .flush(ENVELOPE('boom'), { status: 500, statusText: 'x' });
+      backend
+        .expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f9/uploads')
+        .flush(null, { status: 409, statusText: 'Conflict' });
+      backend.expectOne((r) => r.method === 'DELETE' && r.url === '/api/v1/files/f9').flush(null);
     });
 
     it('transferFailure_abortsTheMultipartUploadInsteadOfSoftDeleting', () => {

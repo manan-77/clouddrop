@@ -456,3 +456,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - Real S3 behaviour (CORS, multipart ETag exposure, presigned conditions) is only proven against a fake so far.
 - The development laptop sleeping stops all unattended work. Keep it awake and plugged in.
 - Commands that need approval stall unattended runs. Consider an allowlist of safe commands in settings.
+
+## OWNER-DECISION log (wording conflicts to confirm; the standards files were not edited)
+- frontend/CLAUDE.md "Uploads" says multipart needs the part ETag and S3 CORS `ExposeHeaders: ETag`; the implementation has the server list the parts itself, so no ETag is read in the browser (CORS must still allow PUT).
+- frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.
