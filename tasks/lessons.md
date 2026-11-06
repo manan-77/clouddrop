@@ -151,3 +151,6 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 109. **When a tool is missing locally, make CI the verifier** (a workflow that builds and smoke-tests) instead of shipping unverified config and saying so.
 110. **The proxy must overwrite, not append, X-Forwarded-For**, and the API must trust only the proxy's address.
 111. **nginx `add_header` inside a location drops every inherited one**; share security headers through an include in each such location and assert the header on the real response in CI.
+112. **A CSP header check by curl proves nothing about rendering**: remove the inline handlers the policy would block (Angular `inlineCritical: false`) and assert their absence in CI.
+113. **Run every container role as the real user in CI**, not only the API: beat needs a writable schedule path and failed only for a non-root user.
+114. **Use `^~` for proxied prefixes in nginx** so asset-extension regexes cannot capture API paths, and give missing files a real 404 instead of the SPA fallback.

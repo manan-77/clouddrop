@@ -2,13 +2,18 @@
 # and Redis). Not exercised in CI; CI only builds the two images.
 #   docker compose -f docker-compose.yml -f docker-compose.stack.yml up --build
 # Needs .env (see .env.example). DATABASE_URL and REDIS_URL are overridden below to use the
-# compose service names.
+# compose service names. POSTGRES_PASSWORD is placed in the URL as is: use only URL-safe characters.
 x-api-env: &api-env
   env_file: .env
   environment:
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-clouddrop}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-clouddrop}
     REDIS_URL: redis://redis:6379/0
-    FORWARDED_ALLOW_IPS: "*"  # only the web container can reach the API on this network
+    # Local stack only: the API publishes no port, so only the web container can reach it. In a
+    # real deployment set this to the proxy's address, never "*".
+    FORWARDED_ALLOW_IPS: "*"
+    # No ClamAV container here, so uploads would fail the scan stage; allowed only because
+    # ENVIRONMENT is development in .env. Add a clamd service to scan locally.
+    SCANNER_MODE: "off"
 
 services:
   migrate:
@@ -44,7 +49,8 @@ services:
   beat:
     build: ./backend
     <<: *api-env
-    command: ["celery", "-A", "app.worker.celery_app", "beat", "-l", "info"]
+    command:
+      ["celery", "-A", "app.worker.celery_app", "beat", "-l", "info", "--schedule", "/tmp/celerybeat-schedule"]
     healthcheck:
       disable: true
     depends_on:
@@ -58,4 +64,5 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - api
+      api:
+        condition: service_healthy

@@ -1,3 +1,6 @@
+import logging
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,10 +12,16 @@ from app.modules.health.router import router as health_router
 from app.modules.storage.file_router import router as file_router
 from app.modules.storage.folder_router import router as folder_router
 
+logger = logging.getLogger(__name__)
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging()
+    if not settings.is_local and not os.environ.get("FORWARDED_ALLOW_IPS"):
+        logger.warning(
+            "FORWARDED_ALLOW_IPS is not set; rate limits will see the proxy, not the client"
+        )
     app = FastAPI(
         title="CloudDrop AI",
         docs_url="/docs" if settings.docs_enabled else None,
