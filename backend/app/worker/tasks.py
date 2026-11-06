@@ -1,4 +1,3 @@
-import logging
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -7,7 +6,7 @@ from datetime import timedelta
 from celery import Task
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import CELERY_RETRY_BACKOFF_MAX_SECONDS, get_settings
 from app.db.session import get_sessionmaker
 from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.processing.pipeline import run_pipeline
@@ -17,7 +16,6 @@ from app.modules.storage.factory import build_storage
 from app.modules.storage.s3 import S3Storage
 from app.worker.celery_app import celery_app
 
-logger = logging.getLogger(__name__)
 _settings = get_settings()
 
 
@@ -36,8 +34,8 @@ def storage_for_worker() -> S3Storage:
     name="processing.process_file_version",
     bind=True,
     autoretry_for=(TransientStageError,),
-    retry_backoff=True,
-    retry_backoff_max=600,
+    retry_backoff=30,
+    retry_backoff_max=CELERY_RETRY_BACKOFF_MAX_SECONDS,
     retry_jitter=True,
     max_retries=_settings.processing_max_retries,
 )
@@ -50,6 +48,7 @@ def process_file_version(self: Task, file_version_id: str) -> None:
             storage_for_worker(),
             uuid.UUID(file_version_id),
             stale_after=timedelta(seconds=settings.processing_job_stale_seconds),
+            max_attempts=settings.processing_max_attempts,
         )
 
 

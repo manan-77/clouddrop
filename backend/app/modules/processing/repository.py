@@ -7,9 +7,11 @@ worker has no user and needs rows that are not scoped to a workspace. Only the s
 
 import uuid
 from datetime import datetime
+from typing import Any, cast
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
 
 from app.db.soft_delete import only_active
@@ -40,31 +42,35 @@ class PipelineRepository:
                 ProcessingJob.file_version_id == version_id, ProcessingJob.stage == stage
             )
         )
-        assert job is not None  # inserted above or already present
+        if job is None:  # inserted above or already present, so this cannot happen
+            raise RuntimeError("processing job missing after insert")
         return job
 
     def claim(self, job_id: uuid.UUID, now: datetime, stale_before: datetime) -> bool:
         """Atomically take a job: pending, or running but abandoned by a crashed worker."""
-        result = self.session.execute(
-            update(ProcessingJob)
-            .where(
-                ProcessingJob.id == job_id,
-                or_(
-                    ProcessingJob.status == JobStatus.PENDING.value,
-                    (ProcessingJob.status == JobStatus.RUNNING.value)
-                    & (ProcessingJob.started_at < stale_before),
-                ),
-            )
-            .values(
-                status=JobStatus.RUNNING.value,
-                attempts=ProcessingJob.attempts + 1,
-                started_at=now,
-                finished_at=None,
-                error_code=None,
-            )
+        result = cast(
+            CursorResult[Any],
+            self.session.execute(
+                update(ProcessingJob)
+                .where(
+                    ProcessingJob.id == job_id,
+                    or_(
+                        ProcessingJob.status == JobStatus.PENDING.value,
+                        (ProcessingJob.status == JobStatus.RUNNING.value)
+                        & (ProcessingJob.started_at < stale_before),
+                    ),
+                )
+                .values(
+                    status=JobStatus.RUNNING.value,
+                    attempts=ProcessingJob.attempts + 1,
+                    started_at=now,
+                    finished_at=None,
+                    error_code=None,
+                )
+            ),
         )
         self.session.flush()
-        return bool(getattr(result, "rowcount", 0) == 1)
+        return result.rowcount == 1
 
     def stuck_version_ids(
         self,
@@ -87,17 +93,25 @@ class PipelineRepository:
             )
             .scalar_subquery()
         )
+        # When the file last moved or was last handed to the worker, whichever is later.
+        marker = func.coalesce(FileVersion.enqueued_at, File.updated_at)
         rows = self.session.scalars(
             select(FileVersion.id)
             .join(File, File.id == FileVersion.file_id)
             .where(
                 only_active(File),
                 File.status.in_(statuses),
-                File.updated_at < stuck_before,
+                marker < stuck_before,
                 FileVersion.version == latest,
                 succeeded < expected_stages,
             )
-            .order_by(File.updated_at)
+            .order_by(marker)
             .limit(limit)
         )
         return list(rows)
+
+    def mark_enqueued(self, version_ids: list[uuid.UUID], when: datetime) -> None:
+        if version_ids:
+            self.session.execute(
+                update(FileVersion).where(FileVersion.id.in_(version_ids)).values(enqueued_at=when)
+            )

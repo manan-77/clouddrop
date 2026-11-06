@@ -1,11 +1,13 @@
 from celery import Celery
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 
-def create_celery_app() -> Celery:
-    settings = get_settings()
-    app = Celery("clouddrop", broker=settings.redis_url, include=["app.worker.tasks"])
+def create_celery_app(settings: Settings | None = None) -> Celery:
+    settings = settings or get_settings()
+    app = Celery(
+        "clouddrop", broker=settings.redis_url.get_secret_value(), include=["app.worker.tasks"]
+    )
     app.conf.update(
         task_serializer="json",
         accept_content=["json"],
@@ -17,9 +19,18 @@ def create_celery_app() -> Celery:
         task_soft_time_limit=settings.celery_task_soft_time_limit_seconds,
         worker_prefetch_multiplier=1,
         broker_connection_retry_on_startup=True,
+        # Publishing happens on a request thread: fail fast instead of retrying for many seconds.
+        broker_connection_timeout=2,
+        task_publish_retry=True,
+        task_publish_retry_policy={
+            "max_retries": 1,
+            "interval_start": 0,
+            "interval_step": 0.2,
+            "interval_max": 0.2,
+        },
         broker_transport_options={
             "visibility_timeout": settings.celery_visibility_timeout_seconds,
-            "socket_connect_timeout": 5,
+            "socket_connect_timeout": 2,
             "socket_timeout": 30,
         },
         timezone="UTC",
@@ -28,6 +39,9 @@ def create_celery_app() -> Celery:
             "sweep-stuck-files": {
                 "task": "processing.sweep_stuck_files",
                 "schedule": settings.sweeper_interval_seconds,
+                # A beat message that waits longer than one interval is dropped, so a stopped
+                # worker does not come back to a pile of identical sweeps.
+                "options": {"expires": settings.sweeper_interval_seconds},
             }
         },
     )

@@ -102,6 +102,7 @@ class FileService:
             )
 
         version.etag = info.etag
+        version.enqueued_at = datetime.now(UTC)
         file.status = FileStatus.UPLOADED
         self.session.commit()
         # After the commit, never before: the worker must see the row. If the broker is down the

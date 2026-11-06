@@ -11,4 +11,5 @@ The backend standard says a module reaches another module only through that modu
 ## Consequences
 - The worker side of the file tables is one small repository, easy to audit.
 - If the file tables change shape, `processing/repository.py` must change with them.
+- The stages also import the storage S3 wrapper and the file status constants; they are the same worker-side coupling and are covered by this decision.
 - The standard has an explicit exception for worker-side modules; the owner should confirm or reword it. The author did not edit the standards file.

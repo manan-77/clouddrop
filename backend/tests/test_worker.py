@@ -3,7 +3,9 @@ from contextlib import contextmanager
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
+from app.core.config import CELERY_RETRY_BACKOFF_MAX_SECONDS, Settings, get_settings
 from app.core.errors import ServiceUnavailableError
 from app.modules.processing.stages import TransientStageError
 from app.worker import tasks
@@ -22,7 +24,8 @@ def test_celeryApp_isConfiguredForSafeRecoveryAndSmallMessages() -> None:
 
 def test_visibilityTimeout_exceedsTheLongestTaskIncludingBackoff() -> None:
     conf = celery_app.conf
-    longest = conf.task_time_limit + tasks.process_file_version.retry_backoff_max
+    longest = conf.task_time_limit + CELERY_RETRY_BACKOFF_MAX_SECONDS
+    assert tasks.process_file_version.retry_backoff_max == CELERY_RETRY_BACKOFF_MAX_SECONDS
     assert conf.broker_transport_options["visibility_timeout"] > longest
 
 
@@ -31,10 +34,11 @@ def test_tasks_areRegisteredWithRetryAndASweeperSchedule() -> None:
     assert "processing.sweep_stuck_files" in celery_app.tasks
     task: Any = tasks.process_file_version
     assert task.autoretry_for == (TransientStageError,)
-    assert task.retry_backoff is True and task.retry_jitter is True
-    assert task.max_retries == 5
+    assert task.retry_backoff == 30 and task.retry_jitter is True
+    assert task.max_retries == get_settings().processing_max_retries
     schedule = celery_app.conf.beat_schedule["sweep-stuck-files"]
     assert schedule["task"] == "processing.sweep_stuck_files"
+    assert schedule["options"]["expires"] == schedule["schedule"]  # stale beat messages are dropped
 
 
 def test_processTask_takesAnIdAndRunsThePipelineInItsOwnSession(
@@ -101,3 +105,41 @@ def test_storageUnavailable_isATransientErrorForTheWorker() -> None:
 
     with pytest.raises(TransientStageError):
         VerifyObjectStage().run(object(), type("V", (), {"s3_key": "k"})(), Down())  # type: ignore[arg-type]
+
+
+def test_processTask_transientFailure_isRetriedUntilTheLimitThenGivesUp(
+    monkeypatch: pytest.MonkeyPatch, session: Any
+) -> None:
+    attempts: list[int] = []
+
+    @contextmanager
+    def fake_session():  # type: ignore[no-untyped-def]
+        yield session
+
+    def boom(*_: object, **__: object) -> None:
+        attempts.append(1)
+        raise TransientStageError("storage unavailable")
+
+    monkeypatch.setattr(tasks, "open_session", fake_session)
+    monkeypatch.setattr(tasks, "storage_for_worker", lambda: object())
+    monkeypatch.setattr(tasks, "run_pipeline", boom)
+    result = tasks.process_file_version.apply(args=[str(uuid.uuid4())])
+    assert len(attempts) == get_settings().processing_max_retries + 1
+    assert isinstance(result.result, TransientStageError)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"celery_visibility_timeout_seconds": 900},
+        {"celery_task_soft_time_limit_seconds": 400, "celery_task_time_limit_seconds": 330},
+    ],
+)
+def test_settings_inconsistentWorkerLimits_failAtStartup(overrides: dict[str, int]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(database_url="x", jwt_secret="a" * 32, **overrides)  # type: ignore[arg-type]
+
+
+def test_settings_brokerUrlIsASecretSoItNeverShowsInReprs() -> None:
+    settings = Settings(database_url="x", jwt_secret="a" * 32, redis_url="redis://:pw@host/0")  # type: ignore[arg-type]
+    assert "pw" not in repr(settings)

@@ -67,6 +67,7 @@ erDiagram
         bigint size_bytes
         string content_type
         string etag
+        timestamptz enqueued_at "when processing was last handed to the worker"
         timestamptz created_at
     }
     processing_jobs {

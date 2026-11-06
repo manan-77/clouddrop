@@ -19,7 +19,7 @@ from app.modules.processing.models import ProcessingJob
 from app.modules.processing.pipeline import PIPELINE, run_pipeline
 from app.modules.processing.stages import TransientStageError
 from app.modules.processing.sweeper import sweep_stuck_files
-from app.modules.storage.models import File
+from app.modules.storage.models import File, FileVersion
 from app.modules.storage.s3 import S3Storage
 from tests.conftest import BUCKET, FakeDispatcher
 
@@ -284,6 +284,12 @@ class TestSweeper:
             .where(File.id == file_id)
             .values(updated_at=text(f"now() - interval '{minutes} minutes'"))
         )
+        # The sweeper looks at when the version was last handed to the worker as well.
+        session.execute(
+            update(FileVersion)
+            .where(FileVersion.file_id == file_id)
+            .values(enqueued_at=text(f"now() - interval '{minutes} minutes'"))
+        )
 
     def test_stuckFiles_areReEnqueuedAndFreshOnesAreNot(
         self, client, make_user, s3_client, dispatcher, session: Session
@@ -294,7 +300,8 @@ class TestSweeper:
         self._age(session, stuck, 60)
         sweeper = FakeDispatcher()
         count = sweep_stuck_files(session, sweeper, stuck_after=timedelta(minutes=10), limit=100)  # type: ignore[arg-type]
-        assert count == 1 and len(sweeper.calls) == 1
+        assert count == 1
+        assert sweeper.calls == [dispatcher.calls[0]]  # the stuck file's version, not the fresh one
         assert fresh != stuck
 
     def test_failedDeletedAndFullyProcessedFiles_areIgnored(

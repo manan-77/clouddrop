@@ -29,6 +29,9 @@ def sweep_stuck_files(
         len(PIPELINE) if expected_stages is None else expected_stages,
         limit,
     )
+    # Recorded before sending, so the next sweep takes other files instead of the same oldest ones.
+    repo.mark_enqueued(version_ids, datetime.now(UTC))
+    session.commit()
     for version_id in version_ids:
         dispatcher.enqueue(version_id)
     if version_ids:

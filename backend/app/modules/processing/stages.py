@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Callable
 from typing import Protocol
 
@@ -7,9 +6,7 @@ from app.modules.processing.constants import JobStage
 from app.modules.processing.filetype import matches_declared_type
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion
-from app.modules.storage.s3 import S3Storage
-
-logger = logging.getLogger(__name__)
+from app.modules.storage.s3 import ObjectChangedError, S3Storage
 
 HEAD_BYTES = 4096
 
@@ -61,7 +58,13 @@ class DetectTypeStage:
     file_status = FileStatus.PROCESSING
 
     def run(self, file: File, version: FileVersion, storage: S3Storage) -> None:
-        head: bytes | None = _call(lambda: storage.read_head(version.s3_key, HEAD_BYTES))
+        try:
+            # IfMatch: the bytes must come from the very object that verify_object approved.
+            head: bytes | None = _call(
+                lambda: storage.read_head(version.s3_key, HEAD_BYTES, if_match=version.etag)
+            )
+        except ObjectChangedError as exc:
+            raise PermanentStageError("object_changed") from exc
         if head is None:
             raise PermanentStageError("object_missing")
         if not matches_declared_type(head, file.content_type):

@@ -63,8 +63,11 @@ class FakeDispatcher:
 
     def __init__(self) -> None:
         self.calls: list[uuid.UUID] = []
+        self.on_enqueue: Callable[[uuid.UUID], None] | None = None
 
     def enqueue(self, file_version_id: uuid.UUID) -> None:
+        if self.on_enqueue:
+            self.on_enqueue(file_version_id)
         self.calls.append(file_version_id)
 
 

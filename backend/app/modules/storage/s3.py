@@ -30,6 +30,10 @@ class ObjectInfo:
     etag: str
 
 
+class ObjectChangedError(Exception):
+    """The object no longer has the ETag the caller expected."""
+
+
 class S3Storage:
     "The only code that talks to S3. Blocking: call from `def` endpoints or workers only."
 
@@ -73,12 +77,20 @@ class S3Storage:
             raise self._unavailable("head object", exc) from exc
         return ObjectInfo(response["ContentLength"], response["ETag"].strip('"'))
 
-    def read_head(self, key: str, length: int) -> bytes | None:
-        """The first `length` bytes of an object (ranged read), or None when it does not exist."""
+    def read_head(self, key: str, length: int, *, if_match: str | None = None) -> bytes | None:
+        """The first `length` bytes of an object, or None when it does not exist.
+
+        With `if_match` the read only succeeds while the object still has that ETag, so bytes
+        can never come from a different upload than the one that was verified.
+        """
+        byte_range = f"bytes=0-{length - 1}"
         try:
-            response = self.client.get_object(
-                Bucket=self.bucket, Key=key, Range=f"bytes=0-{length - 1}"
-            )
+            if if_match:
+                response = self.client.get_object(
+                    Bucket=self.bucket, Key=key, Range=byte_range, IfMatch=f'"{if_match}"'
+                )
+            else:
+                response = self.client.get_object(Bucket=self.bucket, Key=key, Range=byte_range)
             body = response["Body"]
             try:
                 return bytes(body.read(length))
@@ -88,6 +100,8 @@ class S3Storage:
             code = exc.response.get("Error", {}).get("Code")
             if code in _NOT_FOUND_CODES:
                 return None
+            if code in {"PreconditionFailed", "412"}:
+                raise ObjectChangedError from exc
             if code == "InvalidRange":  # an empty object has no first byte
                 return b""
             raise self._unavailable("read object", exc) from exc

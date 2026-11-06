@@ -69,4 +69,6 @@ class FileVersion(UUIDPrimaryKeyMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     content_type: Mapped[str] = mapped_column(String(255))
     etag: Mapped[str | None] = mapped_column(String(128))
+    # When processing was last handed to the worker; the sweeper orders on it so no file starves.
+    enqueued_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
