@@ -47,14 +47,17 @@ It contains tasks only. No code lives here.
 ### 1.4 Release rule
 - develop goes into main only through a separate release PR. Ask the owner before opening each one. main stays protected.
 
-## 2. Status snapshot
+## 2. Status snapshot (2026-11-06)
 
-- [x] Phase 0: repo layout, CLAUDE.md files (root, backend, frontend), env template, ignore rules, compose file, README, local Postgres 17 with pgvector 0.8.7, local Redis, uv, database and test database.
-- [ ] Phase 0 leftover: APIM check script run (BLOCKED-APIM, needs values).
-- [x] Phase 1: backend foundation and auth (23 tests).
-- [x] Phase 2: workspaces, folders, files, file versions, S3 presigned upload and download, tested with a fake S3 (54 tests total).
-- [x] PR number 1 and PR number 2 (review fixes) are squash merged into develop and their branches are deleted.
-- [~] Phase 3 to Phase 8 below. Pre-work branch chore/env-template-and-docs is in review.
+Merged to develop (PRs #1 to #21): foundation and auth; workspaces, folders, files and S3 presigned upload/download; the Angular app (shell, auth, explorer, uploads); the Celery processing pipeline (verification, ClamAV scan, type detection, extraction and chunking); purge job; multipart upload (backend and frontend); Redis rate limiting and the CSRF header; CI workflows, container images and their CI smoke tests; security review, backup notes and architecture docs. Backend: 244 tests; frontend: 215 tests; all CI jobs green.
+
+Every remaining item is blocked on the owner or an external service:
+
+- **Phase 4 (sharing, permissions, audit logs, sharing UI):** needs the permission-inheritance decision (section 3.3), then `docs/permissions.md` before code.
+- **Phases 6 and 7 (embeddings, search, RAG chat, summaries, compare, AI UI):** need the embedding model and dimension (the `vector(N)` column) and the APIM details; fake-gateway work can start once the dimension is decided.
+- **Phase 8 leftovers:** error-tracking backend choice; real deploy (Azure subscription and secrets); restore check with a role that can create a database; load tests (need real services); release PR develop to main (ask the owner first).
+- **Never exercised for real:** AWS S3, ClamAV, a real browser session, APIM, concurrent workers.
+- **Phase 3 leftovers:** file move UI, status polling after upload (waits for statuses that advance to `ready`), real-browser check.
 
 ## 3. Inputs needed from the owner
 
