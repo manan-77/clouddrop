@@ -72,7 +72,7 @@ Existing folder and file endpoints now accept resources in a shared tree accordi
 |---|---|---|---|
 | GET | `/audit-events` | 200 paginated, newest first | Activity in the caller's own workspace (including what editors did there). Filters `resource_type` (`file`, `folder`, `user`) and `resource_id`. Items: `action`, `result`, `resource_type`, `resource_id`, `actor_id`, `actor_name`, `target_user_id`, `detail` (the role for grants), `request_id`, `created_at`. Someone else's resource id gives an empty page |
 
-Recorded actions: `file.uploaded` (when complete succeeds), `file.downloaded` (when a link is issued), `file.deleted`, `folder.deleted`, `permission.granted`, `permission.changed`, `permission.revoked`, `auth.login`, `auth.login_failed` (only for existing accounts, in that account's own trail). Rows hold ids and short codes only, never names, emails, tokens or URLs.
+Recorded actions: `file.uploaded` (when complete succeeds), `file.downloaded` (when a link is issued), `file.deleted`, `folder.deleted`, `permission.granted`, `permission.changed`, `permission.revoked`, and `auth.login` (successful sign-ins). **Not recorded:** failed logins, denied attempts and failed uploads (an unauthenticated caller must not be able to write into someone's trail, and extra work for known emails would be a timing oracle). Issuing a download link writes a row, so a repeated request is a repeated event. Actions by editors are written to the owner's trail. Rows hold ids and short codes only, never names, emails, tokens or URLs; the request id is the one the request carried (letters, digits, `_` and `-`, at most 64).
 
 ## Storage setup notes (S3)
 

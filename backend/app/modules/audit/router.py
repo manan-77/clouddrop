@@ -33,24 +33,7 @@ def list_audit_events(
         user.id, params, resource_type=resource_type, resource_id=resource_id
     )
     return Page[AuditEventRead](
-        items=[
-            AuditEventRead.model_validate(
-                {
-                    "id": event.id,
-                    "created_at": event.created_at,
-                    "action": event.action,
-                    "result": event.result,
-                    "resource_type": event.resource_type,
-                    "resource_id": event.resource_id,
-                    "actor_id": event.actor_id,
-                    "actor_name": actor_name,
-                    "target_user_id": event.target_user_id,
-                    "detail": event.detail,
-                    "request_id": event.request_id,
-                }
-            )
-            for event, actor_name in rows
-        ],
+        items=[AuditEventRead.model_validate(row) for row in rows],
         total=total,
         page=params.page,
         page_size=params.page_size,

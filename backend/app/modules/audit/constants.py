@@ -10,7 +10,6 @@ class AuditAction(StrEnum):
     PERMISSION_CHANGED = "permission.changed"
     PERMISSION_REVOKED = "permission.revoked"
     LOGIN = "auth.login"
-    LOGIN_FAILED = "auth.login_failed"
 
 
 class AuditResult(StrEnum):

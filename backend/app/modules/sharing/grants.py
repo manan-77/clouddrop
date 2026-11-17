@@ -16,6 +16,11 @@ from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, Folder
 from app.modules.storage.repository import FileRepository, FolderRepository
 
+_RESOURCE_TYPES: dict[Kind, ResourceType] = {
+    "files": ResourceType.FILE,
+    "folders": ResourceType.FOLDER,
+}
+
 
 class SharingService:
     """Grant, change, revoke and list access. Only the owner of a resource may do any of it."""
@@ -54,8 +59,11 @@ class SharingService:
             raise UnprocessableError("You already own this", code="cannot_share_with_self")
         existing = self.permissions.find(kind, resource_id, grantee.id, lock=True)
         if existing is not None:
-            existing.role = role
-            self._audit(user_id, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role)
+            if existing.role != role:
+                existing.role = role
+                self._audit(
+                    user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role
+                )
             self.session.commit()
             return existing, grantee, False
         permission = Permission(
@@ -73,11 +81,14 @@ class SharingService:
             winner = self.permissions.find(kind, resource_id, grantee.id, lock=True)
             if winner is None:
                 raise  # not a lost race (for example the grantee vanished): surface the real error
-            winner.role = role
-            self._audit(user_id, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role)
+            if winner.role != role:
+                winner.role = role
+                self._audit(
+                    user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role
+                )
             self.session.commit()
             return winner, grantee, False
-        self._audit(user_id, resource, AuditAction.PERMISSION_GRANTED, grantee.id, role)
+        self._audit(user_id, kind, resource, AuditAction.PERMISSION_GRANTED, grantee.id, role)
         self.session.commit()
         return permission, grantee, True
 
@@ -120,8 +131,9 @@ class SharingService:
         resource, permission, grantee = self._load_grant(
             user_id, kind, resource_id, permission_id, lock=True
         )
-        permission.role = role
-        self._audit(user_id, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role)
+        if permission.role != role:
+            permission.role = role
+            self._audit(user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role)
         self.session.commit()
         return permission, grantee
 
@@ -132,12 +144,15 @@ class SharingService:
             user_id, kind, resource_id, permission_id, lock=True
         )
         self.permissions.delete(permission)
-        self._audit(user_id, resource, AuditAction.PERMISSION_REVOKED, grantee.id, permission.role)
+        self._audit(
+            user_id, kind, resource, AuditAction.PERMISSION_REVOKED, grantee.id, permission.role
+        )
         self.session.commit()
 
     def _audit(
         self,
         user_id: uuid.UUID,
+        kind: Kind,
         resource: File | Folder,
         action: AuditAction,
         grantee_id: uuid.UUID,
@@ -147,7 +162,7 @@ class SharingService:
             workspace_id=resource.workspace_id,
             actor_id=user_id,
             action=action,
-            resource_type=ResourceType.FILE if isinstance(resource, File) else ResourceType.FOLDER,
+            resource_type=_RESOURCE_TYPES[kind],
             resource_id=resource.id,
             target_user_id=grantee_id,
             detail=role,

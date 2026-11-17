@@ -6,13 +6,18 @@ Phase 4 needs a trail of uploads, downloads, deletes, sharing changes and logins
 
 ## Decision
 
-- One append-only `audit_events` table. Each row names the **workspace** whose owner may read it, so an owner sees everything that happens to their resources, including what editors do. The resource id has no foreign key, so the trail outlives a purged file.
-- An event for a successful action is added to the **same transaction** as the action. If the audit row cannot be written, the action does not happen (fail closed). Events for outcomes with nothing else to commit (a failed login) are written on their own and never raise, so they cannot hide the original error.
-- Rows hold ids and short machine codes only: no file names, emails, tokens, URLs or content. Action, result and resource type are CHECK-constrained text.
+- One `audit_events` table. Each row names the **workspace** whose owner may read it, so an owner sees everything that happens to their resources, including what editors do. The resource id has no foreign key, so the trail outlives a purged file.
+- An event for a successful, authorised action is added to the **same transaction** as the action. If the audit row cannot be written, the action does not happen (fail closed).
+- Only authenticated, authorised outcomes are recorded. **Failed logins, denied attempts and failed uploads are not**: an unauthenticated caller could flood a victim's trail, and the extra work for a known email would be a timing oracle for account existence. Rate limits and logs cover those.
+- A role change is recorded only when the role actually changes.
+- Rows hold ids and short machine codes only: no file names, emails, tokens, URLs or content. Action, result and resource type are CHECK-constrained text; a test inserts every enum member so the migration literals cannot drift from the enums.
 - `created_at` uses `clock_timestamp()`, so rows from one transaction still order by when they happened.
-- Failed logins are recorded only for existing accounts, in that account's own trail; an unknown email leaves no row.
+- The module follows router -> service -> repository. `audit` joins the `users` table directly for the actor's display name (an exception to the module-boundary rule, like ADR 0008).
 
 ## Consequences
 
-- No retention or purge of audit rows yet (a later decision).
-- Read access is workspace-scoped; per-resource sharing of the trail (letting editors see activity) is not supported.
+- Issuing a download link now writes and commits in a GET, and a repeated request is a repeated event; a client that never uses the link still logs a download.
+- The table is append-only by convention (no code path updates or deletes a row). The database cannot enforce it because the foreign-key actions (`SET NULL`, `CASCADE`) need UPDATE and DELETE.
+- There is no retention or purge of audit rows yet, and the total count runs per page request; both are a later decision if the table grows.
+- The request id is stored as the request carried it (the middleware limits it to letters, digits, `_` and `-`, at most 64), so an authenticated user can choose the text of their own events' request ids.
+- Read access is workspace-scoped; letting editors see activity is not supported.

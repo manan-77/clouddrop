@@ -13,16 +13,27 @@ def _values(enum: type[AuditAction] | type[AuditResult] | type[ResourceType]) ->
 
 
 class AuditEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
-    """Append-only record of who did what to which resource. Ids and short codes only: never
-    file names, file contents, emails or request bodies."""
+    """Record of who did what to which resource. Ids and short codes only: never file names,
+    file contents, emails or request bodies. Append-only by convention (no code path updates or
+    deletes a row); the database cannot enforce it because the foreign-key actions need both."""
 
     __tablename__ = "audit_events"
     __table_args__ = (
         CheckConstraint(f"action IN ({_values(AuditAction)})", name="action_valid"),
         CheckConstraint(f"result IN ({_values(AuditResult)})", name="result_valid"),
         CheckConstraint(f"resource_type IN ({_values(ResourceType)})", name="resource_type_valid"),
-        Index("ix_audit_events_workspace_created", "workspace_id", text("created_at DESC")),
-        Index("ix_audit_events_workspace_resource", "workspace_id", "resource_id"),
+        Index(
+            "ix_audit_events_workspace_created",
+            "workspace_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+        Index(
+            "ix_audit_events_workspace_resource",
+            "workspace_id",
+            "resource_id",
+            text("created_at DESC"),
+        ),
     )
 
     # clock_timestamp(), not now(): rows from one transaction still order by when they happened.

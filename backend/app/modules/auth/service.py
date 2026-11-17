@@ -57,33 +57,25 @@ class AuthService:
         user = self.users.get_by_email(email.strip().lower())
         password_ok = verify_password(password, user.password_hash if user else None)
         if user is None or not password_ok or not user.is_active:
-            if user is not None:
-                # Only attributable attempts are recorded, in that account's own trail.
-                self._audit_login(user.id, AuditAction.LOGIN_FAILED, failed=True)
+            # Failed logins are deliberately not recorded: an unauthenticated caller could flood
+            # a victim's trail, and extra work for known emails would be a timing oracle.
             raise UnauthorizedError("Invalid email or password", code="invalid_credentials")
         tokens = self._issue_tokens(user.id, family_id=uuid.uuid4())
-        self._audit_login(user.id, AuditAction.LOGIN, failed=False)
+        self._audit_login(user.id)
         self.session.commit()
         return tokens
 
-    def _audit_login(self, user_id: uuid.UUID, action: AuditAction, *, failed: bool) -> None:
-        workspace_id = self.workspaces.get_for_user(user_id).id
-        if failed:
-            self.audit.record_failure(
-                workspace_id=workspace_id,
-                actor_id=user_id,
-                action=action,
-                resource_type=ResourceType.USER,
-                resource_id=user_id,
-            )
-        else:
-            self.audit.record(
-                workspace_id=workspace_id,
-                actor_id=user_id,
-                action=action,
-                resource_type=ResourceType.USER,
-                resource_id=user_id,
-            )
+    def _audit_login(self, user_id: uuid.UUID) -> None:
+        workspace = self.workspaces.workspaces.get_by_owner(user_id)
+        if workspace is None:
+            return  # a login must never fail because there is nowhere to record it
+        self.audit.record(
+            workspace_id=workspace.id,
+            actor_id=user_id,
+            action=AuditAction.LOGIN,
+            resource_type=ResourceType.USER,
+            resource_id=user_id,
+        )
 
     def refresh(self, raw_refresh_token: str | None) -> AuthTokens:
         if not raw_refresh_token:

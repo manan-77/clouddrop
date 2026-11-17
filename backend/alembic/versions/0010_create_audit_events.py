@@ -19,8 +19,7 @@ depends_on: str | Sequence[str] | None = None
 
 ACTIONS = (
     "'file.uploaded', 'file.downloaded', 'file.deleted', 'folder.deleted', "
-    "'permission.granted', 'permission.changed', 'permission.revoked', "
-    "'auth.login', 'auth.login_failed'"
+    "'permission.granted', 'permission.changed', 'permission.revoked', 'auth.login'"
 )
 
 
@@ -81,10 +80,12 @@ def upgrade() -> None:
     op.create_index(
         "ix_audit_events_workspace_created",
         "audit_events",
-        ["workspace_id", sa.text("created_at DESC")],
+        ["workspace_id", sa.text("created_at DESC"), sa.text("id DESC")],
     )
     op.create_index(
-        "ix_audit_events_workspace_resource", "audit_events", ["workspace_id", "resource_id"]
+        "ix_audit_events_workspace_resource",
+        "audit_events",
+        ["workspace_id", "resource_id", sa.text("created_at DESC")],
     )
     # The target_user_id foreign key column gets its own index too.
     op.create_index(op.f("ix_audit_events_target_user_id"), "audit_events", ["target_user_id"])
