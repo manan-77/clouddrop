@@ -213,4 +213,24 @@ describe('ExplorerPage sharing controls', () => {
     expect(root.querySelector('cd-share-dialog')).toBeNull();
     backend.match(() => true).forEach((r) => r.flush(page([])));
   });
+
+  it('navigatingFromAnEditableFolderToAViewOnlyOne_offersNothingWhileItLoads', async () => {
+    const { fixture, backend, root } = await setup('shared', 'editor');
+    expect(root.querySelector('cd-upload-button')).not.toBeNull();
+    const route = TestBed.inject(ActivatedRoute) as unknown as {
+      paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+    };
+    route.paramMap.next(convertToParamMap({ folderId: 'other' }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    // The second folder has not answered yet: the first folder's role must not carry over.
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+    expect(buttons(root)).not.toContain('New folder');
+    backend.expectOne('/api/v1/folders/other/path').flush([folder('other', 'Other', 'viewer')]);
+    backend.expectOne((r) => r.url === '/api/v1/folders').flush(page([]));
+    backend.expectOne((r) => r.url === '/api/v1/files').flush(page([]));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+  });
 });

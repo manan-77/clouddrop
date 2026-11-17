@@ -61,6 +61,7 @@ export class ShareDialogComponent implements OnInit {
   protected readonly notice = signal<string | null>(null);
   protected readonly emailMessage = signal<string | null>(null);
   private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('emailInput');
+  private readonly errorBox = viewChild<ElementRef<HTMLElement>>('errorBox');
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     email: [
@@ -126,6 +127,8 @@ export class ShareDialogComponent implements OnInit {
         this.form.controls.email.reset('');
         this.notice.set('Access saved.');
       },
+      undefined,
+      true,
     );
   }
 
@@ -157,8 +160,12 @@ export class ShareDialogComponent implements OnInit {
     if (this.busy()) {
       return;
     }
-    this.run(grant.id, this.api.revoke(this.kind(), this.resourceId(), grant.id), () =>
-      this.notice.set('Access removed.'),
+    this.run(
+      grant.id,
+      this.api.revoke(this.kind(), this.resourceId(), grant.id),
+      () => this.notice.set('Access removed.'),
+      undefined,
+      true,
     );
   }
 
@@ -167,7 +174,8 @@ export class ShareDialogComponent implements OnInit {
     id: string,
     operation: Observable<unknown>,
     done: () => void,
-    failed: () => void = () => undefined,
+    failed: (() => void) | undefined = undefined,
+    refocus = false,
   ): void {
     this.busy.set(true);
     this.pending.set(id);
@@ -186,11 +194,15 @@ export class ShareDialogComponent implements OnInit {
           done();
           this.reload();
           // A removed row takes its button with it; keep the keyboard user in the dialog.
-          this.emailInput()?.nativeElement.focus();
+          if (refocus) {
+            this.emailInput()?.nativeElement.focus();
+          }
         },
         error: (error: unknown) => {
-          failed();
+          failed?.();
           this.error.set(this.resolver.resolve(error).message);
+          // The rebuilt list loses the focused control, so move focus to the message instead.
+          this.errorBox()?.nativeElement.focus();
           this.reload();
         },
       });

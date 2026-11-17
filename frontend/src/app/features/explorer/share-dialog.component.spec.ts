@@ -283,4 +283,59 @@ describe('ShareDialogComponent', () => {
     fixture.detectChanges();
     expect(text()).toContain('b@x.co');
   });
+
+  it('changeRole_whileAnotherActionIsRunningIsIgnoredAndSendsNothing', () => {
+    setup();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    type('b@x.co');
+    submit(); // an add is now running
+    const select = root().querySelector('select[aria-label="Access for ann"]') as HTMLSelectElement;
+    select.value = 'editor';
+    select.dispatchEvent(new Event('change'));
+    backend.expectNone(`${POST}/p1`);
+    backend.expectOne(POST).flush(grant('p2', 'b@x.co'), { status: 201, statusText: 'Created' });
+    fixture.detectChanges();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    expect(root().querySelector('cd-skeleton')).toBeNull();
+    expect(
+      (root().querySelector('select[aria-label="Access for ann"]') as HTMLSelectElement).value,
+    ).toBe('viewer');
+  });
+
+  it('focus_goesToTheEmailFieldAfterAnAddAndAfterARevokeButNotAfterARoleChange', () => {
+    setup();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    const email = root().querySelector('#share-email') as HTMLInputElement;
+    const roleSelect = root().querySelector(
+      'select[aria-label="Access for ann"]',
+    ) as HTMLSelectElement;
+    roleSelect.focus();
+    roleSelect.value = 'editor';
+    roleSelect.dispatchEvent(new Event('change'));
+    backend.expectOne(`${POST}/p1`).flush(grant('p1', 'ann@x.co', 'editor'));
+    expect(document.activeElement).not.toBe(email);
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'editor')));
+    fixture.detectChanges();
+    (root().querySelector('[aria-label="Remove access for ann"]') as HTMLButtonElement).click();
+    backend.expectOne(`${POST}/p1`).flush(null, { status: 204, statusText: 'No Content' });
+    expect(document.activeElement).toBe(email);
+    backend.expectOne(LIST).flush(emptyPage);
+  });
+
+  it('aRefusedChangeMovesFocusToTheMessage', () => {
+    setup();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    const roleSelect = root().querySelector(
+      'select[aria-label="Access for ann"]',
+    ) as HTMLSelectElement;
+    roleSelect.value = 'editor';
+    roleSelect.dispatchEvent(new Event('change'));
+    backend.expectOne(`${POST}/p1`).flush(ENVELOPE('forbidden'), { status: 404, statusText: 'x' });
+    expect((document.activeElement as HTMLElement).getAttribute('role')).toBe('alert');
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+  });
 });

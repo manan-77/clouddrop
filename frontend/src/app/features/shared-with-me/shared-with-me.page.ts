@@ -150,8 +150,9 @@ export class SharedWithMePage implements OnInit {
             tap({
               next: (result) => {
                 // Items were revoked while on a later page: step back to the last page that exists.
-                if (result.items.length === 0 && result.total > 0 && page > 1) {
-                  this.requests.next(Math.ceil(result.total / PAGE_SIZE));
+                const lastPage = Math.ceil(result.total / PAGE_SIZE);
+                if (result.items.length === 0 && result.total > 0 && lastPage < page) {
+                  this.requests.next(lastPage);
                   return;
                 }
                 this.items.set(result.items);

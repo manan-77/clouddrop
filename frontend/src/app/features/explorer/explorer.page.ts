@@ -74,33 +74,52 @@ export class ExplorerPage {
 
   protected readonly currentFolderId = computed(() => this.folderId() ?? null);
 
-  /** The last answer for a folder, so a reload does not unmount the toolbar buttons. */
+  /**
+   * The role-based answer for the folder on screen, or null while it is unknown. A view only
+   * counts when it belongs to the current folder (the store follows the route a tick later, so
+   * the previous folder's view can still be on screen right after a navigation).
+   */
+  private readonly writableNow = computed<boolean | null>(() => {
+    const view = this.store.view();
+    if (view.status !== 'ready') {
+      return null;
+    }
+    const folderId = this.currentFolderId();
+    const last = view.path[view.path.length - 1];
+    const belongsHere = folderId === null ? view.path.length === 0 : last?.id === folderId;
+    if (!belongsHere) {
+      return null;
+    }
+    return folderId === null || canWrite(last.role);
+  });
+
+  /** The last known answer per folder, so a reload does not unmount the toolbar buttons. */
   private readonly lastWritable = signal<{ folderId: string | null; writable: boolean } | null>(
     null,
   );
 
   /**
-   * Whether to offer upload and new-folder here: the role of the folder on screen (owner at the
-   * root). Unknown (first load) and failed loads offer nothing; a reload keeps the last answer.
+   * Whether to offer upload and new-folder here. Unknown (first load, another folder's view) and
+   * failed loads offer nothing; a reload of the same folder keeps the last answer.
    */
   protected readonly canWriteHere = computed(() => {
-    const view = this.store.view();
-    if (view.status === 'ready') {
-      return view.path.length === 0 || canWrite(view.path[view.path.length - 1].role);
+    const now = this.writableNow();
+    if (now !== null) {
+      return now;
     }
     const last = this.lastWritable();
-    return view.status === 'loading' && last?.folderId === this.currentFolderId() && last.writable;
+    return (
+      this.store.view().status === 'loading' &&
+      last?.folderId === this.currentFolderId() &&
+      last.writable
+    );
   });
 
   constructor() {
     effect(() => {
-      const view = this.store.view();
-      if (view.status === 'ready') {
-        const path = view.path;
-        this.lastWritable.set({
-          folderId: this.currentFolderId(),
-          writable: path.length === 0 || canWrite(path[path.length - 1].role),
-        });
+      const writable = this.writableNow();
+      if (writable !== null) {
+        this.lastWritable.set({ folderId: this.currentFolderId(), writable });
       }
     });
     // A finished upload into the folder on screen refreshes the listing.

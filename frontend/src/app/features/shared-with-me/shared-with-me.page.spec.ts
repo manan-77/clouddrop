@@ -152,20 +152,42 @@ describe('SharedWithMePage', () => {
     expect(backend.expectOne(isList).request.params.get('page')).toBe('3');
   });
 
+  const nextPage = (root: HTMLElement) =>
+    (
+      [...root.querySelectorAll('cd-pager button')].find(
+        (b) => b.textContent?.trim() === 'Next',
+      ) as HTMLButtonElement
+    ).click();
+
   it('aPageThatNoLongerExists_stepsBackToTheLastPage', () => {
+    setup();
+    backend.expectOne(isList).flush({ items: [file], total: 150, page: 1, page_size: 50 });
+    fixture.detectChanges();
+    nextPage(root());
+    backend.expectOne(isList).flush({ items: [file], total: 150, page: 2, page_size: 50 });
+    fixture.detectChanges();
+    nextPage(root());
+    // Grants were revoked meanwhile: page 3 is gone, only 60 remain (two pages).
+    const gone = backend.expectOne(isList);
+    expect(gone.request.params.get('page')).toBe('3');
+    gone.flush({ items: [], total: 60, page: 3, page_size: 50 });
+    const back = backend.expectOne(isList);
+    expect(back.request.params.get('page')).toBe('2');
+    back.flush({ items: [file], total: 60, page: 2, page_size: 50 });
+    fixture.detectChanges();
+    expect(root().textContent).toContain('plan.pdf');
+  });
+
+  it('anEmptyPageThatIsNotBeyondTheEnd_isNotRetriedForever', () => {
     setup();
     backend.expectOne(isList).flush({ items: [file], total: 120, page: 1, page_size: 50 });
     fixture.detectChanges();
-    const next = [...root().querySelectorAll('cd-pager button')].find(
-      (b) => b.textContent?.trim() === 'Next',
-    ) as HTMLButtonElement;
-    next.click();
-    // Grants were revoked meanwhile: page 2 is now empty although 60 remain.
+    nextPage(root());
+    // Inconsistent answer: page 2 empty although 60 exist. Page 2 is the last page, so stop.
     backend.expectOne(isList).flush({ items: [], total: 60, page: 2, page_size: 50 });
-    const retry = backend.expectOne(isList);
-    expect(retry.request.params.get('page')).toBe('2');
-    retry.flush({ items: [file], total: 60, page: 2, page_size: 50 });
+    backend.expectNone(isList);
     fixture.detectChanges();
-    expect(root().textContent).toContain('plan.pdf');
+    expect(root().querySelector('cd-skeleton')).toBeNull();
+    expect(root().textContent).toContain('Nothing has been shared with you');
   });
 });
