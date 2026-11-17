@@ -66,6 +66,14 @@ Rules are in `docs/permissions.md`: a grant on a folder covers everything inside
 
 Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given and the hidden parent id is `null`. Non-owners see and download only `ready` files (plus their own unfinished uploads). Upload init endpoints are rate limited per user (429).
 
+## Audit trail (`/api/v1/audit-events`) - authenticated
+
+| Method | Path | Success | Notes |
+|---|---|---|---|
+| GET | `/audit-events` | 200 paginated, newest first | Activity in the caller's own workspace (including what editors did there). Filters `resource_type` (`file`, `folder`, `user`) and `resource_id`. Items: `action`, `result`, `resource_type`, `resource_id`, `actor_id`, `actor_name`, `target_user_id`, `detail` (the role for grants), `request_id`, `created_at`. Someone else's resource id gives an empty page |
+
+Recorded actions: `file.uploaded` (when complete succeeds), `file.downloaded` (when a link is issued), `file.deleted`, `folder.deleted`, `permission.granted`, `permission.changed`, `permission.revoked`, `auth.login`, `auth.login_failed` (only for existing accounts, in that account's own trail). Rows hold ids and short codes only, never names, emails, tokens or URLs.
+
 ## Storage setup notes (S3)
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.

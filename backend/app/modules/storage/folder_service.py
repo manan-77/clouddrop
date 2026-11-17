@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
+from app.modules.audit.constants import AuditAction, ResourceType
+from app.modules.audit.service import AuditService
 from app.modules.sharing.repository import PermissionRepository
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import MAX_FOLDER_DEPTH
@@ -24,6 +26,7 @@ class FolderService:
         self.workspaces = WorkspaceService(session)
         self.access = AccessService(session)
         self.permissions = PermissionRepository(session)
+        self.audit = AuditService(session)
 
     def list_folders(
         self, user_id: uuid.UUID, parent_id: uuid.UUID | None, params: PageParams
@@ -114,6 +117,13 @@ class FolderService:
         ):
             raise ConflictError("Folder is not empty", code="folder_not_empty")
         folder.deleted_at = datetime.now(UTC)
+        self.audit.record(
+            workspace_id=workspace_id,
+            actor_id=user_id,
+            action=AuditAction.FOLDER_DELETED,
+            resource_type=ResourceType.FOLDER,
+            resource_id=folder.id,
+        )
         self.session.commit()
 
     def _own_workspace(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:

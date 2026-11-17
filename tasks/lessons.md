@@ -166,3 +166,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 124. **Response fields can leak what the access check hides**: `parent_id` and `folder_id` need the same per-caller redaction as breadcrumbs.
 125. **Unique indexes are existence oracles**: a name collision reveals siblings the caller cannot see, so operations that can collide across the visibility boundary (renaming the top of a shared tree) need a role gate.
 126. **A rate limit must be scoped to the abuse it prevents**: limiting every upload to stop an editor reserving quota broke owner bulk uploads.
+127. **Audit rows must order by `clock_timestamp()`**, not `now()`, or everything done in one transaction (and every test) ties on the timestamp.
+128. **Decide fail-open or fail-closed for audit writes per outcome**: successful actions commit with their row (fail closed); outcomes with nothing else to commit are best effort and must never raise over the real error.
