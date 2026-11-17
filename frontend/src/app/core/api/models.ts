@@ -34,12 +34,16 @@ export type FileStatus =
   | 'infected'
   | 'needs_ocr';
 
+/** What the caller may do with an item. The server decides; the UI only reflects it. */
+export type CallerRole = 'owner' | 'editor' | 'viewer';
+
 export interface FolderRead {
   id: string;
   parent_id: string | null;
   name: string;
   created_at: string;
   updated_at: string;
+  role: CallerRole;
 }
 
 export interface FileRead {
@@ -51,6 +55,7 @@ export interface FileRead {
   status: FileStatus;
   created_at: string;
   updated_at: string;
+  role: CallerRole;
 }
 
 export interface Page<T> {
@@ -97,4 +102,50 @@ export interface MultipartInitResponse {
 export interface PartUrlsResponse {
   parts: { part_number: number; url: string }[];
   expires_in: number;
+}
+
+export type GrantRole = 'viewer' | 'editor';
+export type ShareKind = 'files' | 'folders';
+
+export interface GrantRead {
+  id: string;
+  email: string;
+  display_name: string;
+  role: GrantRole;
+  created_at: string;
+}
+
+export interface SharedItem {
+  resource_type: 'file' | 'folder';
+  id: string;
+  name: string;
+  role: GrantRole;
+  owner_name: string;
+  updated_at: string;
+  size_bytes: number | null;
+  content_type: string | null;
+  status: FileStatus | null;
+}
+
+export type AuditAction =
+  | 'file.uploaded'
+  | 'file.downloaded'
+  | 'file.deleted'
+  | 'folder.deleted'
+  | 'permission.granted'
+  | 'permission.changed'
+  | 'permission.revoked'
+  | 'auth.login';
+
+export interface AuditEvent {
+  id: string;
+  created_at: string;
+  action: AuditAction;
+  resource_type: 'file' | 'folder' | 'user';
+  resource_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  target_user_id: string | null;
+  detail: string | null;
+  request_id: string | null;
 }

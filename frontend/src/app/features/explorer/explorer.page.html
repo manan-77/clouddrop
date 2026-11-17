@@ -2,8 +2,12 @@
   <div class="cd-toolbar">
     <h1>Files</h1>
     <div class="cd-actions">
-      <cd-upload-button [folderId]="currentFolderId()" />
-      <button cd-button type="button" (click)="show({ kind: 'create-folder' })">New folder</button>
+      @if (canWriteHere()) {
+        <cd-upload-button [folderId]="currentFolderId()" />
+        <button cd-button type="button" (click)="show({ kind: 'create-folder' })">
+          New folder
+        </button>
+      }
     </div>
   </div>
 
@@ -68,6 +72,8 @@
               [folders]="current.folders.items"
               (rename)="show({ kind: 'rename-folder', folder: $event })"
               (remove)="show({ kind: 'delete-folder', folder: $event })"
+              (share)="show({ kind: 'share-folder', folder: $event })"
+              (activity)="show({ kind: 'activity-folder', folder: $event })"
             />
             <cd-pager
               label="Folders pagination"
@@ -87,6 +93,8 @@
               (download)="download($event)"
               (rename)="show({ kind: 'rename-file', file: $event })"
               (remove)="show({ kind: 'delete-file', file: $event })"
+              (share)="show({ kind: 'share-file', file: $event })"
+              (activity)="show({ kind: 'activity-file', file: $event })"
             />
             <cd-pager
               label="Files pagination"
@@ -156,6 +164,32 @@
     [busy]="busy()"
     [error]="dialogError()"
     (confirmed)="confirmDelete()"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'share-folder') {
+  <cd-share-dialog
+    kind="folders"
+    [resourceId]="open.folder.id"
+    [resourceName]="open.folder.name"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'share-file') {
+  <cd-share-dialog
+    kind="files"
+    [resourceId]="open.file.id"
+    [resourceName]="open.file.name"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'activity-folder') {
+  <cd-activity-dialog
+    [resourceId]="open.folder.id"
+    [resourceName]="open.folder.name"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'activity-file') {
+  <cd-activity-dialog
+    [resourceId]="open.file.id"
+    [resourceName]="open.file.name"
     (dismissed)="closeDialog()"
   />
 }

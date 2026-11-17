@@ -16,6 +16,7 @@ const folder = (id: string, name: string, parent: string | null = null): FolderR
   name,
   created_at: STAMP,
   updated_at: STAMP,
+  role: 'owner',
 });
 const file = (id: string, name: string, status: FileStatus = 'ready'): FileRead => ({
   id,
@@ -26,6 +27,7 @@ const file = (id: string, name: string, status: FileStatus = 'ready'): FileRead 
   status,
   created_at: STAMP,
   updated_at: STAMP,
+  role: 'owner',
 });
 const page = <T>(items: T[], total = items.length, current = 1, size = 50): Page<T> => ({
   items,

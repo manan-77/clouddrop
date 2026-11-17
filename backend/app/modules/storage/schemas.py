@@ -1,9 +1,13 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.storage.constants import FileStatus
+
+# What the caller may do with this item; set per caller by the routers. The server still decides.
+CallerRole = Literal["owner", "editor", "viewer"]
 
 
 class FolderCreate(BaseModel):
@@ -23,6 +27,7 @@ class FolderRead(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
+    role: CallerRole | None = None
 
 
 class FileUploadRequest(BaseModel):
@@ -49,6 +54,7 @@ class FileRead(BaseModel):
     status: FileStatus
     created_at: datetime
     updated_at: datetime
+    role: CallerRole | None = None
 
 
 class UploadInstructions(BaseModel):

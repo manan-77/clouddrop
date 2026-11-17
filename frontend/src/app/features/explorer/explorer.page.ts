@@ -19,12 +19,15 @@ import { EmptyStateComponent } from '@shared/ui/empty-state/empty-state.componen
 import { ErrorStateComponent } from '@shared/ui/error-state/error-state.component';
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
+import { canWrite } from '@core/api/permissions';
+import { ActivityDialogComponent } from './activity-dialog.component';
 import { ConfirmDialogComponent } from './confirm-dialog.component';
 import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerStore } from './explorer.store';
 import { FileTableComponent } from './file-table.component';
 import { FolderTableComponent } from './folder-table.component';
 import { NameDialogComponent } from './name-dialog.component';
+import { ShareDialogComponent } from './share-dialog.component';
 import { UploadButtonComponent } from './upload-button.component';
 import { UploadPanelComponent } from './upload-panel.component';
 
@@ -33,12 +36,17 @@ type Dialog =
   | { kind: 'rename-folder'; folder: FolderRead }
   | { kind: 'rename-file'; file: FileRead }
   | { kind: 'delete-folder'; folder: FolderRead }
-  | { kind: 'delete-file'; file: FileRead };
+  | { kind: 'delete-file'; file: FileRead }
+  | { kind: 'share-folder'; folder: FolderRead }
+  | { kind: 'share-file'; file: FileRead }
+  | { kind: 'activity-folder'; folder: FolderRead }
+  | { kind: 'activity-file'; file: FileRead };
 
 @Component({
   selector: 'cd-explorer-page',
   imports: [
     RouterLink,
+    ActivityDialogComponent,
     ButtonComponent,
     ConfirmDialogComponent,
     DropZoneDirective,
@@ -48,6 +56,7 @@ type Dialog =
     FolderTableComponent,
     NameDialogComponent,
     PagerComponent,
+    ShareDialogComponent,
     SkeletonComponent,
     UploadButtonComponent,
     UploadPanelComponent,
@@ -76,6 +85,12 @@ export class ExplorerPage {
   );
 
   protected readonly currentFolderId = computed(() => this.folderId() ?? null);
+
+  /** Whether to offer upload and new-folder here: the role of the folder on screen (owner at the root). */
+  protected readonly canWriteHere = computed(() => {
+    const path = this.store.view().path;
+    return path.length === 0 || canWrite(path[path.length - 1].role);
+  });
 
   constructor() {
     // A finished upload into the folder on screen refreshes the listing.

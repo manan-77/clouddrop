@@ -17,7 +17,7 @@ from app.core.pagination import PageParams
 from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.service import AuditService
 from app.modules.processing.dispatcher import ProcessingDispatcher
-from app.modules.sharing.service import AccessService, Action
+from app.modules.sharing.service import AccessService, Action, Role
 from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
 from app.modules.storage.models import File, FileVersion, Folder
 from app.modules.storage.naming import sanitize_name
@@ -313,6 +313,17 @@ class FileService:
             return False
         folder = self.folders.get_any(folder_id)
         return folder is not None and not self.workspaces.is_owner(user_id, folder.workspace_id)
+
+    def role_in(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> str:
+        """The caller's role on a folder they were already allowed to use (owner at the root)."""
+        if folder_id is None:
+            return Role.OWNER.value
+        folder = self.folders.get_any(folder_id)
+        role = self.access.folder_role(user_id, folder) if folder else None
+        return (role or Role.VIEWER).value
+
+    def role_of(self, user_id: uuid.UUID, file: File) -> str:
+        return (self.access.file_role(user_id, file) or Role.VIEWER).value
 
     def folder_visible(self, user_id: uuid.UUID, file: File) -> bool:
         """Whether the caller may be told the holding folder (not a file-only grantee)."""

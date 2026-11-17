@@ -8,6 +8,12 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', canActivate: [authGuard], loadComponent: explorer },
   { path: 'folders/:folderId', canActivate: [authGuard], loadComponent: explorer },
   {
+    path: 'shared',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/shared-with-me/shared-with-me.page').then((m) => m.SharedWithMePage),
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/auth/login.page').then((m) => m.LoginPage),

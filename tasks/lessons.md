@@ -173,3 +173,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 131. **Remove a column the moment nothing can write it**; a dead `result` field advertised outcomes that never existed.
 132. **Anything that writes an audit row per request needs its own rate limit**, or a low-privileged user can grow someone else's table.
 133. **Scope a limit to the actor it protects against and apply it after the cheap access check**: a download limit for grantees must not throttle owners or count rejected requests.
+134. **The UI needs the caller's role in every response**: without it the client cannot hide controls and ends up guessing; compute it once per list (not per item) to keep query counts flat.
+135. **Never call methods or `$any` in a template**: use pure pipes (`canWrite`, `auditLabel`) and template reference variables.

@@ -43,6 +43,9 @@ import { ButtonComponent } from '@shared/ui/button/button.component';
         >
           Files
         </a>
+        <a routerLink="/shared" routerLinkActive="active" ariaCurrentWhenActive="page">
+          Shared with me
+        </a>
       } @else if (session.status() === 'anonymous') {
         <a routerLink="/login" routerLinkActive="active" ariaCurrentWhenActive="page">Sign in</a>
         <a routerLink="/register" routerLinkActive="active" ariaCurrentWhenActive="page">

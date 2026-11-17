@@ -214,11 +214,11 @@ Goal: owners can share files and folders with other people at viewer or editor l
 - [x] Tests: event written exactly once per action, an unwritable audit row stops the action (fail closed, per call site), no sensitive data stored.
 
 ### 7.4 Branch: feat/frontend-sharing (OK-NOW)
-- [ ] Share dialog: add person by email, choose role, list current access, change and revoke.
-- [ ] Share link creation with expiry and copy button, revoke button.
-- [ ] Shared-with-me page and role-aware UI (hide controls the role cannot use, while the server stays the authority).
-- [ ] Activity view for a file from the audit endpoint.
-- [ ] Tests: dialog validation, role-driven controls, revoke flow.
+- [x] Share dialog: add person by email, choose role, list current access, change and revoke.
+- [ ] (waits for the share-link backend) Share link creation with expiry and copy button, revoke button.
+- [x] Shared-with-me page and role-aware UI (hide controls the role cannot use, while the server stays the authority).
+- [x] Activity view for a file from the audit endpoint.
+- [x] Tests: dialog validation, role-driven controls, revoke flow.
 
 ### 7.5 Optional branch inside Phase 4 if email is in scope: feat/email-flows (NEEDS-YOU: provider and key)
 - [ ] Email verification on register, password reset with single-use expiring tokens stored hashed, share invitations.

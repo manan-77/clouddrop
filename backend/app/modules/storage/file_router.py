@@ -30,9 +30,18 @@ from app.modules.storage.schemas import (
 router = APIRouter(prefix="/api/v1/files", tags=["files"])
 
 
-def _read(service: FileService, user: User, file: File, *, folder_known: bool = False) -> FileRead:
+def _read(
+    service: FileService,
+    user: User,
+    file: File,
+    *,
+    folder_known: bool = False,
+    role: str | None = None,
+) -> FileRead:
     """A file-only grantee is not told which folder holds the file."""
-    read = FileRead.model_validate(file)
+    read = FileRead.model_validate(file).model_copy(
+        update={"role": role or service.role_of(user.id, file)}
+    )
     if not folder_known and not service.folder_visible(user.id, file):
         read = read.model_copy(update={"folder_id": None})
     return read
@@ -67,8 +76,9 @@ def list_files(
     status_filter: Annotated[FileStatus | None, Query(alias="status")] = None,
 ) -> Page[FileRead]:
     files, total = service.list_files(user.id, folder_id, status_filter, params)
+    role = service.role_in(user.id, folder_id)
     return Page[FileRead](
-        items=[_read(service, user, file, folder_known=True) for file in files],
+        items=[_read(service, user, f, folder_known=True, role=role) for f in files],
         total=total,
         page=params.page,
         page_size=params.page_size,
@@ -91,7 +101,9 @@ def init_upload(
     )
     response.headers["Location"] = f"/api/v1/files/{file.id}"
     return UploadInitResponse(
-        file=_read(service, user, file, folder_known=True),
+        file=_read(
+            service, user, file, folder_known=True, role=service.role_in(user.id, body.folder_id)
+        ),
         upload=UploadInstructions(
             url=upload.url, fields=upload.fields, expires_in=upload.expires_in
         ),
@@ -116,7 +128,9 @@ def init_multipart_upload(
     )
     response.headers["Location"] = f"/api/v1/files/{file.id}"
     return MultipartInitResponse(
-        file=_read(service, user, file, folder_known=True),
+        file=_read(
+            service, user, file, folder_known=True, role=service.role_in(user.id, body.folder_id)
+        ),
         multipart=MultipartInstructions(
             part_size_bytes=part_size,
             part_count=part_count,

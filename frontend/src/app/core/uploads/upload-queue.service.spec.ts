@@ -29,6 +29,7 @@ const fileRead = (id: string, name = 'report.pdf') => ({
   status: 'pending_upload',
   created_at: '',
   updated_at: '',
+  role: 'owner',
 });
 const initResponse = (id: string) => ({
   file: fileRead(id),
