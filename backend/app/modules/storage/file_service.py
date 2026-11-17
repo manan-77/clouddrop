@@ -1,6 +1,7 @@
 import contextlib
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -16,7 +17,7 @@ from app.core.pagination import PageParams
 from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
-from app.modules.storage.models import File, FileVersion
+from app.modules.storage.models import File, FileVersion, Folder
 from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FileVersionRepository, FolderRepository
 from app.modules.storage.s3 import (
@@ -56,7 +57,7 @@ class FileService:
         max_bytes: int,
     ) -> tuple[File, FileVersion]:
         """Validates the request and adds the pending rows; the caller presigns and commits."""
-        workspace_id = self._scope(user_id, Action.WRITE)
+        workspace_id = self._upload_workspace(user_id, folder_id)
         normalized_type = content_type.split(";")[0].strip().lower()
         if size_bytes > max_bytes:
             raise UnprocessableError("File is too large", code="file_too_large")
@@ -70,11 +71,6 @@ class FileService:
             > self.settings.user_quota_bytes
         ):
             raise UnprocessableError("Storage quota exceeded", code="quota_exceeded")
-        if (
-            folder_id is not None
-            and self.folders.get(workspace_id, folder_id, lock="share") is None
-        ):
-            raise NotFoundError("Folder not found", code="folder_not_found")
 
         file = File(
             workspace_id=workspace_id,
@@ -82,6 +78,7 @@ class FileService:
             name=sanitize_name(name),
             content_type=normalized_type,
             size_bytes=size_bytes,
+            created_by=user_id,
         )
         self.files.add(file)
         # The key is server-generated; the user's filename never appears in it.
@@ -153,7 +150,7 @@ class FileService:
     def _multipart_file(
         self, user_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
     ) -> tuple[File, FileVersion]:
-        file = self._get(self._scope(user_id, Action.WRITE), file_id, for_update=for_update)
+        file = self._upload_file(user_id, file_id, for_update=for_update)
         version = self.versions.get_current(file.id)
         if (
             file.status != FileStatus.PENDING_UPLOAD
@@ -193,8 +190,7 @@ class FileService:
         return urls
 
     def abort_upload(self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage) -> None:
-        workspace_id = self._scope(user_id, Action.WRITE)
-        file = self._get(workspace_id, file_id, for_update=True)
+        file = self._upload_file(user_id, file_id, for_update=True)
         if file.status != FileStatus.PENDING_UPLOAD:
             raise ConflictError("This is not an upload in progress", code="upload_not_pending")
         version = self.versions.get_current(file.id)
@@ -246,9 +242,8 @@ class FileService:
             ) from exc
 
     def complete_upload(self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage) -> File:
-        workspace_id = self._scope(user_id, Action.WRITE)
         # Row lock: two concurrent completes must not both flip the status.
-        file = self._get(workspace_id, file_id, for_update=True)
+        file = self._upload_file(user_id, file_id, for_update=True)
         if file.status != FileStatus.PENDING_UPLOAD:
             return file
         version = self.versions.get_current(file.id)
@@ -287,19 +282,38 @@ class FileService:
         status: FileStatus | None,
         params: PageParams,
     ) -> tuple[list[File], int]:
-        workspace_id = self._scope(user_id, Action.READ)
-        if folder_id is not None and self.folders.get(workspace_id, folder_id) is None:
-            raise NotFoundError("Folder not found", code="folder_not_found")
+        viewer_id: uuid.UUID | None = None
+        if folder_id is None:
+            workspace_id = self._scope(user_id, Action.READ)
+        else:
+            workspace_id = self._folder(user_id, folder_id, Action.READ).workspace_id
+            if not self.workspaces.is_owner(user_id, workspace_id):
+                viewer_id = user_id
         return self.files.list_files(
             workspace_id,
             folder_id,
             status.value if status else None,
             params.page_size,
             params.offset,
+            viewer_id=viewer_id,
         )
 
+    def uploads_into_shared_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> bool:
+        """True when the target folder belongs to someone else (an editor's upload)."""
+        if folder_id is None:
+            return False
+        folder = self.folders.get_any(folder_id)
+        return folder is not None and not self.workspaces.is_owner(user_id, folder.workspace_id)
+
+    def folder_visible(self, user_id: uuid.UUID, file: File) -> bool:
+        """Whether the caller may be told the holding folder (not a file-only grantee)."""
+        if file.folder_id is None or self.workspaces.is_owner(user_id, file.workspace_id):
+            return True
+        folder = self.folders.get_any(file.folder_id)
+        return folder is not None and self.access.folder_role(user_id, folder) is not None
+
     def get_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> File:
-        return self._get(self._scope(user_id, Action.READ), file_id)
+        return self._file(user_id, file_id, Action.READ)
 
     def update_file(
         self,
@@ -310,16 +324,18 @@ class FileService:
         folder_id: uuid.UUID | None,
         move: bool,
     ) -> File:
-        workspace_id = self._scope(user_id, Action.WRITE)
-        file = self._get(workspace_id, file_id)
+        file = self._file(user_id, file_id, Action.WRITE)
         if name is None and not move:
             raise UnprocessableError("Nothing to update", code="empty_update")
-        if (
-            move
-            and folder_id is not None
-            and self.folders.get(workspace_id, folder_id, lock="share") is None
-        ):
-            raise NotFoundError("Folder not found", code="folder_not_found")
+        if move:
+            # Moves stay inside the file's workspace; only its owner may move something to the root.
+            if folder_id is None:
+                if not self.access.can_access(user_id, file.workspace_id, Action.WRITE):
+                    raise NotFoundError("Folder not found", code="folder_not_found")
+            else:
+                target = self._folder(user_id, folder_id, Action.WRITE, lock="share")
+                if target.workspace_id != file.workspace_id:
+                    raise NotFoundError("Folder not found", code="folder_not_found")
         if name is not None:
             file.name = sanitize_name(name)
         if move:
@@ -328,7 +344,7 @@ class FileService:
         return file
 
     def delete_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> None:
-        file = self._get(self._scope(user_id, Action.DELETE), file_id)
+        file = self._file(user_id, file_id, Action.DELETE)
         # Soft delete only; a purge task removes the S3 objects later.
         file.deleted_at = datetime.now(UTC)
         self.session.commit()
@@ -336,12 +352,17 @@ class FileService:
     def create_download_url(
         self, user_id: uuid.UUID, file_id: uuid.UUID, storage: S3Storage
     ) -> tuple[str, int]:
-        file = self._get(self._scope(user_id, Action.READ), file_id)
-        if file.status == FileStatus.INFECTED:
-            raise ForbiddenError(
-                "This file was blocked because it may be unsafe", code="file_infected"
-            )
-        if file.status not in DOWNLOADABLE_STATUSES:
+        file = self._file(user_id, file_id, Action.READ)
+        if self.workspaces.is_owner(user_id, file.workspace_id):
+            if file.status == FileStatus.INFECTED:
+                raise ForbiddenError(
+                    "This file was blocked because it may be unsafe", code="file_infected"
+                )
+            downloadable = file.status in DOWNLOADABLE_STATUSES
+        else:
+            # Everyone else gets only files that finished processing cleanly.
+            downloadable = file.status == FileStatus.READY
+        if not downloadable:
             raise ConflictError("The file is not available yet", code="file_not_ready")
         version = self.versions.get_current(file.id)
         if version is None:
@@ -352,14 +373,64 @@ class FileService:
         )
 
     def _scope(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:
+        """The caller's own workspace (root-level operations)."""
         workspace = self.workspaces.get_for_user(user_id)
         self.access.require(user_id, workspace.id, action)
         return workspace.id
 
-    def _get(
-        self, workspace_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
+    def _folder(
+        self,
+        user_id: uuid.UUID,
+        folder_id: uuid.UUID,
+        action: Action,
+        *,
+        lock: Literal["update", "share"] | None = None,
+    ) -> Folder:
+        folder = self.folders.get_any(folder_id, lock=lock)
+        if folder is None or not self.access.can_on_folder(user_id, folder, action):
+            raise NotFoundError("Folder not found", code="folder_not_found")
+        return folder
+
+    def _upload_workspace(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> uuid.UUID:
+        """Where an upload lands: the caller's root, or the workspace of a folder they may write to.
+
+        Content an editor adds lives in the owner's workspace and counts against the owner's quota.
+        """
+        if folder_id is None:
+            return self._scope(user_id, Action.WRITE)
+        return self._folder(user_id, folder_id, Action.WRITE, lock="share").workspace_id
+
+    def _file(
+        self,
+        user_id: uuid.UUID,
+        file_id: uuid.UUID,
+        action: Action,
+        *,
+        for_update: bool = False,
     ) -> File:
-        file = self.files.get(workspace_id, file_id, for_update=for_update)
-        if file is None:
+        """The file if the caller may do `action` on it, else the 404 a missing one gives."""
+        file = self.files.get_any(file_id, for_update=for_update)
+        if (
+            file is None
+            or not self.access.can_on_file(user_id, file, action)
+            or not self._visible(user_id, file)
+        ):
+            raise NotFoundError("File not found", code="file_not_found")
+        return file
+
+    def _visible(self, user_id: uuid.UUID, file: File) -> bool:
+        """Non-owners see only files that finished processing cleanly, plus their own uploads."""
+        return (
+            file.status == FileStatus.READY
+            or file.created_by == user_id
+            or self.workspaces.is_owner(user_id, file.workspace_id)
+        )
+
+    def _upload_file(
+        self, user_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
+    ) -> File:
+        """An upload in progress may be driven only by whoever started it, or by the owner."""
+        file = self._file(user_id, file_id, Action.WRITE, for_update=for_update)
+        if file.created_by != user_id and not self.workspaces.is_owner(user_id, file.workspace_id):
             raise NotFoundError("File not found", code="file_not_found")
         return file

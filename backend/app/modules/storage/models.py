@@ -56,6 +56,11 @@ class File(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     content_type: Mapped[str] = mapped_column(String(255))
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     status: Mapped[str] = mapped_column(String(20), default=FileStatus.PENDING_UPLOAD.value)
+    # Who started the upload: only they (or the owner) may drive it, and a grantee sees only
+    # their own unfinished files. Null for rows from before this column existed.
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
 
 
 class FileVersion(UUIDPrimaryKeyMixin, Base):

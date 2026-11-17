@@ -18,18 +18,11 @@ class FolderRepository:
         self.session.add(folder)
         self.session.flush()
 
-    def get(
-        self,
-        workspace_id: uuid.UUID,
-        folder_id: uuid.UUID,
-        *,
-        lock: Literal["update", "share"] | None = None,
+    def get_any(
+        self, folder_id: uuid.UUID, *, lock: Literal["update", "share"] | None = None
     ) -> Folder | None:
-        query = select(Folder).where(
-            Folder.id == folder_id, Folder.workspace_id == workspace_id, only_active(Folder)
-        )
-        # Writers into a folder take FOR SHARE, a delete takes FOR UPDATE, so a folder can
-        # never be deleted while a child is being added to it.
+        """An active folder in any workspace; the caller must check access."""
+        query = select(Folder).where(Folder.id == folder_id, only_active(Folder))
         if lock == "update":
             query = query.with_for_update()
         elif lock == "share":
@@ -98,12 +91,9 @@ class FileRepository:
         self.session.add(file)
         self.session.flush()
 
-    def get(
-        self, workspace_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
-    ) -> File | None:
-        query = select(File).where(
-            File.id == file_id, File.workspace_id == workspace_id, only_active(File)
-        )
+    def get_any(self, file_id: uuid.UUID, *, for_update: bool = False) -> File | None:
+        """An active file in any workspace; the caller must check access."""
+        query = select(File).where(File.id == file_id, only_active(File))
         return self.session.scalar(query.with_for_update() if for_update else query)
 
     def list_files(
@@ -113,8 +103,13 @@ class FileRepository:
         status: str | None,
         limit: int,
         offset: int,
+        *,
+        viewer_id: uuid.UUID | None = None,
     ) -> tuple[list[File], int]:
         where = self._filter(workspace_id, folder_id, status)
+        if viewer_id is not None:
+            # A grantee sees finished files and their own unfinished uploads, nothing else.
+            where.append(or_(File.status == FileStatus.READY.value, File.created_by == viewer_id))
         total = self.session.scalar(select(func.count()).select_from(File).where(*where)) or 0
         rows = self.session.scalars(
             select(File).where(*where).order_by(File.name, File.id).limit(limit).offset(offset)

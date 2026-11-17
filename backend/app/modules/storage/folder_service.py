@@ -5,16 +5,15 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, UnprocessableError
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
+from app.modules.sharing.repository import PermissionRepository
 from app.modules.sharing.service import AccessService, Action
+from app.modules.storage.constants import MAX_FOLDER_DEPTH
 from app.modules.storage.models import Folder
 from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FolderRepository
 from app.modules.workspaces.service import WorkspaceService
-
-# Breadcrumb queries stop climbing here, so a corrupted parent chain can never loop or run long.
-MAX_FOLDER_DEPTH = 50
 
 
 class FolderService:
@@ -24,27 +23,53 @@ class FolderService:
         self.files = FileRepository(session)
         self.workspaces = WorkspaceService(session)
         self.access = AccessService(session)
+        self.permissions = PermissionRepository(session)
 
     def list_folders(
         self, user_id: uuid.UUID, parent_id: uuid.UUID | None, params: PageParams
     ) -> tuple[list[Folder], int]:
-        workspace_id = self._scope(user_id, Action.READ)
-        if parent_id is not None:
-            self._get(workspace_id, parent_id)
+        if parent_id is None:
+            workspace_id = self._own_workspace(user_id, Action.READ)
+        else:
+            parent = self._folder(user_id, parent_id, Action.READ)
+            workspace_id = parent.workspace_id
         return self.folders.list_children(workspace_id, parent_id, params.page_size, params.offset)
 
     def get_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> Folder:
-        return self._get(self._scope(user_id, Action.READ), folder_id)
+        return self._folder(user_id, folder_id, Action.READ)
 
     def get_folder_path(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> list[Folder]:
-        workspace_id = self._scope(user_id, Action.READ)
-        self._get(workspace_id, folder_id)
-        return self.folders.get_path(workspace_id, folder_id, MAX_FOLDER_DEPTH)
+        folder = self._folder(user_id, folder_id, Action.READ)
+        path = self.folders.get_path(folder.workspace_id, folder.id, MAX_FOLDER_DEPTH)
+        if self.workspaces.is_owner(user_id, folder.workspace_id):
+            return path
+        # A grantee never learns what lies above the folder they were given.
+        granted = self.permissions.folder_grants_among(user_id, [item.id for item in path])
+        start = next((i for i, item in enumerate(path) if item.id in granted), 0)
+        return path[start:]
+
+    def parent_visible(self, user_id: uuid.UUID, folder: Folder) -> bool:
+        """Whether the caller may be told the parent id (not for the top of a shared tree)."""
+        if folder.parent_id is None or self.workspaces.is_owner(user_id, folder.workspace_id):
+            return True
+        parent = self.folders.get_any(folder.parent_id)
+        return parent is not None and self.access.folder_role(user_id, parent) is not None
+
+    def _siblings_visible(self, user_id: uuid.UUID, folder: Folder) -> bool:
+        """Whether every folder sharing this folder's name space is one the caller may see."""
+        if self.workspaces.is_owner(user_id, folder.workspace_id):
+            return True
+        if folder.parent_id is None:
+            return False  # a root folder's siblings are the owner's other top-level folders
+        parent = self.folders.get_any(folder.parent_id)
+        return parent is not None and self.access.folder_role(user_id, parent) is not None
 
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
-        workspace_id = self._scope(user_id, Action.WRITE)
-        if parent_id is not None:
-            self._get(workspace_id, parent_id, lock="share")
+        if parent_id is None:
+            workspace_id = self._own_workspace(user_id, Action.WRITE)
+        else:
+            parent = self._folder(user_id, parent_id, Action.WRITE, lock="share")
+            workspace_id = parent.workspace_id
             # Enforced at write time so the breadcrumb cap can never silently truncate a path.
             if (
                 len(self.folders.get_path(workspace_id, parent_id, MAX_FOLDER_DEPTH))
@@ -65,7 +90,13 @@ class FolderService:
         return folder
 
     def rename_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID, name: str) -> Folder:
-        folder = self._get(self._scope(user_id, Action.WRITE), folder_id)
+        folder = self._folder(user_id, folder_id, Action.WRITE)
+        if not self._siblings_visible(user_id, folder):
+            # The top of a shared tree has siblings the editor cannot see, and a name clash with
+            # one would reveal it. Only the owner renames it.
+            raise ForbiddenError(
+                "Only the owner can rename the top of a shared folder", code="shared_root_locked"
+            )
         try:
             with self.session.begin_nested():
                 folder.name = sanitize_name(name)
@@ -76,8 +107,8 @@ class FolderService:
         return folder
 
     def delete_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID) -> None:
-        workspace_id = self._scope(user_id, Action.DELETE)
-        folder = self._get(workspace_id, folder_id, lock="update")
+        folder = self._folder(user_id, folder_id, Action.DELETE, lock="update")
+        workspace_id = folder.workspace_id
         if self.folders.has_subfolders(workspace_id, folder_id) or self.files.has_files_in(
             workspace_id, folder_id
         ):
@@ -85,19 +116,21 @@ class FolderService:
         folder.deleted_at = datetime.now(UTC)
         self.session.commit()
 
-    def _scope(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:
+    def _own_workspace(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:
         workspace = self.workspaces.get_for_user(user_id)
         self.access.require(user_id, workspace.id, action)
         return workspace.id
 
-    def _get(
+    def _folder(
         self,
-        workspace_id: uuid.UUID,
+        user_id: uuid.UUID,
         folder_id: uuid.UUID,
+        action: Action,
         lock: Literal["update", "share"] | None = None,
     ) -> Folder:
-        folder = self.folders.get(workspace_id, folder_id, lock=lock)
-        if folder is None:
+        """The folder if the caller may do `action` on it, else the 404 a missing one gives."""
+        folder = self.folders.get_any(folder_id, lock=lock)
+        if folder is None or not self.access.can_on_folder(user_id, folder, action):
             raise NotFoundError("Folder not found", code="folder_not_found")
         return folder
 

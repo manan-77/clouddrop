@@ -21,7 +21,7 @@ Resources that do not belong to the caller return 404, never 403. The interactiv
 | POST | `/logout` | 204 | Revokes the token family and clears the cookie |
 | GET | `/me` | 200 user | Authenticated |
 
-Rate limits (fixed window, Redis, per IP and for login also per account; defaults in `Settings`): login 20 per IP and 10 per account per 15 minutes, register 10 per IP per hour, refresh 60 per IP per minute. Exceeding one returns **429** `rate_limited` with a `Retry-After` header. The per-account login budget is per (account, client), so a stranger cannot lock the owner out; guessing spread over many clients is bounded by the per-IP limit and the password hashing cost. IPv6 clients share one budget per /64. If Redis is down the limiter fails open and logs a warning.
+Rate limits (fixed window, Redis, per IP and for login also per account; defaults in `Settings`): login 20 per IP and 10 per account per 15 minutes, register 10 per IP per hour, refresh 60 per IP per minute. Grants are limited to 60 per hour per user (`RATE_LIMIT_GRANT_PER_USER`, window `RATE_LIMIT_GRANT_WINDOW_SECONDS`), and an editor starting uploads into someone else's shared folder to 120 per hour per user (`RATE_LIMIT_UPLOAD_INIT_PER_USER`, `RATE_LIMIT_UPLOAD_INIT_WINDOW_SECONDS`); owners uploading into their own space are not limited. Exceeding one returns **429** `rate_limited` with a `Retry-After` header. The per-account login budget is per (account, client), so a stranger cannot lock the owner out; guessing spread over many clients is bounded by the per-IP limit and the password hashing cost. IPv6 clients share one budget per /64. If Redis is down the limiter fails open and logs a warning.
 
 **Deployment:** the client address is the socket peer. Behind the reverse proxy the API must run with `--proxy-headers --forwarded-allow-ips=<proxy address>` (tracked in the containers task), otherwise every user shares one budget.
 
@@ -52,6 +52,19 @@ Rate limits (fixed window, Redis, per IP and for login also per account; default
 | GET | `/{file_id}/download` | 200 `{url, expires_in}` | Short-lived link forced to download. 409 `file_not_ready`, 403 `file_infected` |
 
 While no bucket is configured (`S3_BUCKET` empty), only the routes that talk to S3 return 503 `storage_not_configured`: upload init, upload completion and download. Listing, reading, renaming and deleting files, folders, auth and health are unaffected.
+
+## Sharing (`/api/v1`) - authenticated
+
+Rules are in `docs/permissions.md`: a grant on a folder covers everything inside it; viewer reads, editor reads and writes, only the owner deletes and shares. A caller without access gets 404.
+
+| Method | Path | Success | Notes |
+|---|---|---|---|
+| POST | `/folders/{id}/permissions`, `/files/{id}/permissions` | 201 + `Location`, or 200 when the grant already existed (role updated) | Body `email` (an existing account), `role` (`viewer` or `editor`). 404 `user_not_found`, 422 `cannot_share_with_self`, 409 `file_not_ready` (files must be `ready`), 429 after 60 grants per hour |
+| GET | `/folders/{id}/permissions`, `/files/{id}/permissions` | 200 paginated | Owner only |
+| GET / PATCH / DELETE | `.../permissions/{permission_id}` | 200 / 200 / 204 | PATCH body `role`. Revoking takes effect immediately |
+| GET | `/shared-with-me` | 200 paginated | Direct grants only (`resource_type`, `id`, `name`, `role`, `owner_name`, and for files `size_bytes`, `content_type`, `status`) |
+
+Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given and the hidden parent id is `null`. Non-owners see and download only `ready` files (plus their own unfinished uploads). Upload init endpoints are rate limited per user (429).
 
 ## Storage setup notes (S3)
 
