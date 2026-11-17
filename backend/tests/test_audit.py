@@ -401,12 +401,14 @@ class TestDownloadRateLimit:
             for _ in range(limit + 1)
         ]
         assert codes[-1] == 429 and 429 not in codes[:limit]
-        # Someone else's budget is separate, and only the allowed requests were audited.
-        assert (
+        # The owner is not limited: their rows go into their own trail.
+        own = {
             client.get(f"/api/v1/files/{file_id}/download", headers=owner.headers).status_code
-            == 200
-        )
+            for _ in range(limit + 2)
+        }
+        assert own == {200}
         total = client.get(
             f"/api/v1/audit-events?page_size=1&resource_id={file_id}", headers=owner.headers
         ).json()["total"]
-        assert total == 2 + limit + 1  # upload, grant, then each allowed download
+        # upload, grant, the viewer's allowed downloads, then all of the owner's
+        assert total == 2 + limit + (limit + 2)

@@ -16,7 +16,7 @@ Phase 4 needs a trail of uploads, downloads, deletes, sharing changes and logins
 
 ## Consequences
 
-- Issuing a download link now writes and commits in a GET, and a repeated request is a repeated event; a client that never uses the link still logs a download. Link requests are rate limited per user so a grantee cannot grow the owner's trail without bound.
+- Issuing a download link now writes and commits in a GET, and a repeated request is a repeated event; a client that never uses the link still logs a download. A grantee's link requests are rate limited per user so they cannot grow the owner's trail without bound; owners are not limited.
 - The table is append-only by convention (no code path updates or deletes a row). The database cannot enforce it because the foreign-key actions (`SET NULL`, `CASCADE`) need UPDATE and DELETE.
 - There is no retention or purge of audit rows yet, and the total count runs per page request; both are a later decision if the table grows.
 - The request id is stored as the request carried it (the middleware limits it to letters, digits, `_` and `-`, at most 64), so an authenticated user can choose the text of their own events' request ids.

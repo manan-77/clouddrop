@@ -302,6 +302,11 @@ class FileService:
             viewer_id=viewer_id,
         )
 
+    def is_grantee_of_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> bool:
+        """True when the file lives in someone else's workspace (a grantee downloading)."""
+        file = self.files.get_any(file_id)
+        return file is not None and not self.workspaces.is_owner(user_id, file.workspace_id)
+
     def uploads_into_shared_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> bool:
         """True when the target folder belongs to someone else (an editor's upload)."""
         if folder_id is None:

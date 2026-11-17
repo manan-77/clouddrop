@@ -172,3 +172,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 130. **CHECK literals live outside the model drift test**: add a test that inserts every enum member against the migrated schema.
 131. **Remove a column the moment nothing can write it**; a dead `result` field advertised outcomes that never existed.
 132. **Anything that writes an audit row per request needs its own rate limit**, or a low-privileged user can grow someone else's table.
+133. **Scope a limit to the actor it protects against and apply it after the cheap access check**: a download limit for grantees must not throttle owners or count rejected requests.
