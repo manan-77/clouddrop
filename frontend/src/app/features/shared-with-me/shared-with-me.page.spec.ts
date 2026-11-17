@@ -108,4 +108,48 @@ describe('SharedWithMePage', () => {
     expect(root().textContent).toContain('Too many attempts');
     expect(download.start).not.toHaveBeenCalled();
   });
+
+  it('noNoticeMeansNoAlertRegion', () => {
+    setup();
+    backend.expectOne(isList).flush({ items: [file], total: 1, page: 1, page_size: 50 });
+    fixture.detectChanges();
+    expect(root().querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('pager_afterAFailedPageChange_retryAsksForThatSamePage', () => {
+    setup();
+    backend.expectOne(isList).flush({ items: [file], total: 120, page: 1, page_size: 50 });
+    fixture.detectChanges();
+    const next = [...root().querySelectorAll('cd-pager button')].find(
+      (b) => b.textContent?.trim() === 'Next',
+    ) as HTMLButtonElement;
+    next.click();
+    const failed = backend.expectOne(isList);
+    expect(failed.request.params.get('page')).toBe('2');
+    failed.flush(ENVELOPE('internal_error'), { status: 500, statusText: 'x' });
+    fixture.detectChanges();
+    (root().querySelector('cd-error-state button') as HTMLButtonElement).click();
+    expect(backend.expectOne(isList).request.params.get('page')).toBe('2');
+    backend.match(isList);
+  });
+
+  it('pager_aNewerPageCancelsAnOlderRequest', () => {
+    setup();
+    backend.expectOne(isList).flush({ items: [file], total: 200, page: 1, page_size: 50 });
+    fixture.detectChanges();
+    const click = (label: string) =>
+      (
+        [...root().querySelectorAll('cd-pager button')].find(
+          (b) => b.textContent?.trim() === label,
+        ) as HTMLButtonElement
+      ).click();
+    click('Next');
+    const slow = backend.expectOne(isList);
+    // Skeleton hides the pager while loading, so ask for the next page through the same stream.
+    expect(slow.request.params.get('page')).toBe('2');
+    slow.flush({ items: [folder], total: 200, page: 2, page_size: 50 });
+    fixture.detectChanges();
+    click('Next');
+    expect(backend.expectOne(isList).request.params.get('page')).toBe('3');
+  });
 });

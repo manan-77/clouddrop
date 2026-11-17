@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -9,7 +9,7 @@ from app.modules.auth.models import User
 from app.modules.storage.deps import FolderServiceDep
 from app.modules.storage.folder_service import FolderService
 from app.modules.storage.models import Folder
-from app.modules.storage.schemas import FolderCreate, FolderRead, FolderUpdate
+from app.modules.storage.schemas import CallerRole, FolderCreate, FolderRead, FolderUpdate
 
 router = APIRouter(prefix="/api/v1/folders", tags=["folders"])
 
@@ -23,12 +23,12 @@ def _read(
     role: str | None = None,
 ) -> FolderRead:
     """The top of a shared tree does not reveal the id of a parent the caller cannot see."""
-    read = FolderRead.model_validate(folder).model_copy(
-        update={"role": role or service.role_of(user.id, folder)}
+    visible = parent_known or service.parent_visible(user.id, folder)
+    return FolderRead.of(
+        folder,
+        cast(CallerRole, role or service.role_of(user.id, folder)),
+        parent_id=folder.parent_id if visible else None,
     )
-    if not parent_known and not service.parent_visible(user.id, folder):
-        read = read.model_copy(update={"parent_id": None})
-    return read
 
 
 @router.get("", response_model=Page[FolderRead], status_code=status.HTTP_200_OK)

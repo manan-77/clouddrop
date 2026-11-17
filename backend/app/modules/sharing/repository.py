@@ -71,6 +71,16 @@ class PermissionRepository:
         self.session.delete(permission)
         self.session.flush()
 
+    def file_roles_among(
+        self, user_id: uuid.UUID, file_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        rows = self.session.execute(
+            select(Permission.file_id, Permission.role).where(
+                Permission.grantee_id == user_id, Permission.file_id.in_(file_ids)
+            )
+        )
+        return {file_id: role for file_id, role in rows if file_id is not None}
+
     def folder_roles_among(
         self, user_id: uuid.UUID, folder_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]:

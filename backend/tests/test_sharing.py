@@ -914,3 +914,50 @@ class TestRoleField:
             headers=editor.headers,
         )
         assert init.json()["file"]["role"] == "editor"
+
+
+class TestRoleFieldRoundTwo:
+    def test_aHigherDirectFileGrantShowsInTheListingAndMatchesTheGet(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, person = people["owner"], people["editor"]
+        folder = _folder(client, owner, "F")
+        plain = _file(client, owner, s3_client, session, folder, "plain.txt")
+        raised = _file(client, owner, s3_client, session, folder, "raised.txt")
+        _grant(client, owner, "folders", folder, person, "viewer")
+        _grant(client, owner, "files", raised, person, "editor")
+        listing = client.get(f"/api/v1/files?folder_id={folder}", headers=person.headers).json()
+        by_name = {f["name"]: f["role"] for f in listing["items"]}
+        assert by_name == {"plain.txt": "viewer", "raised.txt": "editor"}
+        for file_id, expected in ((plain, "viewer"), (raised, "editor")):
+            assert (
+                client.get(f"/api/v1/files/{file_id}", headers=person.headers).json()["role"]
+                == expected
+            )
+
+    def test_theOwnersPathIsOwnerAtEveryStep(self, client, people) -> None:
+        owner = people["owner"]
+        a = _folder(client, owner, "A")
+        b = _folder(client, owner, "B", a)
+        path = client.get(f"/api/v1/folders/{b}/path", headers=owner.headers).json()
+        assert [f["role"] for f in path] == ["owner", "owner"]
+
+    def test_roleIsAlwaysPresentOnEveryFileAndFolderResponse(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner = people["owner"]
+        folder = _folder(client, owner, "F")
+        file_id = _file(client, owner, s3_client, session, folder)
+        schema = client.get("/openapi.json").json()["components"]["schemas"]
+        assert "role" in schema["FileRead"]["required"]
+        assert "role" in schema["FolderRead"]["required"]
+        renamed = client.patch(
+            f"/api/v1/files/{file_id}", json={"name": "n.txt"}, headers=owner.headers
+        )
+        assert renamed.json()["role"] == "owner"
+        assert (
+            client.patch(
+                f"/api/v1/folders/{folder}", json={"name": "G"}, headers=owner.headers
+            ).json()["role"]
+            == "owner"
+        )

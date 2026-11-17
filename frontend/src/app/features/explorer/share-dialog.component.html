@@ -1,0 +1,87 @@
+<cd-dialog
+  [heading]="'Share ' + resourceName()"
+  [dismissible]="!busy()"
+  (dismissed)="dismissed.emit()"
+>
+  <form class="cd-form" [formGroup]="form" (ngSubmit)="add()" novalidate>
+    <div class="cd-field">
+      <label for="share-email">Email of the person</label>
+      <input
+        id="share-email"
+        class="cd-input"
+        type="email"
+        autocomplete="off"
+        aria-describedby="share-email-error"
+        formControlName="email"
+        [attr.aria-invalid]="emailMessage() ? 'true' : null"
+        [readOnly]="busy()"
+        (input)="onEdit()"
+      />
+      <cd-field-error fieldId="share-email-error" [message]="emailMessage()" />
+    </div>
+    <div class="cd-field">
+      <label for="share-role">Can</label>
+      <select id="share-role" class="cd-input" formControlName="role">
+        <option value="viewer">View</option>
+        <option value="editor">Edit</option>
+      </select>
+    </div>
+    <div class="cd-actions">
+      <button cd-button type="submit" [busy]="busy() && pending() === 'add'">Share</button>
+    </div>
+  </form>
+
+  <p class="cd-form-error" role="alert">{{ error() }}</p>
+  <p class="notice" role="status">{{ notice() }}</p>
+
+  <h3>People with access</h3>
+  @if (!loaded() && !loadError()) {
+    <cd-skeleton [lines]="2" />
+  } @else if (loadError(); as message) {
+    <p class="cd-form-error" role="alert">{{ message }}</p>
+    <button cd-button variant="secondary" type="button" (click)="reload()">Try again</button>
+  } @else if (items().length === 0) {
+    <p>Nobody else has access yet.</p>
+  } @else {
+    <ul class="people">
+      @for (grant of items(); track grant.id) {
+        <li>
+          <span class="who">{{ grant.display_name }} ({{ grant.email }})</span>
+          <select
+            #roleSelect
+            class="cd-input"
+            [attr.aria-label]="'Access for ' + grant.display_name"
+            [value]="grant.role"
+            [disabled]="busy()"
+            (change)="change(grant, roleSelect)"
+          >
+            <option value="viewer">View</option>
+            <option value="editor">Edit</option>
+          </select>
+          <button
+            cd-button
+            variant="danger"
+            type="button"
+            [busy]="pending() === grant.id"
+            [disabled]="busy()"
+            [attr.aria-label]="'Remove access for ' + grant.display_name"
+            (click)="revoke(grant)"
+          >
+            Remove
+          </button>
+        </li>
+      }
+    </ul>
+  }
+  <div class="cd-actions">
+    <button
+      cd-button
+      variant="secondary"
+      type="button"
+      [disabled]="busy()"
+      (click)="dismissed.emit()"
+    >
+      Close
+    </button>
+  </div>
+</cd-dialog>

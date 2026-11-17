@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.storage.constants import FileStatus
+from app.modules.storage.models import File, Folder
 
 # What the caller may do with this item; set per caller by the routers. The server still decides.
 CallerRole = Literal["owner", "editor", "viewer"]
@@ -27,7 +28,19 @@ class FolderRead(BaseModel):
     name: str
     created_at: datetime
     updated_at: datetime
-    role: CallerRole | None = None
+    role: CallerRole
+
+    @classmethod
+    def of(cls, folder: "Folder", role: CallerRole, *, parent_id: uuid.UUID | None) -> "FolderRead":
+        # Explicit on purpose: a response cannot be built without saying what the caller may do.
+        return cls(
+            id=folder.id,
+            parent_id=parent_id,
+            name=folder.name,
+            created_at=folder.created_at,
+            updated_at=folder.updated_at,
+            role=role,
+        )
 
 
 class FileUploadRequest(BaseModel):
@@ -54,7 +67,21 @@ class FileRead(BaseModel):
     status: FileStatus
     created_at: datetime
     updated_at: datetime
-    role: CallerRole | None = None
+    role: CallerRole
+
+    @classmethod
+    def of(cls, file: "File", role: CallerRole, *, folder_id: uuid.UUID | None) -> "FileRead":
+        return cls(
+            id=file.id,
+            folder_id=folder_id,
+            name=file.name,
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+            status=FileStatus(file.status),
+            created_at=file.created_at,
+            updated_at=file.updated_at,
+            role=role,
+        )
 
 
 class UploadInstructions(BaseModel):

@@ -1,10 +1,13 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
 import { BehaviorSubject } from 'rxjs';
 
 import { type CallerRole, type FileRead, type FolderRead } from '@core/api/models';
 import { provideAuthTesting } from '@core/auth/auth-testing';
+import { UploadQueue } from '@core/uploads/upload-queue.service';
+import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerPage } from './explorer.page';
 
 const STAMP = '2026-01-02T10:00:00Z';
@@ -65,7 +68,8 @@ describe('ExplorerPage sharing controls', () => {
   it('root_offersUploadAndNewFolder', async () => {
     const { root, backend } = await setup(null, 'owner');
     expect(buttons(root)).toContain('New folder');
-    backend.match(() => true);
+    expect(root.querySelector('cd-upload-button')).not.toBeNull();
+    expect(backend).toBeTruthy();
   });
 
   it('inAFolderSharedAsViewOnly_uploadAndNewFolderAreHidden', async () => {
@@ -106,5 +110,66 @@ describe('ExplorerPage sharing controls', () => {
       b.getAttribute('aria-label'),
     );
     expect(labels).toEqual(['Download a.pdf']);
+  });
+
+  it('whileAFolderIsStillLoading_noWriteControlsAreOffered', async () => {
+    const params$ = new BehaviorSubject(convertToParamMap({ folderId: 'shared' }));
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideAuthTesting(),
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: params$.value }, paramMap: params$ },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ExplorerPage);
+    const backend = TestBed.inject(HttpTestingController);
+    await fixture.whenStable();
+    // The loads run together: the first failure cancels the others.
+    const [first] = backend.match(() => true);
+    first.flush({ error: { code: 'folder_not_found' } }, { status: 404, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+    expect(buttons(root)).not.toContain('New folder');
+  });
+
+  it('droppingFilesOnAViewOnlyFolder_queuesNothing', async () => {
+    const { fixture, root } = await setup('shared', 'viewer');
+    const queue = TestBed.inject(UploadQueue);
+    const add = vi.spyOn(queue, 'add');
+    const zone = fixture.debugElement.query(By.directive(DropZoneDirective));
+    zone.triggerEventHandler('filesDropped', [new File(['x'], 'x.txt')]);
+    expect(add).not.toHaveBeenCalled();
+    expect(root).toBeTruthy();
+  });
+
+  it('droppingFilesOnAnEditableFolder_queuesThem', async () => {
+    const { fixture } = await setup('shared', 'editor');
+    const queue = TestBed.inject(UploadQueue);
+    const add = vi.spyOn(queue, 'add').mockImplementation(() => undefined);
+    const zone = fixture.debugElement.query(By.directive(DropZoneDirective));
+    zone.triggerEventHandler('filesDropped', [new File(['x'], 'x.txt')]);
+    expect(add).toHaveBeenCalledOnce();
+  });
+
+  it('anOpenDialogClosesWhenTheFolderChanges', async () => {
+    const { fixture, backend, root } = await setup(null, 'owner');
+    (root.querySelector('[aria-label="Share folder Docs"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-share-dialog')).not.toBeNull();
+    backend.expectOne('/api/v1/folders/d1/permissions?page=1&page_size=100').flush(page([]));
+    const route = TestBed.inject(ActivatedRoute) as unknown as {
+      paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+    };
+    route.paramMap.next(convertToParamMap({ folderId: 'other' }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-share-dialog')).toBeNull();
+    backend.match(() => true).forEach((r) => r.flush(page([])));
   });
 });

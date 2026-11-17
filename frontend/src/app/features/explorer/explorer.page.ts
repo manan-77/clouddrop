@@ -11,7 +11,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize, map, type Observable } from 'rxjs';
 
-import { type FileRead, type FolderRead } from '@core/api/models';
+import { type FileRead } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { ButtonComponent } from '@shared/ui/button/button.component';
@@ -20,33 +20,21 @@ import { ErrorStateComponent } from '@shared/ui/error-state/error-state.componen
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
 import { canWrite } from '@core/api/permissions';
-import { ActivityDialogComponent } from './activity-dialog.component';
 import { ConfirmDialogComponent } from './confirm-dialog.component';
+import { type Dialog } from './explorer-dialog';
 import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerStore } from './explorer.store';
 import { FileTableComponent } from './file-table.component';
 import { FolderTableComponent } from './folder-table.component';
 import { NameDialogComponent } from './name-dialog.component';
-import { ShareDialogComponent } from './share-dialog.component';
+import { SharingDialogsComponent } from './sharing-dialogs.component';
 import { UploadButtonComponent } from './upload-button.component';
 import { UploadPanelComponent } from './upload-panel.component';
-
-type Dialog =
-  | { kind: 'create-folder' }
-  | { kind: 'rename-folder'; folder: FolderRead }
-  | { kind: 'rename-file'; file: FileRead }
-  | { kind: 'delete-folder'; folder: FolderRead }
-  | { kind: 'delete-file'; file: FileRead }
-  | { kind: 'share-folder'; folder: FolderRead }
-  | { kind: 'share-file'; file: FileRead }
-  | { kind: 'activity-folder'; folder: FolderRead }
-  | { kind: 'activity-file'; file: FileRead };
 
 @Component({
   selector: 'cd-explorer-page',
   imports: [
     RouterLink,
-    ActivityDialogComponent,
     ButtonComponent,
     ConfirmDialogComponent,
     DropZoneDirective,
@@ -56,7 +44,7 @@ type Dialog =
     FolderTableComponent,
     NameDialogComponent,
     PagerComponent,
-    ShareDialogComponent,
+    SharingDialogsComponent,
     SkeletonComponent,
     UploadButtonComponent,
     UploadPanelComponent,
@@ -88,8 +76,12 @@ export class ExplorerPage {
 
   /** Whether to offer upload and new-folder here: the role of the folder on screen (owner at the root). */
   protected readonly canWriteHere = computed(() => {
-    const path = this.store.view().path;
-    return path.length === 0 || canWrite(path[path.length - 1].role);
+    const view = this.store.view();
+    // Not while loading or after an error: until the folder's role is known, offer nothing.
+    if (view.status !== 'ready') {
+      return false;
+    }
+    return view.path.length === 0 || canWrite(view.path[view.path.length - 1].role);
   });
 
   constructor() {
@@ -109,6 +101,9 @@ export class ExplorerPage {
   }
 
   protected addFiles(files: File[]): void {
+    if (!this.canWriteHere()) {
+      return;
+    }
     this.uploads.add(files, this.currentFolderId());
   }
 

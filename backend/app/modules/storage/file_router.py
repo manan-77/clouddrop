@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Query, Response, status
 
@@ -14,6 +14,7 @@ from app.modules.storage.deps import FileServiceDep, StorageDep
 from app.modules.storage.file_service import FileService
 from app.modules.storage.models import File
 from app.modules.storage.schemas import (
+    CallerRole,
     DownloadResponse,
     FileRead,
     FileUpdate,
@@ -39,12 +40,12 @@ def _read(
     role: str | None = None,
 ) -> FileRead:
     """A file-only grantee is not told which folder holds the file."""
-    read = FileRead.model_validate(file).model_copy(
-        update={"role": role or service.role_of(user.id, file)}
+    visible = folder_known or service.folder_visible(user.id, file)
+    return FileRead.of(
+        file,
+        cast(CallerRole, role or service.role_of(user.id, file)),
+        folder_id=file.folder_id if visible else None,
     )
-    if not folder_known and not service.folder_visible(user.id, file):
-        read = read.model_copy(update={"folder_id": None})
-    return read
 
 
 def _limit_init(
@@ -76,9 +77,9 @@ def list_files(
     status_filter: Annotated[FileStatus | None, Query(alias="status")] = None,
 ) -> Page[FileRead]:
     files, total = service.list_files(user.id, folder_id, status_filter, params)
-    role = service.role_in(user.id, folder_id)
+    roles = service.list_roles(user.id, files, service.role_in(user.id, folder_id))
     return Page[FileRead](
-        items=[_read(service, user, f, folder_known=True, role=role) for f in files],
+        items=[_read(service, user, f, folder_known=True, role=roles[f.id]) for f in files],
         total=total,
         page=params.page,
         page_size=params.page_size,

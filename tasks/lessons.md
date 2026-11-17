@@ -175,3 +175,7 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 133. **Scope a limit to the actor it protects against and apply it after the cheap access check**: a download limit for grantees must not throttle owners or count rejected requests.
 134. **The UI needs the caller's role in every response**: without it the client cannot hide controls and ends up guessing; compute it once per list (not per item) to keep query counts flat.
 135. **Never call methods or `$any` in a template**: use pure pipes (`canWrite`, `auditLabel`) and template reference variables.
+136. **A role computed once per folder is wrong when a file has a higher direct grant**: take the max per item in the same query, and test viewer-on-folder plus editor-on-file.
+137. **"Not loaded yet" must read as "no permission"** for any control gated by a role, including drag-and-drop.
+138. **Drive reads through a `switchMap` trigger** so only the latest response can update the screen, and keep the old list visible while it reloads.
+139. **Design tokens must exist**: `var(--space-2)` silently did nothing; grep `_tokens.scss` before using one.

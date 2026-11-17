@@ -52,18 +52,17 @@ class FolderService:
         return path[start:]
 
     def role_in(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> str:
-        """The caller's role on a folder they were already allowed to read (owner at the root)."""
-        if folder_id is None:
-            return Role.OWNER.value
-        folder = self.folders.get_any(folder_id)
-        role = self.access.folder_role(user_id, folder) if folder else None
-        return (role or Role.VIEWER).value
+        return self.access.role_in_folder(user_id, folder_id).value
 
     def role_of(self, user_id: uuid.UUID, folder: Folder) -> str:
         return (self.access.folder_role(user_id, folder) or Role.VIEWER).value
 
     def path_roles(self, user_id: uuid.UUID, path: list[Folder]) -> list[str]:
-        """The caller's role at each step of a path in one query (it never shrinks going down)."""
+        """The caller's role at each step of a path in one query (it never shrinks going down).
+
+        The path must be the one `get_folder_path` returns: it starts at the first folder the
+        caller was given, so no step is above their access.
+        """
         if not path or self.workspaces.is_owner(user_id, path[0].workspace_id):
             return [Role.OWNER.value] * len(path)
         direct = self.permissions.folder_roles_among(user_id, [item.id for item in path])

@@ -53,16 +53,16 @@ describe('ShareDialogComponent', () => {
     expect(text()).toContain('Nobody else has access yet.');
   });
 
-  it('load_failureShowsAnErrorAndRetryReloads', () => {
+  it('load_failureShowsTheSafeMessageAndRetryReloads', () => {
     setup();
     backend.expectOne(LIST).flush(ENVELOPE('forbidden'), { status: 404, statusText: 'Not Found' });
     fixture.detectChanges();
-    const alerts = [...root().querySelectorAll('[role="alert"]')].map((a) => a.textContent?.trim());
-    expect(alerts.some((a) => a && a.length > 0)).toBe(true);
+    expect(text()).toContain('You do not have permission to do that.');
     (root().querySelector('button[type="button"]') as HTMLButtonElement).click();
     backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co')));
     fixture.detectChanges();
     expect(text()).toContain('ann@x.co');
+    expect(text()).not.toContain('You do not have permission to do that.');
   });
 
   it('add_invalidEmailIsShownInlineAndNothingIsSent', () => {
@@ -173,5 +173,109 @@ describe('ShareDialogComponent', () => {
     expect(text()).toContain('That access no longer exists.');
     const button = root().querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
+  });
+
+  it.each(['a@b', 'a@b.', '@b.co', 'a b@c.co'])(
+    'add_%s_isRejectedInlineLikeTheServerWould',
+    (value) => {
+      setup();
+      backend.expectOne(LIST).flush(emptyPage);
+      type(value);
+      submit();
+      expect(text()).toContain('Enter a valid email address.');
+      backend.expectNone(POST);
+    },
+  );
+
+  it('add_whitespaceOnlyAndOverlongEmailsAreRejected', () => {
+    setup();
+    backend.expectOne(LIST).flush(emptyPage);
+    type('   ');
+    submit();
+    expect(text()).toContain('Email is required.');
+    type(`${'a'.repeat(320)}@x.co`);
+    submit();
+    expect(text()).toMatch(/Enter a valid email address\.|Email must be at most 320 characters\./);
+    backend.expectNone(POST);
+  });
+
+  it.each([
+    [429, 'rate_limited', 'Too many attempts. Please wait a moment and try again.'],
+    [422, 'validation_error', 'Please check the highlighted fields.'],
+    [404, 'user_not_found', 'There is no account with that email address.'],
+  ])('add_status%i_isShownAndTheFormIsUsableAgain', (status, code, message) => {
+    setup();
+    backend.expectOne(LIST).flush(emptyPage);
+    type('a@x.co');
+    submit();
+    backend.expectOne(POST).flush(ENVELOPE(code), { status, statusText: 'x' });
+    backend.expectOne(LIST).flush(emptyPage);
+    fixture.detectChanges();
+    expect(text()).toContain(message);
+    expect((root().querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it('add_aSuccessfulSaveLeavesTheFormUsableAndTypingClearsTheNotice', () => {
+    setup();
+    backend.expectOne(LIST).flush(emptyPage);
+    type('a@x.co');
+    submit();
+    backend.expectOne(POST).flush(grant('p1', 'a@x.co'), { status: 201, statusText: 'Created' });
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'a@x.co')));
+    fixture.detectChanges();
+    expect(text()).toContain('Access saved.');
+    expect((root().querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(
+      false,
+    );
+    type('b');
+    expect(text()).not.toContain('Access saved.');
+  });
+
+  it('files_usesTheFilesPath', () => {
+    TestBed.configureTestingModule({ providers: provideAuthTesting() });
+    backend = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(ShareDialogComponent);
+    fixture.componentRef.setInput('kind', 'files');
+    fixture.componentRef.setInput('resourceId', 'x1');
+    fixture.componentRef.setInput('resourceName', 'a.pdf');
+    fixture.detectChanges();
+    backend
+      .expectOne((r) => r.url === '/api/v1/files/x1/permissions' && r.method === 'GET')
+      .flush(emptyPage);
+  });
+
+  it('changeRole_refusedPutsTheSelectBackToTheSavedRole', () => {
+    setup();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    const select = root().querySelector('select[aria-label="Access for ann"]') as HTMLSelectElement;
+    select.value = 'editor';
+    select.dispatchEvent(new Event('change'));
+    backend.expectOne(`${POST}/p1`).flush(ENVELOPE('forbidden'), { status: 404, statusText: 'x' });
+    expect(select.value).toBe('viewer');
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+  });
+
+  it('reload_keepsTheListOnScreenAndTheNewestResponseWins', () => {
+    setup();
+    backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co')));
+    fixture.detectChanges();
+    (root().querySelector('[aria-label="Remove access for ann"]') as HTMLButtonElement).click();
+    backend.expectOne(`${POST}/p1`).flush(null, { status: 204, statusText: 'No Content' });
+    // The list stays on screen while the reload is pending.
+    expect(root().querySelector('cd-skeleton')).toBeNull();
+    expect(text()).toContain('ann@x.co');
+    // A second write starts a second reload before the first has answered.
+    type('b@x.co');
+    submit();
+    backend.expectOne(POST).flush(grant('p2', 'b@x.co'), { status: 201, statusText: 'Created' });
+    const [older, newer] = backend.match(LIST);
+    // The older request is cancelled outright, so it can never overwrite the newer list.
+    expect(older.cancelled).toBe(true);
+    newer.flush(pageOf(grant('p2', 'b@x.co')));
+    fixture.detectChanges();
+    expect(text()).toContain('b@x.co');
   });
 });

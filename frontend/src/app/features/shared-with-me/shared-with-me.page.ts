@@ -8,10 +8,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { catchError, EMPTY, finalize, Subject, switchMap, tap } from 'rxjs';
 
 import { FilesApi } from '@core/api/files-api.service';
-import { type Page, type SharedItem } from '@core/api/models';
+import { type SharedItem } from '@core/api/models';
 import { SharingApi } from '@core/api/sharing-api.service';
 import { DownloadService } from '@core/download/download.service';
 import { ErrorResolver } from '@core/error/error-resolver.service';
@@ -23,11 +23,6 @@ import { EmptyStateComponent } from '@shared/ui/empty-state/empty-state.componen
 import { ErrorStateComponent } from '@shared/ui/error-state/error-state.component';
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
-
-type State =
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'ready'; page: Page<SharedItem> };
 
 const PAGE_SIZE = 50;
 
@@ -50,88 +45,87 @@ const PAGE_SIZE = 50;
     <div class="cd-toolbar">
       <h1>Shared with me</h1>
     </div>
-    <p class="cd-form-error" role="alert">{{ notice() }}</p>
-    @switch (state().status) {
-      @case ('loading') {
-        <cd-skeleton [lines]="4" />
-      }
-      @case ('error') {
-        <cd-error-state [message]="errorText()" (retry)="load(pageNumber())" />
-      }
-      @default {
-        @if (items().length === 0) {
-          <cd-empty-state
-            title="Nothing has been shared with you"
-            description="When someone shares a folder or file with you, it shows up here."
-          />
-        } @else {
-          <div class="cd-table-wrap">
-            <table class="cd-table">
-              <caption class="cd-visually-hidden">
-                Shared with me
-              </caption>
-              <thead>
+    @if (notice(); as message) {
+      <p class="cd-form-error" role="alert">{{ message }}</p>
+    }
+    @if (loading()) {
+      <cd-skeleton [lines]="4" />
+    } @else if (errorText(); as message) {
+      <cd-error-state [message]="message" (retry)="load(pageNumber())" />
+    } @else {
+      @if (items().length === 0) {
+        <cd-empty-state
+          title="Nothing has been shared with you"
+          description="When someone shares a folder or file with you, it shows up here."
+        />
+      } @else {
+        <div class="cd-table-wrap">
+          <table class="cd-table">
+            <caption class="cd-visually-hidden">
+              Shared with me
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Shared by</th>
+                <th scope="col">Your access</th>
+                <th scope="col">Size</th>
+                <th scope="col">Modified</th>
+                <th scope="col"><span class="cd-visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of items(); track item.id) {
                 <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Shared by</th>
-                  <th scope="col">Your access</th>
-                  <th scope="col">Size</th>
-                  <th scope="col">Modified</th>
-                  <th scope="col"><span class="cd-visually-hidden">Actions</span></th>
+                  <td>
+                    @if (item.resource_type === 'folder') {
+                      <a [routerLink]="['/folders', item.id]">{{ item.name }}</a>
+                    } @else {
+                      {{ item.name }}
+                    }
+                  </td>
+                  <td>{{ item.owner_name }}</td>
+                  <td>{{ item.role === 'editor' ? 'Can edit' : 'Can view' }}</td>
+                  <td>{{ item.size_bytes === null ? '' : (item.size_bytes | fileSize) }}</td>
+                  <td>{{ item.updated_at | cdDateTime }}</td>
+                  <td class="cd-actions">
+                    @if (item.resource_type === 'file') {
+                      <button
+                        cd-button
+                        variant="secondary"
+                        type="button"
+                        [busy]="item.id | isIn: downloading()"
+                        [attr.aria-label]="'Download ' + item.name"
+                        (click)="download(item)"
+                      >
+                        Download
+                      </button>
+                    }
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                @for (item of items(); track item.id) {
-                  <tr>
-                    <td>
-                      @if (item.resource_type === 'folder') {
-                        <a [routerLink]="['/folders', item.id]">{{ item.name }}</a>
-                      } @else {
-                        {{ item.name }}
-                      }
-                    </td>
-                    <td>{{ item.owner_name }}</td>
-                    <td>{{ item.role === 'editor' ? 'Can edit' : 'Can view' }}</td>
-                    <td>{{ item.size_bytes === null ? '' : (item.size_bytes | fileSize) }}</td>
-                    <td>{{ item.updated_at | cdDateTime }}</td>
-                    <td class="cd-actions">
-                      @if (item.resource_type === 'file') {
-                        <button
-                          cd-button
-                          variant="secondary"
-                          type="button"
-                          [busy]="item.id | isIn: downloading()"
-                          [attr.aria-label]="'Download ' + item.name"
-                          (click)="download(item)"
-                        >
-                          Download
-                        </button>
-                      }
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
-          <cd-pager
-            label="Shared items pagination"
-            [page]="pageNumber()"
-            [pageSize]="pageSize"
-            [total]="total()"
-            (pageChange)="load($event)"
-          />
-        }
+              }
+            </tbody>
+          </table>
+        </div>
+        <cd-pager
+          label="Shared items pagination"
+          [page]="pageNumber()"
+          [pageSize]="pageSize"
+          [total]="total()"
+          (pageChange)="load($event)"
+        />
       }
     }
   `,
 })
 export class SharedWithMePage implements OnInit {
   protected readonly pageSize = PAGE_SIZE;
-  protected readonly state = signal<State>({ status: 'loading' });
+  protected readonly loading = signal(true);
+  protected readonly errorText = signal<string | null>(null);
   protected readonly items = signal<readonly SharedItem[]>([]);
   protected readonly total = signal(0);
+  /** The page asked for, so Retry after a failure repeats the same page. */
   protected readonly pageNumber = signal(1);
-  protected readonly errorText = signal('');
   protected readonly notice = signal<string | null>(null);
   protected readonly downloading = signal<readonly string[]>([]);
 
@@ -140,28 +134,41 @@ export class SharedWithMePage implements OnInit {
   private readonly downloads = inject(DownloadService);
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly requests = new Subject<number>();
 
   ngOnInit(): void {
+    // switchMap: a slower, older page can never overwrite the latest one.
+    this.requests
+      .pipe(
+        tap((page) => {
+          this.pageNumber.set(page);
+          this.loading.set(true);
+          this.errorText.set(null);
+        }),
+        switchMap((page) =>
+          this.sharing.sharedWithMe(page, PAGE_SIZE).pipe(
+            tap({
+              next: (result) => {
+                this.items.set(result.items);
+                this.total.set(result.total);
+                this.loading.set(false);
+              },
+              error: (error: unknown) => {
+                this.errorText.set(this.resolver.resolve(error).message);
+                this.loading.set(false);
+              },
+            }),
+            catchError(() => EMPTY),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe();
     this.load(1);
   }
 
   protected load(page: number): void {
-    this.state.set({ status: 'loading' });
-    this.sharing
-      .sharedWithMe(page, PAGE_SIZE)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (result) => {
-          this.items.set(result.items);
-          this.total.set(result.total);
-          this.pageNumber.set(result.page);
-          this.state.set({ status: 'ready', page: result });
-        },
-        error: (error: unknown) => {
-          this.errorText.set(this.resolver.resolve(error).message);
-          this.state.set({ status: 'error', message: this.errorText() });
-        },
-      });
+    this.requests.next(page);
   }
 
   protected download(item: SharedItem): void {
