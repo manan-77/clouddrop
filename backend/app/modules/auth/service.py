@@ -14,6 +14,8 @@ from app.core.security import (
     new_refresh_token,
     verify_password,
 )
+from app.modules.audit.constants import AuditAction, ResourceType
+from app.modules.audit.service import AuditService
 from app.modules.auth.models import RefreshToken, User
 from app.modules.auth.repository import RefreshTokenRepository, UserRepository
 from app.modules.workspaces.service import WorkspaceService
@@ -33,6 +35,7 @@ class AuthService:
         self.users = UserRepository(session)
         self.refresh_tokens = RefreshTokenRepository(session)
         self.workspaces = WorkspaceService(session)
+        self.audit = AuditService(session)
 
     def register(self, email: str, password: str, display_name: str) -> User:
         user = User(
@@ -54,10 +57,25 @@ class AuthService:
         user = self.users.get_by_email(email.strip().lower())
         password_ok = verify_password(password, user.password_hash if user else None)
         if user is None or not password_ok or not user.is_active:
+            # Failed logins are deliberately not recorded: an unauthenticated caller could flood
+            # a victim's trail, and extra work for known emails would be a timing oracle.
             raise UnauthorizedError("Invalid email or password", code="invalid_credentials")
         tokens = self._issue_tokens(user.id, family_id=uuid.uuid4())
+        self._audit_login(user.id)
         self.session.commit()
         return tokens
+
+    def _audit_login(self, user_id: uuid.UUID) -> None:
+        workspace = self.workspaces.workspaces.get_by_owner(user_id)
+        if workspace is None:
+            return  # a login must never fail because there is nowhere to record it
+        self.audit.record(
+            workspace_id=workspace.id,
+            actor_id=user_id,
+            action=AuditAction.LOGIN,
+            resource_type=ResourceType.USER,
+            resource_id=user_id,
+        )
 
     def refresh(self, raw_refresh_token: str | None) -> AuthTokens:
         if not raw_refresh_token:

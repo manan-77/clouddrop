@@ -208,10 +208,10 @@ Goal: owners can share files and folders with other people at viewer or editor l
 - [x] Query count tests for the shared listing.
 
 ### 7.3 Branch: feat/audit-logs (OK-NOW)
-- [ ] Migration for the audit log table (actor, action, resource, result, request id, timestamp). No file contents and no file names in the log rows beyond ids.
-- [ ] Audit service called from upload, download, share, revoke, delete and login events.
-- [ ] Endpoint for an owner to read the audit trail of their own resources, paginated.
-- [ ] Tests: event written exactly once per action, failure to write an audit row does not hide the original error, no sensitive data stored.
+- [x] Migration for the audit log table (actor, action, resource, result, request id, timestamp). No file contents and no file names in the log rows beyond ids.
+- [x] Audit service called from upload, download, share, revoke, delete and login events.
+- [x] Endpoint for an owner to read the audit trail of their own resources, paginated.
+- [x] Tests: event written exactly once per action, an unwritable audit row stops the action (fail closed, per call site), no sensitive data stored.
 
 ### 7.4 Branch: feat/frontend-sharing (OK-NOW)
 - [ ] Share dialog: add person by email, choose role, list current access, change and revoke.

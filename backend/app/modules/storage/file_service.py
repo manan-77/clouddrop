@@ -14,6 +14,8 @@ from app.core.errors import (
     UnprocessableError,
 )
 from app.core.pagination import PageParams
+from app.modules.audit.constants import AuditAction, ResourceType
+from app.modules.audit.service import AuditService
 from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
@@ -41,6 +43,7 @@ class FileService:
         self.folders = FolderRepository(session)
         self.workspaces = WorkspaceService(session)
         self.access = AccessService(session)
+        self.audit = AuditService(session)
 
     def _pending_cutoff(self) -> datetime:
         # A pending upload past its allowed age is abandoned (the purge job removes it) and must
@@ -267,6 +270,7 @@ class FileService:
 
         version.etag = info.etag
         version.multipart_upload_id = None
+        self._audit(user_id, AuditAction.FILE_UPLOADED, file)
         version.enqueued_at = datetime.now(UTC)
         file.status = FileStatus.UPLOADED
         self.session.commit()
@@ -297,6 +301,11 @@ class FileService:
             params.offset,
             viewer_id=viewer_id,
         )
+
+    def is_grantee_of_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> bool:
+        """True when the file lives in someone else's workspace (a grantee downloading)."""
+        file = self.files.get_any(file_id)
+        return file is not None and not self.workspaces.is_owner(user_id, file.workspace_id)
 
     def uploads_into_shared_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> bool:
         """True when the target folder belongs to someone else (an editor's upload)."""
@@ -347,6 +356,7 @@ class FileService:
         file = self._file(user_id, file_id, Action.DELETE)
         # Soft delete only; a purge task removes the S3 objects later.
         file.deleted_at = datetime.now(UTC)
+        self._audit(user_id, AuditAction.FILE_DELETED, file)
         self.session.commit()
 
     def create_download_url(
@@ -367,9 +377,19 @@ class FileService:
         version = self.versions.get_current(file.id)
         if version is None:
             raise NotFoundError("File not found", code="file_not_found")
-        return (
-            storage.create_download_url(version.s3_key, file.name),
-            self.settings.presigned_download_ttl_seconds,
+        url = storage.create_download_url(version.s3_key, file.name)
+        # Recorded before the link is handed out; the link itself is never stored.
+        self._audit(user_id, AuditAction.FILE_DOWNLOADED, file)
+        self.session.commit()
+        return url, self.settings.presigned_download_ttl_seconds
+
+    def _audit(self, user_id: uuid.UUID, action: AuditAction, file: File) -> None:
+        self.audit.record(
+            workspace_id=file.workspace_id,
+            actor_id=user_id,
+            action=action,
+            resource_type=ResourceType.FILE,
+            resource_id=file.id,
         )
 
     def _scope(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:

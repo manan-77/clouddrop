@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.core.config import get_settings
 from app.db.base import Base
+from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.auth import models as auth_models  # noqa: F401  (register tables)
 from app.modules.processing import models as processing_models  # noqa: F401
 from app.modules.sharing import models as sharing_models  # noqa: F401

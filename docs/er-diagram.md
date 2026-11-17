@@ -13,6 +13,7 @@ erDiagram
     files ||--o{ file_versions : "has"
     file_versions ||--o{ processing_jobs : "has one per stage"
     file_versions ||--o{ document_chunks : "has many"
+    workspaces ||--o{ audit_events : "trail of"
     folders ||--o{ permissions : "granted on"
     files ||--o{ permissions : "granted on"
     users ||--o{ permissions : "grantee"
@@ -99,6 +100,18 @@ erDiagram
         string role "viewer or editor; the owner is implicit"
         timestamptz created_at
         timestamptz updated_at
+    }
+    audit_events {
+        uuid id PK
+        uuid workspace_id FK "whose owner may read it"
+        uuid actor_id FK "SET NULL"
+        string action "CHECK: fixed list"
+        string resource_type "file, folder, user"
+        uuid resource_id "no foreign key: outlives purged rows"
+        uuid target_user_id FK "SET NULL"
+        string detail "short code, e.g. the role"
+        string request_id
+        timestamptz created_at "clock_timestamp()"
     }
     document_chunks {
         uuid id PK

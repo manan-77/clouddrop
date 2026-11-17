@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
+from app.modules.audit.constants import AuditAction, ResourceType
+from app.modules.audit.service import AuditService
 from app.modules.auth.models import User
 from app.modules.auth.repository import UserRepository
 from app.modules.sharing.models import Permission
@@ -14,6 +16,11 @@ from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, Folder
 from app.modules.storage.repository import FileRepository, FolderRepository
 
+_RESOURCE_TYPES: dict[Kind, ResourceType] = {
+    "files": ResourceType.FILE,
+    "folders": ResourceType.FOLDER,
+}
+
 
 class SharingService:
     """Grant, change, revoke and list access. Only the owner of a resource may do any of it."""
@@ -21,6 +28,7 @@ class SharingService:
     def __init__(self, session: Session) -> None:
         self.session = session
         self.access = AccessService(session)
+        self.audit = AuditService(session)
         self.permissions = PermissionRepository(session)
         self.users = UserRepository(session)
         self.files = FileRepository(session)
@@ -51,7 +59,11 @@ class SharingService:
             raise UnprocessableError("You already own this", code="cannot_share_with_self")
         existing = self.permissions.find(kind, resource_id, grantee.id, lock=True)
         if existing is not None:
-            existing.role = role
+            if existing.role != role:
+                existing.role = role
+                self._audit(
+                    user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role
+                )
             self.session.commit()
             return existing, grantee, False
         permission = Permission(
@@ -69,9 +81,14 @@ class SharingService:
             winner = self.permissions.find(kind, resource_id, grantee.id, lock=True)
             if winner is None:
                 raise  # not a lost race (for example the grantee vanished): surface the real error
-            winner.role = role
+            if winner.role != role:
+                winner.role = role
+                self._audit(
+                    user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role
+                )
             self.session.commit()
             return winner, grantee, False
+        self._audit(user_id, kind, resource, AuditAction.PERMISSION_GRANTED, grantee.id, role)
         self.session.commit()
         return permission, grantee, True
 
@@ -82,6 +99,12 @@ class SharingService:
         return self.permissions.list_for(kind, resource_id, params.page_size, params.offset)
 
     def get_grant(
+        self, user_id: uuid.UUID, kind: Kind, resource_id: uuid.UUID, permission_id: uuid.UUID
+    ) -> tuple[Permission, User]:
+        _, permission, grantee = self._load_grant(user_id, kind, resource_id, permission_id)
+        return permission, grantee
+
+    def _load_grant(
         self,
         user_id: uuid.UUID,
         kind: Kind,
@@ -89,13 +112,13 @@ class SharingService:
         permission_id: uuid.UUID,
         *,
         lock: bool = False,
-    ) -> tuple[Permission, User]:
-        self._resource(user_id, kind, resource_id)
+    ) -> tuple[File | Folder, Permission, User]:
+        resource = self._resource(user_id, kind, resource_id)
         # Mutating callers lock the row so a concurrent revoke cannot turn their write into a 500.
         permission = self.permissions.get(kind, resource_id, permission_id, lock=lock)
         if permission is None:
             raise NotFoundError("Permission not found", code="permission_not_found")
-        return permission, self.permissions.grantee(permission)
+        return resource, permission, self.permissions.grantee(permission)
 
     def change_role(
         self,
@@ -105,17 +128,45 @@ class SharingService:
         permission_id: uuid.UUID,
         role: str,
     ) -> tuple[Permission, User]:
-        permission, grantee = self.get_grant(user_id, kind, resource_id, permission_id, lock=True)
-        permission.role = role
+        resource, permission, grantee = self._load_grant(
+            user_id, kind, resource_id, permission_id, lock=True
+        )
+        if permission.role != role:
+            permission.role = role
+            self._audit(user_id, kind, resource, AuditAction.PERMISSION_CHANGED, grantee.id, role)
         self.session.commit()
         return permission, grantee
 
     def revoke(
         self, user_id: uuid.UUID, kind: Kind, resource_id: uuid.UUID, permission_id: uuid.UUID
     ) -> None:
-        permission, _ = self.get_grant(user_id, kind, resource_id, permission_id, lock=True)
+        resource, permission, grantee = self._load_grant(
+            user_id, kind, resource_id, permission_id, lock=True
+        )
         self.permissions.delete(permission)
+        self._audit(
+            user_id, kind, resource, AuditAction.PERMISSION_REVOKED, grantee.id, permission.role
+        )
         self.session.commit()
+
+    def _audit(
+        self,
+        user_id: uuid.UUID,
+        kind: Kind,
+        resource: File | Folder,
+        action: AuditAction,
+        grantee_id: uuid.UUID,
+        role: str,
+    ) -> None:
+        self.audit.record(
+            workspace_id=resource.workspace_id,
+            actor_id=user_id,
+            action=action,
+            resource_type=_RESOURCE_TYPES[kind],
+            resource_id=resource.id,
+            target_user_id=grantee_id,
+            detail=role,
+        )
 
     def shared_with_me(
         self, user_id: uuid.UUID, params: PageParams

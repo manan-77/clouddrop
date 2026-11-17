@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
+from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
 from app.modules.sharing.router import router as sharing_router
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(folder_router)
     app.include_router(file_router)
     app.include_router(sharing_router)
+    app.include_router(audit_router)
     return app
 
 
