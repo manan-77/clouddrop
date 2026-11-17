@@ -16,6 +16,7 @@ erDiagram
     folders ||--o{ permissions : "granted on"
     files ||--o{ permissions : "granted on"
     users ||--o{ permissions : "grantee"
+    users ||--o{ files : "uploaded by"
 
     users {
         uuid id PK
@@ -62,6 +63,7 @@ erDiagram
         timestamptz deleted_at "soft delete"
         timestamptz created_at
         timestamptz updated_at
+            uuid created_by FK "uploader, SET NULL; null for rows from before 0009"
     }
     file_versions {
         uuid id PK

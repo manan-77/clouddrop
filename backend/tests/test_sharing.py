@@ -1,7 +1,8 @@
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, text, update
@@ -79,7 +80,9 @@ def _file(
     return file_id
 
 
-def _grant(client: TestClient, owner: Person, kind: str, rid: str, who: Person, role: str):  # type: ignore[no-untyped-def]
+def _grant(
+    client: TestClient, owner: Person, kind: str, rid: str, who: Person, role: str
+) -> httpx.Response:
     return client.post(
         f"/api/v1/{kind}/{rid}/permissions",
         json={"email": who.email, "role": role},
@@ -511,7 +514,7 @@ class TestConstraints:
                 session.flush()
 
 
-def _start_multipart(client: TestClient, who: Person, folder: str):  # type: ignore[no-untyped-def]
+def _start_multipart(client: TestClient, who: Person, folder: str) -> httpx.Response:
     return client.post(
         "/api/v1/files/uploads/multipart",
         json={
@@ -524,7 +527,7 @@ def _start_multipart(client: TestClient, who: Person, folder: str):  # type: ign
     )
 
 
-def _parts(client: TestClient, who: Person, file_id: str):  # type: ignore[no-untyped-def]
+def _parts(client: TestClient, who: Person, file_id: str) -> httpx.Response:
     return client.post(
         f"/api/v1/files/{file_id}/uploads/parts", json={"part_numbers": [1]}, headers=who.headers
     )
@@ -756,7 +759,9 @@ class TestMovesAndGrantEdgeCases:
         real = PermissionRepository.find
         calls = {"n": 0}
 
-        def blind_first_time(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        def blind_first_time(
+            self: PermissionRepository, *args: Any, **kwargs: Any
+        ) -> Permission | None:
             calls["n"] += 1
             return None if calls["n"] == 1 else real(self, *args, **kwargs)
 
@@ -764,3 +769,93 @@ class TestMovesAndGrantEdgeCases:
         again = _grant(client, owner, "folders", folder, viewer, "editor")
         assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
         assert again.json()["role"] == "editor"
+
+
+class TestRoundTwoRules:
+    def test_anEditorCannotRenameTheTopOfTheSharedTree_butCanRenameInsideIt(
+        self, client, people
+    ) -> None:
+        owner, editor = people["owner"], people["editor"]
+        _folder(client, owner, "TopSecretSibling")
+        top = _folder(client, owner, "Shared")
+        inner = _folder(client, owner, "Inner", top)
+        _grant(client, owner, "folders", top, editor, "editor")
+        for name in ("topsecretsibling", "anything"):
+            denied = client.patch(
+                f"/api/v1/folders/{top}", json={"name": name}, headers=editor.headers
+            )
+            assert (
+                denied.status_code == 403 and denied.json()["error"]["code"] == "shared_root_locked"
+            )
+        ok = client.patch(
+            f"/api/v1/folders/{inner}", json={"name": "Renamed"}, headers=editor.headers
+        )
+        assert ok.status_code == 200
+        assert (
+            client.patch(
+                f"/api/v1/folders/{top}", json={"name": "Mine"}, headers=owner.headers
+            ).status_code
+            == 200
+        )
+
+    def test_anOwnerFillingTheirOwnSpaceIsNotRateLimited(self, client, people) -> None:
+        owner = people["owner"]
+        limit = get_settings().rate_limit_upload_init_per_user
+        body = {"name": "x.txt", "content_type": "text/plain", "size_bytes": 1}
+        codes = {
+            client.post("/api/v1/files/uploads", json=body, headers=owner.headers).status_code
+            for _ in range(limit + 5)
+        }
+        assert codes == {201}
+
+    def test_aSecondEditorCannotCompleteOrAbortAnotherEditorsFile(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, first, second = people["owner"], people["editor"], _person(client, "editor2")
+        folder = _folder(client, owner, "Shared")
+        for who in (first, second):
+            _grant(client, owner, "folders", folder, who, "editor")
+        file_id = _file(client, first, s3_client, session, folder)  # ready, visible to both
+        assert client.get(f"/api/v1/files/{file_id}", headers=second.headers).status_code == 200
+        done = client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=second.headers)
+        assert done.status_code == 404
+        assert (
+            client.delete(f"/api/v1/files/{file_id}/uploads", headers=second.headers).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                f"/api/v1/files/{file_id}/uploads/complete", headers=first.headers
+            ).status_code
+            == 200
+        )
+
+    @pytest.mark.parametrize("listing", ["files", "folders"])
+    def test_granteeListingsUseAConstantNumberOfQueries(
+        self, client, people, s3_client, session: Session, listing: str
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        top = _folder(client, owner, "Top")
+        _grant(client, owner, "folders", top, viewer, "viewer")
+        url = f"/api/v1/{listing}?{'folder_id' if listing == 'files' else 'parent_id'}={top}"
+        counts = []
+        for batch in (2, 6):
+            for i in range(batch):
+                if listing == "files":
+                    _file(client, owner, s3_client, session, top, f"f{batch}-{i}.txt")
+                else:
+                    _folder(client, owner, f"d{batch}-{i}", top)
+            statements: list[str] = []
+
+            def record(conn, cursor, statement, *args, bucket=statements):  # type: ignore[no-untyped-def]  # SQLAlchemy event hook signature
+                bucket.append(statement)
+
+            engine = session.get_bind()
+            event.listen(engine, "before_cursor_execute", record)
+            try:
+                response = client.get(url, headers=viewer.headers)
+            finally:
+                event.remove(engine, "before_cursor_execute", record)
+            assert response.status_code == 200
+            counts.append(len(statements))
+        assert counts[0] == counts[1]

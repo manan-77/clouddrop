@@ -67,7 +67,8 @@ class SharingService:
                 self.permissions.add(permission)
         except IntegrityError:
             winner = self.permissions.find(kind, resource_id, grantee.id, lock=True)
-            assert winner is not None
+            if winner is None:
+                raise  # not a lost race (for example the grantee vanished): surface the real error
             winner.role = role
             self.session.commit()
             return winner, grantee, False

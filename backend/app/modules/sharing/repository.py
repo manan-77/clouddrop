@@ -2,7 +2,7 @@ import uuid
 from typing import Literal
 
 from sqlalchemy import Select, func, literal, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.db.soft_delete import only_active
 from app.modules.auth.models import User
@@ -14,7 +14,7 @@ from app.modules.workspaces.models import Workspace
 Kind = Literal["files", "folders"]
 
 
-def _column(kind: Kind):  # type: ignore[no-untyped-def]
+def _column(kind: Kind) -> InstrumentedAttribute[uuid.UUID | None]:
     return Permission.file_id if kind == "files" else Permission.folder_id
 
 

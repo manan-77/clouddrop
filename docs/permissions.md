@@ -43,9 +43,15 @@ A file's own grants move with it. Inherited access is re-evaluated at the new lo
 
 - **Shared with me** lists direct grants only (the top of each shared tree), paginated, filtered in the database.
 - Breadcrumbs stop at the highest folder the grantee was given; ancestors above it are never revealed, and the `parent_id` of that top folder (and the `folder_id` of a file the grantee only has a file grant on) is returned as `null`.
+- An editor cannot rename the top of the shared tree: its siblings belong to the owner's hidden tree and a name clash would reveal them (403 `shared_root_locked`).
 - Content uploaded by an editor lives in the owner's workspace and counts against the **owner's** quota. Trade-off: an editor can reserve quota with pending uploads. Starting uploads is rate limited per user, and the owner can see and abort every pending upload; a per-uploader cap is not built.
 - Search and AI (later phases) apply the same check inside the same SQL query.
 
 ## Link sharing (decided, built later)
 
 Expiry is required (at most 30 days), links are view-only for a single resource, no password, and only a hash of the token is stored. Links are a public surface and get their own branch and review.
+
+## Known and accepted information leaks to editors
+
+An editor (never a viewer without write access) can infer two things about the owner's hidden tree: whether the owner's storage still has room (`quota_exceeded` against the owner's quota) and roughly how deep the shared folder sits (`folder_too_deep` counts hidden ancestors). The owner chose to grant write access, each probe costs a rate-limited upload or folder creation, and neither reveals names or content.
+

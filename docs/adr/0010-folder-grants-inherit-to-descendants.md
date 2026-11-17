@@ -9,6 +9,7 @@ Phase 4 adds sharing. Until now the only check was "is this your workspace". The
 - Grants (`viewer`, `editor`) are stored per folder or per file in one `permissions` table with two nullable foreign keys (exactly one set), so referential integrity is real and rows cascade when the resource is purged.
 - The effective role is the highest of the file's own grants and the grants on all its ancestor folders, computed with a recursive query on every request. Nothing is cached or copied, so revoking or moving takes effect immediately. There are no deny grants.
 - `AccessService` remains the single function every storage path goes through; the `sharing` module reads the `folders` and `files` tables directly, as the `processing` module does (ADR 0008), to avoid a circular service dependency.
+- `files.created_by` records the uploader. Non-owners see only `ready` files plus their own unfinished uploads, and an upload in progress (parts, complete, abort) can be driven only by its uploader or the owner.
 - Resource lookups no longer filter by the caller's workspace; they find the resource and ask `AccessService`. Anything the caller may not read is a 404.
 
 ## Deviation from backend/CLAUDE.md (logged for the owner)

@@ -5,13 +5,10 @@ from typing import Literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import ConflictError, NotFoundError, UnprocessableError
+from app.core.errors import ConflictError, ForbiddenError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
 from app.modules.sharing.repository import PermissionRepository
-from app.modules.sharing.service import (
-    AccessService,
-    Action,
-)
+from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import MAX_FOLDER_DEPTH
 from app.modules.storage.models import Folder
 from app.modules.storage.naming import sanitize_name
@@ -32,7 +29,7 @@ class FolderService:
         self, user_id: uuid.UUID, parent_id: uuid.UUID | None, params: PageParams
     ) -> tuple[list[Folder], int]:
         if parent_id is None:
-            workspace_id = self._own_workspace(user_id)
+            workspace_id = self._own_workspace(user_id, Action.READ)
         else:
             parent = self._folder(user_id, parent_id, Action.READ)
             workspace_id = parent.workspace_id
@@ -58,9 +55,18 @@ class FolderService:
         parent = self.folders.get_any(folder.parent_id)
         return parent is not None and self.access.folder_role(user_id, parent) is not None
 
+    def _siblings_visible(self, user_id: uuid.UUID, folder: Folder) -> bool:
+        """Whether every folder sharing this folder's name space is one the caller may see."""
+        if self.workspaces.is_owner(user_id, folder.workspace_id):
+            return True
+        if folder.parent_id is None:
+            return False  # a root folder's siblings are the owner's other top-level folders
+        parent = self.folders.get_any(folder.parent_id)
+        return parent is not None and self.access.folder_role(user_id, parent) is not None
+
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
         if parent_id is None:
-            workspace_id = self._own_workspace(user_id)
+            workspace_id = self._own_workspace(user_id, Action.WRITE)
         else:
             parent = self._folder(user_id, parent_id, Action.WRITE, lock="share")
             workspace_id = parent.workspace_id
@@ -85,6 +91,12 @@ class FolderService:
 
     def rename_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID, name: str) -> Folder:
         folder = self._folder(user_id, folder_id, Action.WRITE)
+        if not self._siblings_visible(user_id, folder):
+            # The top of a shared tree has siblings the editor cannot see, and a name clash with
+            # one would reveal it. Only the owner renames it.
+            raise ForbiddenError(
+                "Only the owner can rename the top of a shared folder", code="shared_root_locked"
+            )
         try:
             with self.session.begin_nested():
                 folder.name = sanitize_name(name)
@@ -104,9 +116,9 @@ class FolderService:
         folder.deleted_at = datetime.now(UTC)
         self.session.commit()
 
-    def _own_workspace(self, user_id: uuid.UUID) -> uuid.UUID:
+    def _own_workspace(self, user_id: uuid.UUID, action: Action) -> uuid.UUID:
         workspace = self.workspaces.get_for_user(user_id)
-        self.access.require(user_id, workspace.id, Action.WRITE)
+        self.access.require(user_id, workspace.id, action)
         return workspace.id
 
     def _folder(

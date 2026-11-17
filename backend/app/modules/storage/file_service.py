@@ -150,7 +150,7 @@ class FileService:
     def _multipart_file(
         self, user_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
     ) -> tuple[File, FileVersion]:
-        file = self._file(user_id, file_id, Action.WRITE, for_update=for_update)
+        file = self._upload_file(user_id, file_id, for_update=for_update)
         version = self.versions.get_current(file.id)
         if (
             file.status != FileStatus.PENDING_UPLOAD
@@ -297,6 +297,13 @@ class FileService:
             params.offset,
             viewer_id=viewer_id,
         )
+
+    def uploads_into_shared_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> bool:
+        """True when the target folder belongs to someone else (an editor's upload)."""
+        if folder_id is None:
+            return False
+        folder = self.folders.get_any(folder_id)
+        return folder is not None and not self.workspaces.is_owner(user_id, folder.workspace_id)
 
     def folder_visible(self, user_id: uuid.UUID, file: File) -> bool:
         """Whether the caller may be told the holding folder (not a file-only grantee)."""

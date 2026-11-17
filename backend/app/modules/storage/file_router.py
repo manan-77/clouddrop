@@ -38,9 +38,17 @@ def _read(service: FileService, user: User, file: File, *, folder_known: bool = 
     return read
 
 
-def _limit_init(user: User, limiter: RateLimiter, settings: Settings) -> None:
-    # Each pending upload reserves quota (an editor's counts against the owner), so starting
-    # them is rate limited per user.
+def _limit_init(
+    user: User,
+    folder_id: uuid.UUID | None,
+    service: FileService,
+    limiter: RateLimiter,
+    settings: Settings,
+) -> None:
+    # An editor's pending upload reserves the owner's quota, so those are rate limited per user.
+    # An owner filling their own space is not limited.
+    if not service.uploads_into_shared_folder(user.id, folder_id):
+        return
     enforce(
         limiter,
         "upload-init:user",
@@ -77,7 +85,7 @@ def init_upload(
     limiter: RateLimiterDep,
     settings: SettingsDep,
 ) -> UploadInitResponse:
-    _limit_init(user, limiter, settings)
+    _limit_init(user, body.folder_id, service, limiter, settings)
     file, upload = service.init_upload(
         user.id, body.name, body.content_type, body.size_bytes, body.folder_id, storage
     )
@@ -102,7 +110,7 @@ def init_multipart_upload(
     settings: SettingsDep,
     limiter: RateLimiterDep,
 ) -> MultipartInitResponse:
-    _limit_init(user, limiter, settings)
+    _limit_init(user, body.folder_id, service, limiter, settings)
     file, part_size, part_count = service.init_multipart_upload(
         user.id, body.name, body.content_type, body.size_bytes, body.folder_id, storage
     )
