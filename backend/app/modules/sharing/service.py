@@ -1,16 +1,14 @@
 import uuid
 from enum import StrEnum
 
-from sqlalchemy import exists, literal, or_, select
+from sqlalchemy import ColumnElement, exists, literal, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.core.errors import NotFoundError
 from app.modules.sharing.models import Permission
+from app.modules.storage.constants import MAX_FOLDER_DEPTH
 from app.modules.storage.models import File, Folder
 from app.modules.workspaces.service import WorkspaceService
-
-# Ancestor walks stop here, so a corrupted parent chain can never loop or run long.
-MAX_FOLDER_DEPTH = 50
 
 
 class Action(StrEnum):
@@ -79,19 +77,23 @@ class AccessService:
         conditions = []
         if file_id is not None:
             conditions.append(Permission.file_id == file_id)
+        blocked: ColumnElement[bool] = literal(False)
         if folder_id is not None:
             chain = self._ancestors(folder_id)
-            # A deleted folder anywhere above hides everything below it from non-owners.
-            if self.session.scalar(select(exists().where(chain.c.deleted))):
-                return None
             conditions.append(Permission.folder_id.in_(select(chain.c.id)))
+            # A deleted folder anywhere above hides everything below it from non-owners. It rides
+            # in the same statement, so the ancestor walk runs once.
+            blocked = select(exists().where(chain.c.deleted)).scalar_subquery()
         if not conditions:
             return None
-        roles = self.session.scalars(
-            select(Permission.role).where(Permission.grantee_id == user_id, or_(*conditions))
-        )
-        ranked = [Role(role) for role in roles]
-        return max(ranked, key=_RANK.__getitem__) if ranked else None
+        rows = self.session.execute(
+            select(Permission.role, blocked.label("blocked")).where(
+                Permission.grantee_id == user_id, or_(*conditions)
+            )
+        ).all()
+        if not rows or any(row.blocked for row in rows):
+            return None
+        return max((Role(row.role) for row in rows), key=_RANK.__getitem__)
 
     @staticmethod
     def _ancestors(folder_id: uuid.UUID):  # type: ignore[no-untyped-def]  # a recursive CTE

@@ -64,7 +64,7 @@ Rules are in `docs/permissions.md`: a grant on a folder covers everything inside
 | GET / PATCH / DELETE | `.../permissions/{permission_id}` | 200 / 200 / 204 | PATCH body `role`. Revoking takes effect immediately |
 | GET | `/shared-with-me` | 200 paginated | Direct grants only (`resource_type`, `id`, `name`, `role`, `owner_name`, and for files `size_bytes`, `content_type`, `status`) |
 
-Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given. Non-owners can download only `ready` files.
+Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given and the hidden parent id is `null`. Non-owners see and download only `ready` files (plus their own unfinished uploads). Upload init endpoints are rate limited per user (429).
 
 ## Storage setup notes (S3)
 

@@ -9,10 +9,10 @@ from app.core.errors import ConflictError, NotFoundError, UnprocessableError
 from app.core.pagination import PageParams
 from app.modules.sharing.repository import PermissionRepository
 from app.modules.sharing.service import (
-    MAX_FOLDER_DEPTH,  # noqa: E402  (shared walk limit)
     AccessService,
     Action,
 )
+from app.modules.storage.constants import MAX_FOLDER_DEPTH
 from app.modules.storage.models import Folder
 from app.modules.storage.naming import sanitize_name
 from app.modules.storage.repository import FileRepository, FolderRepository
@@ -50,6 +50,13 @@ class FolderService:
         granted = self.permissions.folder_grants_among(user_id, [item.id for item in path])
         start = next((i for i, item in enumerate(path) if item.id in granted), 0)
         return path[start:]
+
+    def parent_visible(self, user_id: uuid.UUID, folder: Folder) -> bool:
+        """Whether the caller may be told the parent id (not for the top of a shared tree)."""
+        if folder.parent_id is None or self.workspaces.is_owner(user_id, folder.workspace_id):
+            return True
+        parent = self.folders.get_any(folder.parent_id)
+        return parent is not None and self.access.folder_role(user_id, parent) is not None
 
     def create_folder(self, user_id: uuid.UUID, name: str, parent_id: uuid.UUID | None) -> Folder:
         if parent_id is None:

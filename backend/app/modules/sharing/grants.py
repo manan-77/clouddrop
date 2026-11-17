@@ -49,7 +49,7 @@ class SharingService:
             raise NotFoundError("No account with that email", code="user_not_found")
         if grantee.id == user_id:
             raise UnprocessableError("You already own this", code="cannot_share_with_self")
-        existing = self.permissions.find(kind, resource_id, grantee.id)
+        existing = self.permissions.find(kind, resource_id, grantee.id, lock=True)
         if existing is not None:
             existing.role = role
             self.session.commit()
@@ -66,7 +66,7 @@ class SharingService:
             with self.session.begin_nested():
                 self.permissions.add(permission)
         except IntegrityError:
-            winner = self.permissions.find(kind, resource_id, grantee.id)
+            winner = self.permissions.find(kind, resource_id, grantee.id, lock=True)
             assert winner is not None
             winner.role = role
             self.session.commit()
@@ -81,10 +81,17 @@ class SharingService:
         return self.permissions.list_for(kind, resource_id, params.page_size, params.offset)
 
     def get_grant(
-        self, user_id: uuid.UUID, kind: Kind, resource_id: uuid.UUID, permission_id: uuid.UUID
+        self,
+        user_id: uuid.UUID,
+        kind: Kind,
+        resource_id: uuid.UUID,
+        permission_id: uuid.UUID,
+        *,
+        lock: bool = False,
     ) -> tuple[Permission, User]:
         self._resource(user_id, kind, resource_id)
-        permission = self.permissions.get(kind, resource_id, permission_id)
+        # Mutating callers lock the row so a concurrent revoke cannot turn their write into a 500.
+        permission = self.permissions.get(kind, resource_id, permission_id, lock=lock)
         if permission is None:
             raise NotFoundError("Permission not found", code="permission_not_found")
         return permission, self.permissions.grantee(permission)
@@ -97,7 +104,7 @@ class SharingService:
         permission_id: uuid.UUID,
         role: str,
     ) -> tuple[Permission, User]:
-        permission, grantee = self.get_grant(user_id, kind, resource_id, permission_id)
+        permission, grantee = self.get_grant(user_id, kind, resource_id, permission_id, lock=True)
         permission.role = role
         self.session.commit()
         return permission, grantee
@@ -105,7 +112,7 @@ class SharingService:
     def revoke(
         self, user_id: uuid.UUID, kind: Kind, resource_id: uuid.UUID, permission_id: uuid.UUID
     ) -> None:
-        permission, _ = self.get_grant(user_id, kind, resource_id, permission_id)
+        permission, _ = self.get_grant(user_id, kind, resource_id, permission_id, lock=True)
         self.permissions.delete(permission)
         self.session.commit()
 

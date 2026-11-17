@@ -8,9 +8,11 @@ from sqlalchemy import event, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.modules.sharing.models import Permission
+from app.modules.sharing.repository import PermissionRepository
 from app.modules.storage.models import File
-from tests.conftest import BUCKET, FakeRateLimiter
+from tests.conftest import BUCKET
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
@@ -151,16 +153,20 @@ class TestGrantApi:
         )
         assert client.delete(f"{base}/{listing}", headers=actor.headers).status_code == 404
 
-    def test_grantEndpoint_isRateLimited(
-        self, client, people, rate_limiter: FakeRateLimiter
-    ) -> None:
-        owner = people["owner"]
+    def test_grantEndpoint_isRateLimitedPerUser(self, client, people) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        limit = get_settings().rate_limit_grant_per_user
         folder = _folder(client, owner, "F")
         statuses = [
-            _grant(client, owner, "folders", folder, people["viewer"], "viewer").status_code
-            for _ in range(61)
+            _grant(client, owner, "folders", folder, viewer, "viewer").status_code
+            for _ in range(limit + 1)
         ]
-        assert statuses[-1] == 429 and 429 not in statuses[:60]
+        assert statuses[-1] == 429 and 429 not in statuses[:limit]
+        # The budget is per user: someone else can still share.
+        other = _folder(client, people["editor"], "Mine")
+        assert (
+            _grant(client, people["editor"], "folders", other, viewer, "viewer").status_code == 201
+        )
 
     def test_aStrangerCannotTellAMissingResourceFromAForbiddenOne(self, client, people) -> None:
         owner, stranger = people["owner"], people["stranger"]
@@ -269,53 +275,34 @@ class TestRoleMatrix:
         assert "by-editor.txt" in names
         # The editor's own root stays empty.
         assert client.get("/api/v1/files", headers=editor.headers).json()["total"] == 0
-        owner_ws = session.scalar(
-            text("select workspace_id from files where id = :i"), {"i": uploaded}
+        row = session.execute(
+            text(
+                "select u.email, f.created_by from files f "
+                "join workspaces w on w.id = f.workspace_id join users u on u.id = w.owner_id "
+                "where f.id = :i"
+            ),
+            {"i": uploaded},
+        ).one()
+        assert row.email == owner.email  # the owner's workspace (and quota) holds it
+        editor_id = session.scalar(
+            text("select id from users where email = :e"), {"e": editor.email}
         )
-        owners = session.scalar(
-            text("select owner_id from workspaces where id = :w"), {"w": owner_ws}
-        )
-        assert (
-            str(owners) != ""
-            and session.scalar(
-                text("select count(*) from users where id = :o and email = :e"),
-                {"o": owners, "e": owner.email},
-            )
-            == 1
-        )
+        assert row.created_by == editor_id  # while the uploader is remembered
 
-    def test_download_nonOwnersGetOnlyReadyFiles(
+    def test_download_nonOwnersSeeAndGetOnlyReadyFiles(
         self, client, people, tree, s3_client, session: Session
     ) -> None:
         viewer, owner = people["viewer"], people["owner"]
-        assert (
-            client.get(f"/api/v1/files/{tree['file']}/download", headers=viewer.headers).status_code
-            == 200
-        )
-        session.execute(
-            update(File).where(File.id == uuid.UUID(tree["file"])).values(status="processing")
-        )
-        session.commit()
-        assert (
-            client.get(f"/api/v1/files/{tree['file']}/download", headers=viewer.headers).status_code
-            == 409
-        )
-        assert (
-            client.get(f"/api/v1/files/{tree['file']}/download", headers=owner.headers).status_code
-            == 200
-        )
-        session.execute(
-            update(File).where(File.id == uuid.UUID(tree["file"])).values(status="infected")
-        )
-        session.commit()
-        assert (
-            client.get(f"/api/v1/files/{tree['file']}/download", headers=viewer.headers).status_code
-            == 409
-        )
-        assert (
-            client.get(f"/api/v1/files/{tree['file']}/download", headers=owner.headers).status_code
-            == 403
-        )
+        url = f"/api/v1/files/{tree['file']}/download"
+        assert client.get(url, headers=viewer.headers).status_code == 200
+        for status, owner_status in (("processing", 200), ("infected", 403)):
+            session.execute(
+                update(File).where(File.id == uuid.UUID(tree["file"])).values(status=status)
+            )
+            session.commit()
+            # A grantee cannot even tell the file exists until it is ready.
+            assert client.get(url, headers=viewer.headers).status_code == 404
+            assert client.get(url, headers=owner.headers).status_code == owner_status
 
 
 class TestInheritance:
@@ -446,14 +433,9 @@ class TestInheritance:
         c = _folder(client, owner, "C", b)
         _grant(client, owner, "folders", b, viewer, "viewer")
         path = client.get(f"/api/v1/folders/{c}/path", headers=viewer.headers).json()
-        names = [f["name"] for f in (path if isinstance(path, list) else path["items"])]
-        assert names == ["B", "C"]
+        assert [f["name"] for f in path] == ["B", "C"]
         full = client.get(f"/api/v1/folders/{c}/path", headers=owner.headers).json()
-        assert [f["name"] for f in (full if isinstance(full, list) else full["items"])] == [
-            "A",
-            "B",
-            "C",
-        ]
+        assert [f["name"] for f in full] == ["A", "B", "C"]
 
 
 class TestSharedWithMe:
@@ -527,3 +509,258 @@ class TestConstraints:
             with pytest.raises(IntegrityError), session.begin_nested():
                 session.add(Permission(grantee_id=user_id, **kwargs))
                 session.flush()
+
+
+def _start_multipart(client: TestClient, who: Person, folder: str):  # type: ignore[no-untyped-def]
+    return client.post(
+        "/api/v1/files/uploads/multipart",
+        json={
+            "name": "big.txt",
+            "content_type": "text/plain",
+            "size_bytes": 20_000_000,
+            "folder_id": folder,
+        },
+        headers=who.headers,
+    )
+
+
+def _parts(client: TestClient, who: Person, file_id: str):  # type: ignore[no-untyped-def]
+    return client.post(
+        f"/api/v1/files/{file_id}/uploads/parts", json={"part_numbers": [1]}, headers=who.headers
+    )
+
+
+class TestUploadsInSharedFolders:
+    @pytest.fixture
+    def shared(self, client, people) -> str:
+        folder = _folder(client, people["owner"], "Shared")
+        _grant(client, people["owner"], "folders", folder, people["editor"], "editor")
+        _grant(client, people["owner"], "folders", folder, people["viewer"], "viewer")
+        return folder
+
+    @pytest.mark.parametrize(
+        ("who", "status"), [("editor", 201), ("viewer", 404), ("stranger", 404)]
+    )
+    def test_multipartInit_followsTheWriteRule(
+        self, client, people, shared, who: str, status: int
+    ) -> None:
+        assert _start_multipart(client, people[who], shared).status_code == status
+
+    def test_onlyTheUploaderOrTheOwnerMayDriveAnUploadInProgress(
+        self, client, people, shared
+    ) -> None:
+        owner = people["owner"]
+        file_id = _start_multipart(client, owner, shared).json()["file"]["id"]
+        for name in ("editor", "viewer", "stranger"):
+            who = people[name]
+            assert _parts(client, who, file_id).status_code == 404
+            done = client.post(f"/api/v1/files/{file_id}/uploads/complete", headers=who.headers)
+            assert done.status_code == 404
+            assert (
+                client.delete(f"/api/v1/files/{file_id}/uploads", headers=who.headers).status_code
+                == 404
+            )
+        assert _parts(client, owner, file_id).status_code == 200
+
+    def test_theOwnerCanAbortAnEditorsUploadEvenAfterTheGrantIsRevoked(
+        self, client, people, shared
+    ) -> None:
+        owner, editor = people["owner"], people["editor"]
+        file_id = _start_multipart(client, editor, shared).json()["file"]["id"]
+        assert _parts(client, editor, file_id).status_code == 200
+        grants = client.get(f"/api/v1/folders/{shared}/permissions", headers=owner.headers)
+        grant = next(g for g in grants.json()["items"] if g["email"] == editor.email)["id"]
+        client.delete(f"/api/v1/folders/{shared}/permissions/{grant}", headers=owner.headers)
+        assert (
+            client.delete(f"/api/v1/files/{file_id}/uploads", headers=editor.headers).status_code
+            == 404
+        )
+        assert _start_multipart(client, editor, shared).status_code == 404
+        assert (
+            client.delete(f"/api/v1/files/{file_id}/uploads", headers=owner.headers).status_code
+            == 204
+        )
+
+    def test_uploadInit_isRateLimitedPerUser(self, client, people, shared) -> None:
+        limit = get_settings().rate_limit_upload_init_per_user
+        body = {"name": "x.txt", "content_type": "text/plain", "size_bytes": 1, "folder_id": shared}
+        codes = [
+            client.post(
+                "/api/v1/files/uploads", json=body, headers=people["editor"].headers
+            ).status_code
+            for _ in range(limit + 1)
+        ]
+        assert codes[-1] == 429 and 429 not in codes[:limit]
+
+    def test_uploadIntoADeletedSharedFolder_is404(self, client, people) -> None:
+        owner, editor = people["owner"], people["editor"]
+        top = _folder(client, owner, "Top")
+        inner = _folder(client, owner, "Inner", top)
+        _grant(client, owner, "folders", top, editor, "editor")
+        client.delete(f"/api/v1/folders/{inner}", headers=owner.headers)
+        assert _start_multipart(client, editor, inner).status_code == 404
+
+
+class TestNonReadyFilesStayHidden:
+    def test_aGranteeSeesOnlyReadyFilesAndTheirOwnUploads(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, editor, viewer = people["owner"], people["editor"], people["viewer"]
+        folder = _folder(client, owner, "F")
+        _grant(client, owner, "folders", folder, editor, "editor")
+        _grant(client, owner, "folders", folder, viewer, "viewer")
+        ready = _file(client, owner, s3_client, session, folder, "ready.txt")
+        flagged = _file(client, owner, s3_client, session, folder, "flagged.txt", ready=False)
+        mine = _file(client, editor, s3_client, session, folder, "mine.txt", ready=False)
+        session.execute(update(File).where(File.id == uuid.UUID(flagged)).values(status="infected"))
+        session.commit()
+
+        def names(who: Person) -> set[str]:
+            url = f"/api/v1/files?folder_id={folder}"
+            return {i["name"] for i in client.get(url, headers=who.headers).json()["items"]}
+
+        assert names(owner) == {"ready.txt", "flagged.txt", "mine.txt"}
+        assert names(viewer) == {"ready.txt"}
+        assert names(editor) == {"ready.txt", "mine.txt"}
+        assert client.get(f"/api/v1/files/{flagged}", headers=viewer.headers).status_code == 404
+        assert client.get(f"/api/v1/files/{flagged}", headers=editor.headers).status_code == 404
+        assert client.get(f"/api/v1/files/{mine}", headers=editor.headers).status_code == 200
+        assert client.get(f"/api/v1/files/{ready}", headers=viewer.headers).status_code == 200
+
+    def test_aFileThatLaterTurnsInfectedLeavesSharedWithMe(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        file_id = _file(client, owner, s3_client, session, None)
+        _grant(client, owner, "files", file_id, viewer, "viewer")
+        assert client.get("/api/v1/shared-with-me", headers=viewer.headers).json()["total"] == 1
+        session.execute(update(File).where(File.id == uuid.UUID(file_id)).values(status="infected"))
+        session.commit()
+        assert client.get("/api/v1/shared-with-me", headers=viewer.headers).json()["total"] == 0
+
+
+class TestHiddenAncestors:
+    def test_theTopOfASharedTreeDoesNotRevealItsParent(self, client, people) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        a = _folder(client, owner, "A")
+        b = _folder(client, owner, "B", a)
+        c = _folder(client, owner, "C", b)
+        _grant(client, owner, "folders", b, viewer, "viewer")
+        assert (
+            client.get(f"/api/v1/folders/{b}", headers=viewer.headers).json()["parent_id"] is None
+        )
+        assert client.get(f"/api/v1/folders/{c}", headers=viewer.headers).json()["parent_id"] == b
+        assert client.get(f"/api/v1/folders/{b}", headers=owner.headers).json()["parent_id"] == a
+        path = client.get(f"/api/v1/folders/{c}/path", headers=viewer.headers).json()
+        assert [f["parent_id"] for f in path] == [None, b]
+        children = client.get(f"/api/v1/folders?parent_id={b}", headers=viewer.headers).json()
+        assert children["items"][0]["parent_id"] == b
+
+    def test_aFileOnlyGranteeIsNotToldTheFolder(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        folder = _folder(client, owner, "F")
+        file_id = _file(client, owner, s3_client, session, folder)
+        _grant(client, owner, "files", file_id, viewer, "viewer")
+        assert (
+            client.get(f"/api/v1/files/{file_id}", headers=viewer.headers).json()["folder_id"]
+            is None
+        )
+        assert (
+            client.get(f"/api/v1/files/{file_id}", headers=owner.headers).json()["folder_id"]
+            == folder
+        )
+
+    def test_pathStartsAtTheHighestGrantWhenSeveralNestedGrantsExist(self, client, people) -> None:
+        owner, person = people["owner"], people["editor"]
+        top = _folder(client, owner, "Top")
+        a = _folder(client, owner, "A", top)
+        b = _folder(client, owner, "B", a)
+        c = _folder(client, owner, "C", b)
+        _grant(client, owner, "folders", a, person, "viewer")
+        _grant(client, owner, "folders", c, person, "editor")
+        path = client.get(f"/api/v1/folders/{c}/path", headers=person.headers).json()
+        assert [f["name"] for f in path] == ["A", "B", "C"]
+
+
+class TestMovesAndGrantEdgeCases:
+    def test_anEditorCannotMoveIntoAFolderWhereTheyAreOnlyAViewer(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, person = people["owner"], people["editor"]
+        rw, ro = _folder(client, owner, "RW"), _folder(client, owner, "RO")
+        _grant(client, owner, "folders", rw, person, "editor")
+        _grant(client, owner, "folders", ro, person, "viewer")
+        file_id = _file(client, owner, s3_client, session, rw)
+        moved = client.patch(
+            f"/api/v1/files/{file_id}", json={"folder_id": ro}, headers=person.headers
+        )
+        assert moved.status_code == 404
+
+    def test_aPermissionIdIsOnlyValidUnderItsOwnResource(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        one, two = _folder(client, owner, "One"), _folder(client, owner, "Two")
+        grant = _grant(client, owner, "folders", one, viewer, "viewer").json()["id"]
+        file_id = _file(client, owner, s3_client, session, None)
+        for url in (
+            f"/api/v1/folders/{two}/permissions/{grant}",
+            f"/api/v1/files/{file_id}/permissions/{grant}",
+        ):
+            assert client.get(url, headers=owner.headers).status_code == 404
+            assert (
+                client.patch(url, json={"role": "editor"}, headers=owner.headers).status_code == 404
+            )
+            assert client.delete(url, headers=owner.headers).status_code == 404
+        assert (
+            client.get(
+                f"/api/v1/folders/{one}/permissions/{grant}", headers=owner.headers
+            ).status_code
+            == 200
+        )
+
+    def test_aDeactivatedAccountCannotBeGrantedAccess(
+        self, client, people, session: Session
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        folder = _folder(client, owner, "F")
+        session.execute(
+            text("update users set is_active = false where email = :e"), {"e": viewer.email}
+        )
+        session.commit()
+        refused = _grant(client, owner, "folders", folder, viewer, "viewer")
+        assert refused.status_code == 404 and refused.json()["error"]["code"] == "user_not_found"
+
+    def test_grantsListIsPagedAndOrdered(self, client, people) -> None:
+        owner = people["owner"]
+        folder = _folder(client, owner, "F")
+        for name in ("editor", "viewer", "stranger"):
+            _grant(client, owner, "folders", folder, people[name], "viewer")
+        base = f"/api/v1/folders/{folder}/permissions"
+        first = client.get(f"{base}?page_size=2", headers=owner.headers).json()
+        second = client.get(f"{base}?page_size=2&page=2", headers=owner.headers).json()
+        emails = [i["email"] for i in first["items"] + second["items"]]
+        assert first["total"] == 3 and len(first["items"]) == 2 and len(second["items"]) == 1
+        assert emails == sorted(emails)
+        assert client.get(f"{base}?page_size=101", headers=owner.headers).status_code == 422
+        assert client.get(f"{base}?page=9", headers=owner.headers).json()["items"] == []
+
+    def test_twoGrantsRacingOnTheUniqueIndex_endAsOneIdempotentGrant(
+        self, client, people, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        folder = _folder(client, owner, "F")
+        first = _grant(client, owner, "folders", folder, viewer, "viewer")
+        real = PermissionRepository.find
+        calls = {"n": 0}
+
+        def blind_first_time(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+            calls["n"] += 1
+            return None if calls["n"] == 1 else real(self, *args, **kwargs)
+
+        monkeypatch.setattr(PermissionRepository, "find", blind_first_time)
+        again = _grant(client, owner, "folders", folder, viewer, "editor")
+        assert again.status_code == 200 and again.json()["id"] == first.json()["id"]
+        assert again.json()["role"] == "editor"

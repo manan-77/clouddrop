@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.soft_delete import only_active
 from app.modules.auth.models import User
 from app.modules.sharing.models import Permission
+from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, Folder
 from app.modules.workspaces.models import Workspace
 
@@ -25,19 +26,26 @@ class PermissionRepository:
         self.session.add(permission)
         self.session.flush()
 
-    def find(self, kind: Kind, resource_id: uuid.UUID, grantee_id: uuid.UUID) -> Permission | None:
-        return self.session.scalar(
-            select(Permission).where(
-                _column(kind) == resource_id, Permission.grantee_id == grantee_id
-            )
+    def find(
+        self, kind: Kind, resource_id: uuid.UUID, grantee_id: uuid.UUID, *, lock: bool = False
+    ) -> Permission | None:
+        query = select(Permission).where(
+            _column(kind) == resource_id, Permission.grantee_id == grantee_id
         )
+        return self.session.scalar(query.with_for_update() if lock else query)
 
     def get(
-        self, kind: Kind, resource_id: uuid.UUID, permission_id: uuid.UUID
+        self,
+        kind: Kind,
+        resource_id: uuid.UUID,
+        permission_id: uuid.UUID,
+        *,
+        lock: bool = False,
     ) -> Permission | None:
-        return self.session.scalar(
-            select(Permission).where(Permission.id == permission_id, _column(kind) == resource_id)
+        query = select(Permission).where(
+            Permission.id == permission_id, _column(kind) == resource_id
         )
+        return self.session.scalar(query.with_for_update() if lock else query)
 
     def list_for(
         self, kind: Kind, resource_id: uuid.UUID, limit: int, offset: int
@@ -110,7 +118,11 @@ class PermissionRepository:
             .join(File, File.id == Permission.file_id)
             .join(Workspace, Workspace.id == File.workspace_id)
             .join(User, User.id == owner)
-            .where(Permission.grantee_id == user_id, only_active(File))
+            .where(
+                Permission.grantee_id == user_id,
+                only_active(File),
+                File.status == FileStatus.READY.value,
+            )
         )
         union = folders.union_all(files).subquery("shared")
         total = self.session.scalar(select(func.count()).select_from(union))

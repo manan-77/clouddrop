@@ -33,7 +33,8 @@ A file's own grants move with it. Inherited access is re-evaluated at the new lo
 
 - Only the owner manages sharing. Other roles get 404, not 403, so they cannot tell what exists.
 - A **file** can be shared only when its status is `ready` (the root contract: only ready files are shareable). Folders have no status gate. Because nothing becomes `ready` until the embeddings phase, tests and early use cover folders; file grants and grantee downloads switch on with `ready`.
-- Non-owners can download only `ready` files; infected files are never downloadable by anyone.
+- Non-owners can **see** only `ready` files (listing, opening, downloading); anything else (pending, scanning, failed, infected) is a 404 for them. The one exception is the uploader, who still sees their own unfinished uploads. Infected files are never downloadable by anyone.
+- An upload in progress (parts, complete, abort) can be driven only by whoever started it or by the owner, so one editor cannot abort another's upload. The owner can always see and abort every pending upload in their workspace.
 - The grantee is identified by **email and must already have an account**. An unknown email gives 404 `user_not_found`. This reveals whether an email has an account to a signed-in owner; the endpoint is rate limited and registration already behaves the same way, so this is accepted. Invitations to people without an account need an email provider and are out of scope.
 - Granting to yourself is refused (422 `cannot_share_with_self`).
 - Granting again to the same person updates the role (idempotent). Revoking a missing grant is 404.
@@ -41,8 +42,8 @@ A file's own grants move with it. Inherited access is re-evaluated at the new lo
 ## What a grantee sees
 
 - **Shared with me** lists direct grants only (the top of each shared tree), paginated, filtered in the database.
-- Breadcrumbs stop at the highest folder the grantee was given; ancestors above it are never revealed.
-- Content uploaded by an editor lives in the owner's workspace and counts against the **owner's** quota.
+- Breadcrumbs stop at the highest folder the grantee was given; ancestors above it are never revealed, and the `parent_id` of that top folder (and the `folder_id` of a file the grantee only has a file grant on) is returned as `null`.
+- Content uploaded by an editor lives in the owner's workspace and counts against the **owner's** quota. Trade-off: an editor can reserve quota with pending uploads. Starting uploads is rate limited per user, and the owner can see and abort every pending upload; a per-uploader cap is not built.
 - Search and AI (later phases) apply the same check inside the same SQL query.
 
 ## Link sharing (decided, built later)

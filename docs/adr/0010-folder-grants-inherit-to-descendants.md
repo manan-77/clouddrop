@@ -11,6 +11,10 @@ Phase 4 adds sharing. Until now the only check was "is this your workspace". The
 - `AccessService` remains the single function every storage path goes through; the `sharing` module reads the `folders` and `files` tables directly, as the `processing` module does (ADR 0008), to avoid a circular service dependency.
 - Resource lookups no longer filter by the caller's workspace; they find the resource and ask `AccessService`. Anything the caller may not read is a 404.
 
+## Deviation from backend/CLAUDE.md (logged for the owner)
+
+The backend standard says repositories have no unscoped "get by id" and modules reach each other only through services. Sharing cannot work with workspace-scoped lookups (the grantee is not in the owner's workspace), so `get_any` finds an active folder or file by id and the service must call `AccessService` before returning it; every service path does, and tests cover the denial for each action. The `sharing` module also reads the `folders` and `files` tables directly (see ADR 0008).
+
 ## Consequences
 
 - One recursive query per access check (folders are capped at 50 levels). Listing under a shared folder checks the folder once, not per child.
