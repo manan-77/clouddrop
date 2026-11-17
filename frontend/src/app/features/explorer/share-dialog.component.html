@@ -7,6 +7,7 @@
     <div class="cd-field">
       <label for="share-email">Email of the person</label>
       <input
+        #emailInput
         id="share-email"
         class="cd-input"
         type="email"
@@ -52,8 +53,7 @@
             class="cd-input"
             [attr.aria-label]="'Access for ' + grant.display_name"
             [value]="grant.role"
-            [disabled]="busy()"
-            (change)="change(grant, roleSelect)"
+            (change)="change(grant, roleSelect.value)"
           >
             <option value="viewer">View</option>
             <option value="editor">Edit</option>
@@ -63,7 +63,6 @@
             variant="danger"
             type="button"
             [busy]="pending() === grant.id"
-            [disabled]="busy()"
             [attr.aria-label]="'Remove access for ' + grant.display_name"
             (click)="revoke(grant)"
           >

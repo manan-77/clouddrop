@@ -130,7 +130,6 @@ describe('SharedWithMePage', () => {
     fixture.detectChanges();
     (root().querySelector('cd-error-state button') as HTMLButtonElement).click();
     expect(backend.expectOne(isList).request.params.get('page')).toBe('2');
-    backend.match(isList);
   });
 
   it('pager_aNewerPageCancelsAnOlderRequest', () => {
@@ -151,5 +150,22 @@ describe('SharedWithMePage', () => {
     fixture.detectChanges();
     click('Next');
     expect(backend.expectOne(isList).request.params.get('page')).toBe('3');
+  });
+
+  it('aPageThatNoLongerExists_stepsBackToTheLastPage', () => {
+    setup();
+    backend.expectOne(isList).flush({ items: [file], total: 120, page: 1, page_size: 50 });
+    fixture.detectChanges();
+    const next = [...root().querySelectorAll('cd-pager button')].find(
+      (b) => b.textContent?.trim() === 'Next',
+    ) as HTMLButtonElement;
+    next.click();
+    // Grants were revoked meanwhile: page 2 is now empty although 60 remain.
+    backend.expectOne(isList).flush({ items: [], total: 60, page: 2, page_size: 50 });
+    const retry = backend.expectOne(isList);
+    expect(retry.request.params.get('page')).toBe('2');
+    retry.flush({ items: [file], total: 60, page: 2, page_size: 50 });
+    fixture.detectChanges();
+    expect(root().textContent).toContain('plan.pdf');
   });
 });

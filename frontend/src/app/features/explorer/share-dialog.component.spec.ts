@@ -246,16 +246,21 @@ describe('ShareDialogComponent', () => {
       .flush(emptyPage);
   });
 
-  it('changeRole_refusedPutsTheSelectBackToTheSavedRole', () => {
+  it('changeRole_refusedShowsTheSavedRoleAgain', () => {
     setup();
     backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
     fixture.detectChanges();
-    const select = root().querySelector('select[aria-label="Access for ann"]') as HTMLSelectElement;
-    select.value = 'editor';
-    select.dispatchEvent(new Event('change'));
+    const select = () =>
+      root().querySelector('select[aria-label="Access for ann"]') as HTMLSelectElement;
+    select().value = 'editor';
+    select().dispatchEvent(new Event('change'));
     backend.expectOne(`${POST}/p1`).flush(ENVELOPE('forbidden'), { status: 404, statusText: 'x' });
-    expect(select.value).toBe('viewer');
+    fixture.detectChanges(); // the list shows as loading while it is read again
     backend.expectOne(LIST).flush(pageOf(grant('p1', 'ann@x.co', 'viewer')));
+    fixture.detectChanges();
+    // The rows were rebuilt from the stored roles, so the refused value is gone.
+    expect(select().value).toBe('viewer');
+    expect(text()).toContain('You do not have permission to do that.');
   });
 
   it('reload_keepsTheListOnScreenAndTheNewestResponseWins', () => {

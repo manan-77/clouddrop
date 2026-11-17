@@ -2,11 +2,13 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  type ElementRef,
   inject,
   input,
   type OnInit,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -58,6 +60,7 @@ export class ShareDialogComponent implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
   protected readonly emailMessage = signal<string | null>(null);
+  private readonly emailInput = viewChild<ElementRef<HTMLInputElement>>('emailInput');
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     email: [
@@ -126,9 +129,14 @@ export class ShareDialogComponent implements OnInit {
     );
   }
 
-  protected change(grant: GrantRead, select: HTMLSelectElement): void {
-    const role = select.value;
-    if (this.busy() || (role !== 'viewer' && role !== 'editor') || role === grant.role) {
+  protected change(grant: GrantRead, role: string): void {
+    if (role !== 'viewer' && role !== 'editor') {
+      return;
+    }
+    if (this.busy() || role === grant.role) {
+      if (role !== grant.role) {
+        this.rebuildRows(); // ignored while busy: show the saved role again
+      }
       return;
     }
     this.run(
@@ -136,8 +144,13 @@ export class ShareDialogComponent implements OnInit {
       this.api.changeRole(this.kind(), this.resourceId(), grant.id, role),
       () => this.notice.set('Access updated.'),
       // A refused change must not leave the control showing a role that was not saved.
-      () => (select.value = grant.role),
+      () => this.rebuildRows(),
     );
+  }
+
+  /** A select keeps the value the user picked; showing the list as loading rebuilds it from state. */
+  private rebuildRows(): void {
+    this.loaded.set(false);
   }
 
   protected revoke(grant: GrantRead): void {
@@ -172,6 +185,8 @@ export class ShareDialogComponent implements OnInit {
         next: () => {
           done();
           this.reload();
+          // A removed row takes its button with it; keep the keyboard user in the dialog.
+          this.emailInput()?.nativeElement.focus();
         },
         error: (error: unknown) => {
           failed();

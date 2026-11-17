@@ -179,3 +179,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 137. **"Not loaded yet" must read as "no permission"** for any control gated by a role, including drag-and-drop.
 138. **Drive reads through a `switchMap` trigger** so only the latest response can update the screen, and keep the old list visible while it reloads.
 139. **Design tokens must exist**: `var(--space-2)` silently did nothing; grep `_tokens.scss` before using one.
+140. **A signal that flips false and back inside one tick changes nothing in the DOM**: tests must run change detection between the steps, and "rebuild a control" fixes need a real intermediate render.
+141. **Do not unmount role-gated controls on every reload**: keep the last known answer for the same resource and hide only for the first load and for errors.

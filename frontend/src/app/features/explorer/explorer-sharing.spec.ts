@@ -9,6 +9,7 @@ import { provideAuthTesting } from '@core/auth/auth-testing';
 import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerPage } from './explorer.page';
+import { ExplorerStore } from './explorer.store';
 
 const STAMP = '2026-01-02T10:00:00Z';
 const folder = (id: string, name: string, role: CallerRole): FolderRead => ({
@@ -69,7 +70,7 @@ describe('ExplorerPage sharing controls', () => {
     const { root, backend } = await setup(null, 'owner');
     expect(buttons(root)).toContain('New folder');
     expect(root.querySelector('cd-upload-button')).not.toBeNull();
-    expect(backend).toBeTruthy();
+    backend.verify();
   });
 
   it('inAFolderSharedAsViewOnly_uploadAndNewFolderAreHidden', async () => {
@@ -127,14 +128,54 @@ describe('ExplorerPage sharing controls', () => {
     const fixture = TestBed.createComponent(ExplorerPage);
     const backend = TestBed.inject(HttpTestingController);
     await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    // Nothing has been answered yet: the folder's role is unknown, so nothing is offered.
+    expect(root.querySelector('cd-skeleton')).not.toBeNull();
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+    expect(buttons(root)).not.toContain('New folder');
+    backend
+      .match(() => true)
+      .forEach((r) => r.flush({ items: [], total: 0, page: 1, page_size: 50 }));
+  });
+
+  it('afterAFailedLoad_noWriteControlsAreOffered', async () => {
+    const params$ = new BehaviorSubject(convertToParamMap({ folderId: 'shared' }));
+    TestBed.configureTestingModule({
+      providers: [
+        ...provideAuthTesting(),
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: params$.value }, paramMap: params$ },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ExplorerPage);
+    const backend = TestBed.inject(HttpTestingController);
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
     // The loads run together: the first failure cancels the others.
     const [first] = backend.match(() => true);
     first.flush({ error: { code: 'folder_not_found' } }, { status: 404, statusText: 'x' });
     await fixture.whenStable();
     fixture.detectChanges();
-    const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('cd-upload-button')).toBeNull();
     expect(buttons(root)).not.toContain('New folder');
+  });
+
+  it('aReloadKeepsTheLastKnownWriteControlsOnScreen', async () => {
+    const { fixture, backend, root } = await setup('shared', 'editor');
+    expect(root.querySelector('cd-upload-button')).not.toBeNull();
+    // Reload (as after creating a folder): the buttons stay mounted while the answer is pending.
+    fixture.debugElement.injector.get(ExplorerStore).reload();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-skeleton')).not.toBeNull();
+    expect(root.querySelector('cd-upload-button')).not.toBeNull();
+    expect(buttons(root)).toContain('New folder');
+    backend.expectOne('/api/v1/folders/shared/path').flush([folder('shared', 'Shared', 'editor')]);
+    backend.expectOne((r) => r.url === '/api/v1/folders').flush(page([]));
+    backend.expectOne((r) => r.url === '/api/v1/files').flush(page([]));
   });
 
   it('droppingFilesOnAViewOnlyFolder_queuesNothing', async () => {
@@ -144,7 +185,7 @@ describe('ExplorerPage sharing controls', () => {
     const zone = fixture.debugElement.query(By.directive(DropZoneDirective));
     zone.triggerEventHandler('filesDropped', [new File(['x'], 'x.txt')]);
     expect(add).not.toHaveBeenCalled();
-    expect(root).toBeTruthy();
+    expect(root.querySelector('cd-upload-button')).toBeNull();
   });
 
   it('droppingFilesOnAnEditableFolder_queuesThem', async () => {

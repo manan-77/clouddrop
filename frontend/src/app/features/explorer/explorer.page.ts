@@ -74,17 +74,35 @@ export class ExplorerPage {
 
   protected readonly currentFolderId = computed(() => this.folderId() ?? null);
 
-  /** Whether to offer upload and new-folder here: the role of the folder on screen (owner at the root). */
+  /** The last answer for a folder, so a reload does not unmount the toolbar buttons. */
+  private readonly lastWritable = signal<{ folderId: string | null; writable: boolean } | null>(
+    null,
+  );
+
+  /**
+   * Whether to offer upload and new-folder here: the role of the folder on screen (owner at the
+   * root). Unknown (first load) and failed loads offer nothing; a reload keeps the last answer.
+   */
   protected readonly canWriteHere = computed(() => {
     const view = this.store.view();
-    // Not while loading or after an error: until the folder's role is known, offer nothing.
-    if (view.status !== 'ready') {
-      return false;
+    if (view.status === 'ready') {
+      return view.path.length === 0 || canWrite(view.path[view.path.length - 1].role);
     }
-    return view.path.length === 0 || canWrite(view.path[view.path.length - 1].role);
+    const last = this.lastWritable();
+    return view.status === 'loading' && last?.folderId === this.currentFolderId() && last.writable;
   });
 
   constructor() {
+    effect(() => {
+      const view = this.store.view();
+      if (view.status === 'ready') {
+        const path = view.path;
+        this.lastWritable.set({
+          folderId: this.currentFolderId(),
+          writable: path.length === 0 || canWrite(path[path.length - 1].role),
+        });
+      }
+    });
     // A finished upload into the folder on screen refreshes the listing.
     this.uploads.completed$.pipe(takeUntilDestroyed()).subscribe((item) => {
       if (item.folderId === this.currentFolderId()) {
