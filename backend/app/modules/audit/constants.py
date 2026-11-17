@@ -10,6 +10,9 @@ class AuditAction(StrEnum):
     PERMISSION_CHANGED = "permission.changed"
     PERMISSION_REVOKED = "permission.revoked"
     LOGIN = "auth.login"
+    LINK_CREATED = "share_link.created"
+    LINK_REVOKED = "share_link.revoked"
+    LINK_DOWNLOADED = "share_link.downloaded"
 
 
 class ResourceType(StrEnum):

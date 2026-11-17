@@ -47,9 +47,9 @@ A file's own grants move with it. Inherited access is re-evaluated at the new lo
 - Content uploaded by an editor lives in the owner's workspace and counts against the **owner's** quota. Trade-off: an editor can reserve quota with pending uploads. Starting uploads is rate limited per user, and the owner can see and abort every pending upload; a per-uploader cap is not built.
 - Search and AI (later phases) apply the same check inside the same SQL query.
 
-## Link sharing (decided, built later)
+## Link sharing
 
-Expiry is required (at most 30 days), links are view-only for a single resource, no password, and only a hash of the token is stored. Links are a public surface and get their own branch and review.
+Built for **files** (not folders: a folder link would need a public listing). Expiry is required (1 to 30 days), links are view-only, there is no password, and only a hash of the token is stored. Only the owner creates, lists and revokes links, and only for a `ready` file. Anyone with the token can read the file's name, size and type and download it until the link expires, is revoked, or the file is deleted. See ADR 0012.
 
 ## Known and accepted information leaks to editors
 

@@ -201,7 +201,7 @@ Goal: owners can share files and folders with other people at viewer or editor l
 - [x] Extend the single access function to evaluate grants and inheritance, deny by default, always returning 404 for unseen resources.
 - [x] Share endpoints: grant, change role, revoke, list who has access. Every action idempotent.
 - [x] Shared-with-me listing, paginated, filtered in the database.
-- [ ] (later branch, public surface) Share link create, revoke and resolve, token stored hashed only, expiry enforced, no listing of the underlying path.
+- [x] Share link create, revoke and resolve (files only), token stored hashed only, expiry enforced (backend; UI in the next branch).
 - [x] Editors can write but not re-share or delete unless the document allows it. Only owners manage sharing.
 - [x] Update every existing storage endpoint to pass through the extended access check (list, get, update, delete, download, upload into a shared folder).
 - [x] Tests: the full matrix of owner, editor, viewer, stranger and revoked for every action, inheritance cases, revoke takes effect immediately, link expiry, link revocation, no data leak through counts or error text.
