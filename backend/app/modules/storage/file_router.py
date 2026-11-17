@@ -183,7 +183,20 @@ def delete_file(file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep) 
 
 @router.get("/{file_id}/download", response_model=DownloadResponse, status_code=status.HTTP_200_OK)
 def download_file(
-    file_id: uuid.UUID, user: CurrentUser, service: FileServiceDep, storage: StorageDep
+    file_id: uuid.UUID,
+    user: CurrentUser,
+    service: FileServiceDep,
+    storage: StorageDep,
+    limiter: RateLimiterDep,
+    settings: SettingsDep,
 ) -> DownloadResponse:
+    # Each link request writes an audit row into the owner's trail, so the rate is bounded.
+    enforce(
+        limiter,
+        "download:user",
+        str(user.id),
+        settings.rate_limit_download_per_user,
+        settings.rate_limit_download_window_seconds,
+    )
     url, expires_in = service.create_download_url(user.id, file_id, storage)
     return DownloadResponse(url=url, expires_in=expires_in)

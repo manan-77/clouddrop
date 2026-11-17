@@ -12,11 +12,6 @@ class AuditAction(StrEnum):
     LOGIN = "auth.login"
 
 
-class AuditResult(StrEnum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-
-
 class ResourceType(StrEnum):
     FILE = "file"
     FOLDER = "folder"

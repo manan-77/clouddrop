@@ -6,7 +6,7 @@ from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
-from app.modules.audit.constants import AuditAction, AuditResult, ResourceType
+from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.repository import AuditRepository
 from tests.conftest import BUCKET
@@ -51,7 +51,7 @@ class TestEventsAreWrittenOncePerAction:
         client.delete(f"/api/v1/files/{file_id}", headers=owner.headers)
         events = _events(client, owner, f"&resource_id={file_id}")
         assert [e["action"] for e in events] == ["file.deleted", "file.downloaded", "file.uploaded"]
-        assert all(e["result"] == "success" and e["resource_type"] == "file" for e in events)
+        assert all(e["resource_type"] == "file" and "result" not in e for e in events)
 
     def test_aRepeatedCompleteDoesNotDuplicateTheUploadEvent(
         self, client, people, s3_client: "S3Client", session: Session
@@ -321,10 +321,9 @@ class TestConstraints:
     ) -> None:
         """The CHECK literals live in the migration; the drift test cannot see them."""
         workspace = session.scalar(text("select id from workspaces limit 1"))
-        base = {"action": "file.deleted", "result": "success", "resource_type": "file"}
+        base = {"action": "file.deleted", "resource_type": "file"}
         for column, enum in (
             ("action", AuditAction),
-            ("result", AuditResult),
             ("resource_type", ResourceType),
         ):
             for member in enum:
@@ -335,7 +334,6 @@ class TestConstraints:
                     session.flush()
         for column, value in (
             ("action", "file.exploded"),
-            ("result", "maybe"),
             ("resource_type", "robot"),
         ):
             with pytest.raises(IntegrityError), session.begin_nested():
@@ -383,7 +381,32 @@ class TestReadingMore:
         folder = _folder(client, owner, "F")
         grant = _grant(client, owner, "folders", folder, editor, "editor").json()["id"]
         file_id = _file(client, editor, s3_client, session, folder)
-        assert _events(client, editor) != _events(client, owner)
         assert not any(e["resource_id"] in (file_id, folder) for e in _events(client, editor))
         client.delete(f"/api/v1/folders/{folder}/permissions/{grant}", headers=owner.headers)
         assert not any(e["resource_id"] in (file_id, folder) for e in _events(client, editor))
+
+
+class TestDownloadRateLimit:
+    def test_downloadLinkRequestsAreRateLimitedPerUser(
+        self, client, people, s3_client: "S3Client", session: Session
+    ) -> None:
+        from app.core.config import get_settings
+
+        owner, viewer = people["owner"], people["viewer"]
+        file_id = _file(client, owner, s3_client, session, None)
+        _grant(client, owner, "files", file_id, viewer, "viewer")
+        limit = get_settings().rate_limit_download_per_user
+        codes = [
+            client.get(f"/api/v1/files/{file_id}/download", headers=viewer.headers).status_code
+            for _ in range(limit + 1)
+        ]
+        assert codes[-1] == 429 and 429 not in codes[:limit]
+        # Someone else's budget is separate, and only the allowed requests were audited.
+        assert (
+            client.get(f"/api/v1/files/{file_id}/download", headers=owner.headers).status_code
+            == 200
+        )
+        total = client.get(
+            f"/api/v1/audit-events?page_size=1&resource_id={file_id}", headers=owner.headers
+        ).json()["total"]
+        assert total == 2 + limit + 1  # upload, grant, then each allowed download

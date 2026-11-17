@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     rate_limit_register_window_seconds: int = 3600
     rate_limit_refresh_per_ip: int = 60
     rate_limit_refresh_window_seconds: int = 60
+    rate_limit_download_per_user: int = 600
+    rate_limit_download_window_seconds: int = 3600
     rate_limit_grant_per_user: int = 60
     rate_limit_grant_window_seconds: int = 3600
     # Only uploads into someone else's shared folder are limited (they reserve the owner's quota).

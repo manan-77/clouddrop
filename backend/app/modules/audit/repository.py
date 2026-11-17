@@ -16,7 +16,6 @@ class AuditEventView:
     id: uuid.UUID
     created_at: datetime
     action: str
-    result: str
     resource_type: str
     resource_id: uuid.UUID | None
     actor_id: uuid.UUID | None
@@ -61,7 +60,6 @@ class AuditRepository:
                 id=event.id,
                 created_at=event.created_at,
                 action=event.action,
-                result=event.result,
                 resource_type=event.resource_type,
                 resource_id=event.resource_id,
                 actor_id=event.actor_id,

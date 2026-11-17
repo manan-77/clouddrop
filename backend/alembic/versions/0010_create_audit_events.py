@@ -33,7 +33,6 @@ def upgrade() -> None:
         sa.Column("resource_id", sa.Uuid(), nullable=True),
         sa.Column("target_user_id", sa.Uuid(), nullable=True),
         sa.Column("detail", sa.String(length=40), nullable=True),
-        sa.Column("result", sa.String(length=10), nullable=False),
         sa.Column("request_id", sa.String(length=64), nullable=True),
         sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column(
@@ -49,9 +48,6 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.CheckConstraint(f"action IN ({ACTIONS})", name=op.f("ck_audit_events_action_valid")),
-        sa.CheckConstraint(
-            "result IN ('success', 'failure')", name=op.f("ck_audit_events_result_valid")
-        ),
         sa.CheckConstraint(
             "resource_type IN ('file', 'folder', 'user')",
             name=op.f("ck_audit_events_resource_type_valid"),

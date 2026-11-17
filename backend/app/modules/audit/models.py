@@ -5,10 +5,10 @@ from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
-from app.modules.audit.constants import AuditAction, AuditResult, ResourceType
+from app.modules.audit.constants import AuditAction, ResourceType
 
 
-def _values(enum: type[AuditAction] | type[AuditResult] | type[ResourceType]) -> str:
+def _values(enum: type[AuditAction] | type[ResourceType]) -> str:
     return ", ".join(f"'{member.value}'" for member in enum)
 
 
@@ -20,7 +20,6 @@ class AuditEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         CheckConstraint(f"action IN ({_values(AuditAction)})", name="action_valid"),
-        CheckConstraint(f"result IN ({_values(AuditResult)})", name="result_valid"),
         CheckConstraint(f"resource_type IN ({_values(ResourceType)})", name="resource_type_valid"),
         Index(
             "ix_audit_events_workspace_created",
@@ -51,5 +50,4 @@ class AuditEvent(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     detail: Mapped[str | None] = mapped_column(String(40))
-    result: Mapped[str] = mapped_column(String(10))
     request_id: Mapped[str | None] = mapped_column(String(64))

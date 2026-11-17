@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-from app.modules.audit.constants import AuditAction, AuditResult, ResourceType
+from app.modules.audit.constants import AuditAction, ResourceType
 
 
 class AuditEventRead(BaseModel):
@@ -12,7 +12,6 @@ class AuditEventRead(BaseModel):
     id: uuid.UUID
     created_at: datetime
     action: AuditAction
-    result: AuditResult
     resource_type: ResourceType
     resource_id: uuid.UUID | None
     actor_id: uuid.UUID | None

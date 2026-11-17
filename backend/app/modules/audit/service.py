@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.logging import request_id_var
 from app.core.pagination import PageParams
-from app.modules.audit.constants import AuditAction, AuditResult, ResourceType
+from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.models import AuditEvent
 from app.modules.audit.repository import AuditEventView, AuditRepository
 from app.modules.workspaces.service import WorkspaceService
@@ -44,7 +44,6 @@ class AuditService:
                 resource_id=resource_id,
                 target_user_id=target_user_id,
                 detail=detail,
-                result=AuditResult.SUCCESS.value,
                 request_id=None if request_id == "-" else request_id,
             )
         )

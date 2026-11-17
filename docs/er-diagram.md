@@ -110,7 +110,6 @@ erDiagram
         uuid resource_id "no foreign key: outlives purged rows"
         uuid target_user_id FK "SET NULL"
         string detail "short code, e.g. the role"
-        string result "success or failure"
         string request_id
         timestamptz created_at "clock_timestamp()"
     }
