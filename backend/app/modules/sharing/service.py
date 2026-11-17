@@ -65,6 +65,18 @@ class AccessService:
             return Role.OWNER
         return self._granted_role(user_id, file_id=file.id, folder_id=file.folder_id)
 
+    def role_in_folder(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> Role:
+        """The caller's role on a folder they were already allowed to use (owner at the root).
+
+        Fails low: a missing role reads as viewer, which only ever hides controls.
+        """
+        if folder_id is None:
+            return Role.OWNER
+        folder = self.session.scalar(
+            select(Folder).where(Folder.id == folder_id, Folder.deleted_at.is_(None))
+        )
+        return (self.folder_role(user_id, folder) if folder else None) or Role.VIEWER
+
     def can_on_folder(self, user_id: uuid.UUID, folder: Folder, action: Action) -> bool:
         return allows(self.folder_role(user_id, folder), action)
 

@@ -859,3 +859,105 @@ class TestRoundTwoRules:
             assert response.status_code == 200
             counts.append(len(statements))
         assert counts[0] == counts[1]
+
+
+class TestRoleField:
+    """Every file and folder response says what the caller may do, so the UI can hide controls."""
+
+    def test_ownerEditorAndViewerSeeTheirOwnRoleEverywhere(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, editor, viewer = people["owner"], people["editor"], people["viewer"]
+        top = _folder(client, owner, "Top")
+        inner = _folder(client, owner, "Inner", top)
+        file_id = _file(client, owner, s3_client, session, inner)
+        _grant(client, owner, "folders", top, editor, "editor")
+        _grant(client, owner, "folders", top, viewer, "viewer")
+        for who, role in ((owner, "owner"), (editor, "editor"), (viewer, "viewer")):
+            h = who.headers
+            assert client.get(f"/api/v1/folders/{inner}", headers=h).json()["role"] == role
+            assert client.get(f"/api/v1/files/{file_id}", headers=h).json()["role"] == role
+            listed = client.get(f"/api/v1/folders?parent_id={top}", headers=h).json()["items"]
+            assert [f["role"] for f in listed] == [role]
+            files = client.get(f"/api/v1/files?folder_id={inner}", headers=h).json()["items"]
+            assert [f["role"] for f in files] == [role]
+        assert (
+            client.get("/api/v1/folders", headers=owner.headers).json()["items"][0]["role"]
+            == "owner"
+        )
+
+    def test_theBreadcrumbRoleRisesWithANestedEditorGrant(self, client, people) -> None:
+        owner, person = people["owner"], people["editor"]
+        a = _folder(client, owner, "A")
+        b = _folder(client, owner, "B", a)
+        c = _folder(client, owner, "C", b)
+        _grant(client, owner, "folders", a, person, "viewer")
+        _grant(client, owner, "folders", c, person, "editor")
+        path = client.get(f"/api/v1/folders/{c}/path", headers=person.headers).json()
+        assert [(f["name"], f["role"]) for f in path] == [
+            ("A", "viewer"),
+            ("B", "viewer"),
+            ("C", "editor"),
+        ]
+
+    def test_createdAndUploadedItemsCarryTheCallersRole(self, client, people) -> None:
+        owner, editor = people["owner"], people["editor"]
+        top = _folder(client, owner, "Top")
+        _grant(client, owner, "folders", top, editor, "editor")
+        made = client.post(
+            "/api/v1/folders", json={"name": "N", "parent_id": top}, headers=editor.headers
+        )
+        assert made.json()["role"] == "editor"
+        init = client.post(
+            "/api/v1/files/uploads",
+            json={"name": "a.txt", "content_type": "text/plain", "size_bytes": 1, "folder_id": top},
+            headers=editor.headers,
+        )
+        assert init.json()["file"]["role"] == "editor"
+
+
+class TestRoleFieldRoundTwo:
+    def test_aHigherDirectFileGrantShowsInTheListingAndMatchesTheGet(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner, person = people["owner"], people["editor"]
+        folder = _folder(client, owner, "F")
+        plain = _file(client, owner, s3_client, session, folder, "plain.txt")
+        raised = _file(client, owner, s3_client, session, folder, "raised.txt")
+        _grant(client, owner, "folders", folder, person, "viewer")
+        _grant(client, owner, "files", raised, person, "editor")
+        listing = client.get(f"/api/v1/files?folder_id={folder}", headers=person.headers).json()
+        by_name = {f["name"]: f["role"] for f in listing["items"]}
+        assert by_name == {"plain.txt": "viewer", "raised.txt": "editor"}
+        for file_id, expected in ((plain, "viewer"), (raised, "editor")):
+            assert (
+                client.get(f"/api/v1/files/{file_id}", headers=person.headers).json()["role"]
+                == expected
+            )
+
+    def test_theOwnersPathIsOwnerAtEveryStep(self, client, people) -> None:
+        owner = people["owner"]
+        a = _folder(client, owner, "A")
+        b = _folder(client, owner, "B", a)
+        path = client.get(f"/api/v1/folders/{b}/path", headers=owner.headers).json()
+        assert [f["role"] for f in path] == ["owner", "owner"]
+
+    def test_roleIsAlwaysPresentOnEveryFileAndFolderResponse(
+        self, client, people, s3_client, session: Session
+    ) -> None:
+        owner = people["owner"]
+        folder = _folder(client, owner, "F")
+        file_id = _file(client, owner, s3_client, session, folder)
+        schema = client.get("/openapi.json").json()["components"]["schemas"]
+        assert "role" in schema["FileRead"]["required"]
+        assert "role" in schema["FolderRead"]["required"]
+        renamed = client.patch(
+            f"/api/v1/files/{file_id}", json={"name": "n.txt"}, headers=owner.headers
+        )
+        assert renamed.json()["role"] == "owner"
+        assert (
+            client.patch(
+                f"/api/v1/folders/{folder}", json={"name": "G"}, headers=owner.headers
+            ).json()["role"]
+            == "owner"
+        )

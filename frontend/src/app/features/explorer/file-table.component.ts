@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { type FileRead } from '@core/api/models';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
+import { CanManagePipe, CanWritePipe } from '@shared/pipes/role.pipes';
 import { DownloadablePipe } from '@shared/pipes/downloadable.pipe';
 import { FileSizePipe } from '@shared/pipes/file-size.pipe';
 import { IsInPipe } from '@shared/pipes/is-in.pipe';
@@ -11,6 +12,8 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
 @Component({
   selector: 'cd-file-table',
   imports: [
+    CanManagePipe,
+    CanWritePipe,
     DateTimePipe,
     DownloadablePipe,
     FileSizePipe,
@@ -53,24 +56,47 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                 >
                   Download
                 </button>
-                <button
-                  cd-button
-                  variant="secondary"
-                  type="button"
-                  [attr.aria-label]="'Rename ' + file.name"
-                  (click)="rename.emit(file)"
-                >
-                  Rename
-                </button>
-                <button
-                  cd-button
-                  variant="danger"
-                  type="button"
-                  [attr.aria-label]="'Delete ' + file.name"
-                  (click)="remove.emit(file)"
-                >
-                  Delete
-                </button>
+                @if (file.role | canWrite) {
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Rename ' + file.name"
+                    (click)="rename.emit(file)"
+                  >
+                    Rename
+                  </button>
+                }
+                @if (file.role | canManage) {
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [disabled]="file.status !== 'ready'"
+                    [attr.aria-label]="'Share ' + file.name"
+                    (click)="share.emit(file)"
+                  >
+                    Share
+                  </button>
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Activity for ' + file.name"
+                    (click)="activity.emit(file)"
+                  >
+                    Activity
+                  </button>
+                  <button
+                    cd-button
+                    variant="danger"
+                    type="button"
+                    [attr.aria-label]="'Delete ' + file.name"
+                    (click)="remove.emit(file)"
+                  >
+                    Delete
+                  </button>
+                }
               </td>
             </tr>
           }
@@ -85,4 +111,6 @@ export class FileTableComponent {
   readonly download = output<FileRead>();
   readonly rename = output<FileRead>();
   readonly remove = output<FileRead>();
+  readonly share = output<FileRead>();
+  readonly activity = output<FileRead>();
 }

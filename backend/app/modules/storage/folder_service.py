@@ -10,7 +10,7 @@ from app.core.pagination import PageParams
 from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.service import AuditService
 from app.modules.sharing.repository import PermissionRepository
-from app.modules.sharing.service import AccessService, Action
+from app.modules.sharing.service import AccessService, Action, Role
 from app.modules.storage.constants import MAX_FOLDER_DEPTH
 from app.modules.storage.models import Folder
 from app.modules.storage.naming import sanitize_name
@@ -50,6 +50,29 @@ class FolderService:
         granted = self.permissions.folder_grants_among(user_id, [item.id for item in path])
         start = next((i for i, item in enumerate(path) if item.id in granted), 0)
         return path[start:]
+
+    def role_in(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> str:
+        return self.access.role_in_folder(user_id, folder_id).value
+
+    def role_of(self, user_id: uuid.UUID, folder: Folder) -> str:
+        return (self.access.folder_role(user_id, folder) or Role.VIEWER).value
+
+    def path_roles(self, user_id: uuid.UUID, path: list[Folder]) -> list[str]:
+        """The caller's role at each step of a path in one query (it never shrinks going down).
+
+        The path must be the one `get_folder_path` returns: it starts at the first folder the
+        caller was given, so no step is above their access.
+        """
+        if not path or self.workspaces.is_owner(user_id, path[0].workspace_id):
+            return [Role.OWNER.value] * len(path)
+        direct = self.permissions.folder_roles_among(user_id, [item.id for item in path])
+        best = Role.VIEWER
+        roles: list[str] = []
+        for item in path:
+            if item.id in direct and Role(direct[item.id]) == Role.EDITOR:
+                best = Role.EDITOR
+            roles.append(best.value)
+        return roles
 
     def parent_visible(self, user_id: uuid.UUID, folder: Folder) -> bool:
         """Whether the caller may be told the parent id (not for the top of a shared tree)."""

@@ -3,11 +3,12 @@ import { RouterLink } from '@angular/router';
 
 import { type FolderRead } from '@core/api/models';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
+import { CanManagePipe, CanWritePipe } from '@shared/pipes/role.pipes';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 
 @Component({
   selector: 'cd-folder-table',
-  imports: [RouterLink, DateTimePipe, ButtonComponent],
+  imports: [RouterLink, CanManagePipe, CanWritePipe, DateTimePipe, ButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="cd-table-wrap">
@@ -30,24 +31,46 @@ import { ButtonComponent } from '@shared/ui/button/button.component';
               </td>
               <td>{{ folder.updated_at | cdDateTime }}</td>
               <td class="cd-actions">
-                <button
-                  cd-button
-                  variant="secondary"
-                  type="button"
-                  [attr.aria-label]="'Rename folder ' + folder.name"
-                  (click)="rename.emit(folder)"
-                >
-                  Rename
-                </button>
-                <button
-                  cd-button
-                  variant="danger"
-                  type="button"
-                  [attr.aria-label]="'Delete folder ' + folder.name"
-                  (click)="remove.emit(folder)"
-                >
-                  Delete
-                </button>
+                @if (folder.role | canWrite) {
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Rename folder ' + folder.name"
+                    (click)="rename.emit(folder)"
+                  >
+                    Rename
+                  </button>
+                }
+                @if (folder.role | canManage) {
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Share folder ' + folder.name"
+                    (click)="share.emit(folder)"
+                  >
+                    Share
+                  </button>
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Activity for folder ' + folder.name"
+                    (click)="activity.emit(folder)"
+                  >
+                    Activity
+                  </button>
+                  <button
+                    cd-button
+                    variant="danger"
+                    type="button"
+                    [attr.aria-label]="'Delete folder ' + folder.name"
+                    (click)="remove.emit(folder)"
+                  >
+                    Delete
+                  </button>
+                }
               </td>
             </tr>
           }
@@ -60,4 +83,6 @@ export class FolderTableComponent {
   readonly folders = input.required<readonly FolderRead[]>();
   readonly rename = output<FolderRead>();
   readonly remove = output<FolderRead>();
+  readonly share = output<FolderRead>();
+  readonly activity = output<FolderRead>();
 }

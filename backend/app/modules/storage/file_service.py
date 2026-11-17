@@ -17,7 +17,8 @@ from app.core.pagination import PageParams
 from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.service import AuditService
 from app.modules.processing.dispatcher import ProcessingDispatcher
-from app.modules.sharing.service import AccessService, Action
+from app.modules.sharing.repository import PermissionRepository
+from app.modules.sharing.service import AccessService, Action, Role
 from app.modules.storage.constants import DOWNLOADABLE_STATUSES, FileStatus
 from app.modules.storage.models import File, FileVersion, Folder
 from app.modules.storage.naming import sanitize_name
@@ -313,6 +314,26 @@ class FileService:
             return False
         folder = self.folders.get_any(folder_id)
         return folder is not None and not self.workspaces.is_owner(user_id, folder.workspace_id)
+
+    def role_in(self, user_id: uuid.UUID, folder_id: uuid.UUID | None) -> str:
+        return self.access.role_in_folder(user_id, folder_id).value
+
+    def list_roles(
+        self, user_id: uuid.UUID, files: list[File], folder_role: str
+    ) -> dict[uuid.UUID, str]:
+        """Per-file roles for a listing: the folder's role, raised by a direct grant on the file."""
+        if folder_role == Role.OWNER.value or not files:
+            return {file.id: folder_role for file in files}
+        direct = PermissionRepository(self.session).file_roles_among(user_id, [f.id for f in files])
+        return {
+            file.id: Role.EDITOR.value
+            if Role.EDITOR.value in (folder_role, direct.get(file.id))
+            else Role.VIEWER.value
+            for file in files
+        }
+
+    def role_of(self, user_id: uuid.UUID, file: File) -> str:
+        return (self.access.file_role(user_id, file) or Role.VIEWER).value
 
     def folder_visible(self, user_id: uuid.UUID, file: File) -> bool:
         """Whether the caller may be told the holding folder (not a file-only grantee)."""

@@ -1,0 +1,24 @@
+.people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--cd-space-2);
+}
+
+.people li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cd-space-2);
+}
+
+.who {
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}
+
+.notice {
+  color: var(--cd-text-muted);
+  min-height: 1.5em;
+}

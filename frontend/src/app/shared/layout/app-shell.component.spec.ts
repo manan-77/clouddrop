@@ -41,12 +41,13 @@ describe('AppShellComponent', () => {
     expect(root.textContent).not.toContain('Sign out');
   });
 
-  it('signedIn_showsNameFilesLinkAndSignOutWhichClearsTheSession', async () => {
+  it('signedIn_showsNameNavLinksAndSignOutWhichClearsTheSession', async () => {
     const { fixture, root } = await setup(true);
     const session = TestBed.inject(SessionStore);
     expect(root.querySelector('.user')?.textContent).toBe('Ada');
     expect([...root.querySelectorAll('nav a')].map((a) => a.textContent?.trim())).toEqual([
       'Files',
+      'Shared with me',
     ]);
 
     const signOut = [...root.querySelectorAll('button')].find((b) =>

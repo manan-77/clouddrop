@@ -173,3 +173,14 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 131. **Remove a column the moment nothing can write it**; a dead `result` field advertised outcomes that never existed.
 132. **Anything that writes an audit row per request needs its own rate limit**, or a low-privileged user can grow someone else's table.
 133. **Scope a limit to the actor it protects against and apply it after the cheap access check**: a download limit for grantees must not throttle owners or count rejected requests.
+134. **The UI needs the caller's role in every response**: without it the client cannot hide controls and ends up guessing; compute it once per list (not per item) to keep query counts flat.
+135. **Never call methods or `$any` in a template**: use pure pipes (`canWrite`, `auditLabel`) and template reference variables.
+136. **A role computed once per folder is wrong when a file has a higher direct grant**: take the max per item in the same query, and test viewer-on-folder plus editor-on-file.
+137. **"Not loaded yet" must read as "no permission"** for any control gated by a role, including drag-and-drop.
+138. **Drive reads through a `switchMap` trigger** so only the latest response can update the screen, and keep the old list visible while it reloads.
+139. **Design tokens must exist**: `var(--space-2)` silently did nothing; grep `_tokens.scss` before using one.
+140. **A signal that flips false and back inside one tick changes nothing in the DOM**: tests must run change detection between the steps, and "rebuild a control" fixes need a real intermediate render.
+141. **Do not unmount role-gated controls on every reload**: keep the last known answer for the same resource and hide only for the first load and for errors.
+142. **A "last known" cache must be keyed to the thing it describes and written only from a view that belongs to it**: the store follows the route a tick late, so the old folder's view can sit under the new folder's id.
+143. **Every automatic step-back must prove it moves strictly earlier**, or inconsistent server data turns it into a request loop.
+144. **A cached "last known" value must be dropped when the load fails**, or a Retry briefly shows controls for something the user may no longer reach.
