@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     rate_limit_register_window_seconds: int = 3600
     rate_limit_refresh_per_ip: int = 60
     rate_limit_refresh_window_seconds: int = 60
+    rate_limit_grant_per_user: int = 60
+    rate_limit_grant_window_seconds: int = 3600
     purge_interval_seconds: int = 3600
     purge_retention_days: int = 30
     purge_batch_size: int = 100

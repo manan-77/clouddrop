@@ -159,3 +159,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 117. **A doc that claims "done" must be checked sentence by sentence against the code**; say "done with residual risk" and name the exact sites instead of a blanket claim.
 118. **Diagrams must say what is built and what is planned**; mark unbuilt flows explicitly so the docs do not promise features that do not exist.
 119. **Mermaid sequence messages cannot contain semicolons** (they separate statements); use commas or parentheses, and list every real failure edge in state diagrams.
+120. **Lookups that filter by the caller's workspace cannot support sharing**: fetch the resource by id, then ask the access function; every denial must look exactly like a missing resource.
+121. **A model change needs a drift test**: compare the model metadata with the migrated schema so a forgotten migration fails in CI.

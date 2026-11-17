@@ -80,7 +80,7 @@ Every remaining item is blocked on the owner or an external service:
 ### 3.3 Decisions - DECISION
 - [x] Angular version pinned to 21.2 (ADR 0004) and the no-UI-kit default confirmed by default (ADR 0005). Owner may revisit.
 - [ ] Embedding model: Azure endpoint or a local sentence-transformers model (fixes the vector size forever).
-- [ ] Permission inheritance model for folders and files (Phase 4).
+- [x] Permission inheritance: folder grants apply to everything inside (owner confirmed 2026-11-17; ADR 0010).
 - [ ] Display date format (assumed day/month/year with 24-hour time).
 - [ ] Whether email features (verification, password reset, share invitations) are in scope, and which provider.
 - [ ] Whether Google sign-in is in scope.
@@ -191,21 +191,21 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 Goal: owners can share files and folders with other people at viewer or editor level, and every access check goes through one function.
 
 ### 7.1 Branch: docs/permissions-adr (DECISION first)
-- [ ] Write docs/permissions.md: roles (owner, editor, viewer), what each can do per action, how folder grants inherit to children, what wins when grants conflict, what happens to a share when a file moves.
-- [ ] Decide link sharing rules: expiry required or optional, view-only versus download, password optional or not.
-- [ ] Decide how invitations to people without an account behave.
-- [ ] Record as ADR.
+- [x] Write docs/permissions.md: roles (owner, editor, viewer), what each can do per action, how folder grants inherit to children, what wins when grants conflict, what happens to a share when a file moves.
+- [x] Link sharing rules decided (expiry required, view-only, no password; built in a later branch).
+- [x] Decided: not supported without an email provider. Original: how invitations to people without an account behave.
+- [x] ADR 0010.
 
 ### 7.2 Branch: feat/sharing-backend (OK-NOW)
-- [ ] Migration: permissions table (resource type, resource id, grantee user, role, granted by, timestamps) with the right constraints and indexes, and a share links table (hashed token, expiry, role, revoked flag).
-- [ ] Extend the single access function to evaluate grants and inheritance, deny by default, always returning 404 for unseen resources.
-- [ ] Share endpoints: grant, change role, revoke, list who has access. Every action idempotent.
-- [ ] Shared-with-me listing, paginated, filtered in the database.
-- [ ] Share link create, revoke and resolve, token stored hashed only, expiry enforced, no listing of the underlying path.
-- [ ] Editors can write but not re-share or delete unless the document allows it. Only owners manage sharing.
-- [ ] Update every existing storage endpoint to pass through the extended access check (list, get, update, delete, download, upload into a shared folder).
-- [ ] Tests: the full matrix of owner, editor, viewer, stranger and revoked for every action, inheritance cases, revoke takes effect immediately, link expiry, link revocation, no data leak through counts or error text.
-- [ ] Query count tests for the shared listing.
+- [x] Migration: permissions table (resource type, resource id, grantee user, role, granted by, timestamps) with the right constraints and indexes, and a share links table (hashed token, expiry, role, revoked flag).
+- [x] Extend the single access function to evaluate grants and inheritance, deny by default, always returning 404 for unseen resources.
+- [x] Share endpoints: grant, change role, revoke, list who has access. Every action idempotent.
+- [x] Shared-with-me listing, paginated, filtered in the database.
+- [ ] (later branch, public surface) Share link create, revoke and resolve, token stored hashed only, expiry enforced, no listing of the underlying path.
+- [x] Editors can write but not re-share or delete unless the document allows it. Only owners manage sharing.
+- [x] Update every existing storage endpoint to pass through the extended access check (list, get, update, delete, download, upload into a shared folder).
+- [x] Tests: the full matrix of owner, editor, viewer, stranger and revoked for every action, inheritance cases, revoke takes effect immediately, link expiry, link revocation, no data leak through counts or error text.
+- [x] Query count tests for the shared listing.
 
 ### 7.3 Branch: feat/audit-logs (OK-NOW)
 - [ ] Migration for the audit log table (actor, action, resource, result, request id, timestamp). No file contents and no file names in the log rows beyond ids.

@@ -53,6 +53,19 @@ Rate limits (fixed window, Redis, per IP and for login also per account; default
 
 While no bucket is configured (`S3_BUCKET` empty), only the routes that talk to S3 return 503 `storage_not_configured`: upload init, upload completion and download. Listing, reading, renaming and deleting files, folders, auth and health are unaffected.
 
+## Sharing (`/api/v1`) - authenticated
+
+Rules are in `docs/permissions.md`: a grant on a folder covers everything inside it; viewer reads, editor reads and writes, only the owner deletes and shares. A caller without access gets 404.
+
+| Method | Path | Success | Notes |
+|---|---|---|---|
+| POST | `/folders/{id}/permissions`, `/files/{id}/permissions` | 201 + `Location`, or 200 when the grant already existed (role updated) | Body `email` (an existing account), `role` (`viewer` or `editor`). 404 `user_not_found`, 422 `cannot_share_with_self`, 409 `file_not_ready` (files must be `ready`), 429 after 60 grants per hour |
+| GET | `/folders/{id}/permissions`, `/files/{id}/permissions` | 200 paginated | Owner only |
+| GET / PATCH / DELETE | `.../permissions/{permission_id}` | 200 / 200 / 204 | PATCH body `role`. Revoking takes effect immediately |
+| GET | `/shared-with-me` | 200 paginated | Direct grants only (`resource_type`, `id`, `name`, `role`, `owner_name`, and for files `size_bytes`, `content_type`, `status`) |
+
+Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given. Non-owners can download only `ready` files.
+
 ## Storage setup notes (S3)
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.

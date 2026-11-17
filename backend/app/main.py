@@ -9,6 +9,7 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
+from app.modules.sharing.router import router as sharing_router
 from app.modules.storage.file_router import router as file_router
 from app.modules.storage.folder_router import router as folder_router
 
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(folder_router)
     app.include_router(file_router)
+    app.include_router(sharing_router)
     return app
 
 

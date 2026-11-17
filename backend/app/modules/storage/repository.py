@@ -36,6 +36,17 @@ class FolderRepository:
             query = query.with_for_update(read=True)
         return self.session.scalar(query)
 
+    def get_any(
+        self, folder_id: uuid.UUID, *, lock: Literal["update", "share"] | None = None
+    ) -> Folder | None:
+        """An active folder in any workspace; the caller must check access."""
+        query = select(Folder).where(Folder.id == folder_id, only_active(Folder))
+        if lock == "update":
+            query = query.with_for_update()
+        elif lock == "share":
+            query = query.with_for_update(read=True)
+        return self.session.scalar(query)
+
     def get_path(
         self, workspace_id: uuid.UUID, folder_id: uuid.UUID, max_depth: int
     ) -> list[Folder]:
@@ -104,6 +115,11 @@ class FileRepository:
         query = select(File).where(
             File.id == file_id, File.workspace_id == workspace_id, only_active(File)
         )
+        return self.session.scalar(query.with_for_update() if for_update else query)
+
+    def get_any(self, file_id: uuid.UUID, *, for_update: bool = False) -> File | None:
+        """An active file in any workspace; the caller must check access."""
+        query = select(File).where(File.id == file_id, only_active(File))
         return self.session.scalar(query.with_for_update() if for_update else query)
 
     def list_files(
