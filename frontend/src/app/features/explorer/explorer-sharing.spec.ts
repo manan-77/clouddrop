@@ -233,4 +233,25 @@ describe('ExplorerPage sharing controls', () => {
     fixture.detectChanges();
     expect(root.querySelector('cd-upload-button')).toBeNull();
   });
+
+  it('aFailedReloadForgetsTheAnswerSoRetryOffersNothingWhileItLoads', async () => {
+    const { fixture, backend, root } = await setup('shared', 'editor');
+    expect(root.querySelector('cd-upload-button')).not.toBeNull();
+    const store = fixture.debugElement.injector.get(ExplorerStore);
+    store.reload();
+    await fixture.whenStable();
+    const [first] = backend.match(() => true);
+    first.flush({ error: { code: 'folder_not_found' } }, { status: 404, statusText: 'x' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+    // Retry: the stale answer must not bring the controls back while the retry is pending.
+    store.reload();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(root.querySelector('cd-skeleton')).not.toBeNull();
+    expect(root.querySelector('cd-upload-button')).toBeNull();
+    expect(buttons(root)).not.toContain('New folder');
+    backend.match(() => true).forEach((r) => !r.cancelled && r.flush(page([])));
+  });
 });

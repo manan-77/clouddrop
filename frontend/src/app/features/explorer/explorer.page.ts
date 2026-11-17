@@ -120,6 +120,9 @@ export class ExplorerPage {
       const writable = this.writableNow();
       if (writable !== null) {
         this.lastWritable.set({ folderId: this.currentFolderId(), writable });
+      } else if (this.store.view().status === 'error') {
+        // A failed load forgets the answer: the access may be gone, and Retry must start unknown.
+        this.lastWritable.set(null);
       }
     });
     // A finished upload into the folder on screen refreshes the listing.

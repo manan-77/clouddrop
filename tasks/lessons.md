@@ -183,3 +183,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 141. **Do not unmount role-gated controls on every reload**: keep the last known answer for the same resource and hide only for the first load and for errors.
 142. **A "last known" cache must be keyed to the thing it describes and written only from a view that belongs to it**: the store follows the route a tick late, so the old folder's view can sit under the new folder's id.
 143. **Every automatic step-back must prove it moves strictly earlier**, or inconsistent server data turns it into a request loop.
+144. **A cached "last known" value must be dropped when the load fails**, or a Retry briefly shows controls for something the user may no longer reach.
