@@ -7,11 +7,14 @@ import pytest
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from moto import mock_aws
+from pwdlib import PasswordHash
+from pwdlib.hashers.argon2 import Argon2Hasher
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.core import security
 from app.core.config import get_settings
 from app.core.ratelimit import RateLimitResult, get_rate_limiter
 from app.db.session import get_session
@@ -56,6 +59,16 @@ def session(engine: Engine) -> Iterator[Session]:
         test_session.close()
         outer.rollback()
         connection.close()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cheap_password_hashing() -> Iterator[None]:
+    "Argon2 at production cost made every test user; tests need a valid hash, not a slow one."
+    original = (security._hasher, security._DUMMY_HASH)
+    security._hasher = PasswordHash((Argon2Hasher(time_cost=1, memory_cost=8, parallelism=1),))
+    security._DUMMY_HASH = security._hasher.hash("timing-equaliser-not-a-real-password")
+    yield
+    security._hasher, security._DUMMY_HASH = original
 
 
 BUCKET = "test-bucket"
