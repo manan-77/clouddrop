@@ -196,3 +196,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 154. **A persistent `mockImplementation` that throws leaks past its test**; use `mockImplementationOnce` for a throwing double.
 155. **When a button is disabled by a binding, a click before change detection is ignored**: assert the request exists (`expectOne`) before asserting the DOM.
 156. **Bind a select's choice with `[selected]` on each option**, not `[value]` on the select: the value is applied before the options exist, so the screen can show a different choice than the one sent. Always test the untouched default.
+157. **A route fragment (or any route input) can change without a reload**: follow it as an observable with `switchMap` instead of reading it once, or the page keeps acting on the previous value.
+158. **A template reference on an element that carries a component points at the component, not the element**: use `viewChild(ref, { read: ElementRef })` to focus it.

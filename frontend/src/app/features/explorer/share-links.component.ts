@@ -2,10 +2,12 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
   inject,
   input,
   type OnInit,
   signal,
+  viewChild,
 } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -44,7 +46,9 @@ const DAY_CHOICES = [1, 7, 30] as const;
           </option>
         }
       </select>
-      <button cd-button type="button" [busy]="busy()" (click)="create()">Create link</button>
+      <button #createButton cd-button type="button" [busy]="busy()" (click)="create()">
+        Create link
+      </button>
     </div>
 
     <p class="cd-form-error" role="alert">{{ error() }}</p>
@@ -127,6 +131,9 @@ export class ShareLinksComponent implements OnInit {
   /** The link just made and its full address; memory only, dropped when that link is turned off. */
   protected readonly created = signal<{ id: string; address: string } | null>(null);
 
+  private readonly createButton = viewChild('createButton', {
+    read: ElementRef<HTMLButtonElement>,
+  });
   private readonly api = inject(ShareLinksApi);
   private readonly resolver = inject(ErrorResolver);
   private readonly router = inject(Router);
@@ -204,6 +211,8 @@ export class ShareLinksComponent implements OnInit {
           }
           this.announcement.set('Link turned off.');
           this.reloads.next();
+          // The focused button leaves with its row; keep the keyboard user in the dialog.
+          this.createButton()?.nativeElement.focus();
         },
         error: (error: unknown) => this.error.set(this.resolver.resolve(error).message),
       });

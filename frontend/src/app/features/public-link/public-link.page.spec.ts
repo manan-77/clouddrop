@@ -1,5 +1,7 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { ActivatedRoute } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
 import { DownloadService } from '@core/download/download.service';
@@ -20,20 +22,23 @@ describe('PublicLinkPage', () => {
   let backend: HttpTestingController;
   const root = () => fixture.nativeElement as HTMLElement;
 
+  let fragment$: BehaviorSubject<string | null>;
+  // The route's fragment is the token, so the spec drives it like the router would.
   const setup = (hash: string) => {
+    fragment$ = new BehaviorSubject<string | null>(hash.replace(/^#/, '') || null);
     TestBed.configureTestingModule({
-      providers: [...provideAuthTesting(), { provide: DownloadService, useValue: downloads }],
+      providers: [
+        ...provideAuthTesting(),
+        { provide: DownloadService, useValue: downloads },
+        { provide: ActivatedRoute, useValue: { fragment: fragment$ } },
+      ],
     });
-    window.location.hash = hash;
     backend = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(PublicLinkPage);
     fixture.detectChanges();
   };
   beforeEach(() => downloads.start.mockReset());
-  afterEach(() => {
-    window.location.hash = '';
-    TestBed.inject(HttpTestingController).verify();
-  });
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
 
   it('noToken_showsTheUnavailableMessageAndSendsNothing', () => {
     setup('');
@@ -107,12 +112,42 @@ describe('PublicLinkPage', () => {
     expect(root().textContent).not.toContain('javascript');
   });
 
-  it('token_isReadOnceWhenThePageOpens', () => {
+  it('aNewFragmentInTheSameTab_resolvesTheNewLinkAndDownloadsThatOne', () => {
     setup('#first-token');
     backend.expectOne(RESOLVE).flush(FILE);
-    window.location.hash = '#second-token';
     fixture.detectChanges();
+    expect(root().textContent).toContain('plan.pdf');
+    // Another link pasted into the same tab: no page reload, only the fragment changes.
+    fragment$.next('second-token');
+    fixture.detectChanges();
+    expect(root().textContent).not.toContain('plan.pdf');
+    const again = backend.expectOne(RESOLVE);
+    expect(again.request.body).toEqual({ token: 'second-token' });
+    again.flush({ ...FILE, file_name: 'other.pdf' });
+    fixture.detectChanges();
+    expect(root().textContent).toContain('other.pdf');
     (root().querySelector('button') as HTMLButtonElement).click();
-    expect(backend.expectOne(DOWNLOAD).request.body).toEqual({ token: 'first-token' });
+    expect(backend.expectOne(DOWNLOAD).request.body).toEqual({ token: 'second-token' });
+  });
+
+  it('aNewFragmentThatIsEmpty_dropsTheOldFileAndShowsTheUnavailableMessage', () => {
+    setup('#first-token');
+    backend.expectOne(RESOLVE).flush(FILE);
+    fixture.detectChanges();
+    fragment$.next(null);
+    fixture.detectChanges();
+    expect(root().textContent).not.toContain('plan.pdf');
+    expect(root().textContent).toContain('This link is not available.');
+    expect(root().querySelector('button')).toBeNull();
+  });
+
+  it('aNewFragmentWhileTheOldOneIsResolving_ignoresTheOlderAnswer', () => {
+    setup('#first-token');
+    const older = backend.expectOne(RESOLVE);
+    fragment$.next('second-token');
+    expect(older.cancelled).toBe(true);
+    backend.expectOne(RESOLVE).flush({ ...FILE, file_name: 'second.pdf' });
+    fixture.detectChanges();
+    expect(root().textContent).toContain('second.pdf');
   });
 });

@@ -6,9 +6,9 @@ import {
   type OnInit,
   signal,
 } from '@angular/core';
-import { DOCUMENT } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { finalize } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
+import { catchError, finalize, of, switchMap, tap } from 'rxjs';
 
 import { type PublicLink } from '@core/api/models';
 import { ShareLinksApi } from '@core/api/share-links-api.service';
@@ -64,26 +64,40 @@ export class PublicLinkPage implements OnInit {
   private readonly api = inject(ShareLinksApi);
   private readonly downloads = inject(DownloadService);
   private readonly resolver = inject(ErrorResolver);
-  private readonly document = inject(DOCUMENT);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private token = '';
 
   ngOnInit(): void {
-    this.token = this.document.location.hash.slice(1);
-    if (!this.token) {
-      this.error.set(UNAVAILABLE);
-      this.loading.set(false);
-      return;
-    }
-    this.api
-      .resolve(this.token)
+    // The fragment is the token. A fragment-only change (another link pasted into this tab) does
+    // not reload the page, so it is followed here and the older answer is dropped.
+    this.route.fragment
       .pipe(
-        finalize(() => this.loading.set(false)),
+        tap((fragment) => {
+          this.token = fragment ?? '';
+          this.link.set(null);
+          this.error.set(null);
+          this.downloadError.set(null);
+          this.loading.set(this.token !== '');
+        }),
+        switchMap(() =>
+          this.token === ''
+            ? of(null)
+            : this.api.resolve(this.token).pipe(
+                tap({
+                  next: (result) => this.link.set(result),
+                  error: (error: unknown) => this.error.set(this.resolver.resolve(error).message),
+                }),
+                catchError(() => of(null)),
+                finalize(() => this.loading.set(false)),
+              ),
+        ),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe({
-        next: (result) => this.link.set(result),
-        error: (error: unknown) => this.error.set(this.resolver.resolve(error).message),
+      .subscribe((result) => {
+        if (this.token === '' && result === null) {
+          this.error.set(UNAVAILABLE);
+        }
       });
   }
 

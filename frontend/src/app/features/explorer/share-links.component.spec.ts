@@ -169,6 +169,14 @@ describe('ShareLinksComponent', () => {
     expect(root().querySelector('input[aria-label="Link address"]')).toBeNull();
   });
 
+  it('revoke_movesFocusToTheCreateButtonSoKeyboardUsersKeepTheirPlace', () => {
+    setup(link('l1'));
+    click('.links li button');
+    backend.expectOne(`${BASE}/l1`).flush(null, { status: 204, statusText: 'No Content' });
+    expect(document.activeElement).toBe(root().querySelector('.make button'));
+    backend.expectOne(LIST).flush(page(link('l1', '2026-11-02T10:00:00Z')));
+  });
+
   it('revoke_ofADifferentLinkKeepsTheNewAddress', () => {
     setup(link('old'));
     make();
