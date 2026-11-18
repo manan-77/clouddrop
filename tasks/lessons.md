@@ -184,3 +184,10 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 142. **A "last known" cache must be keyed to the thing it describes and written only from a view that belongs to it**: the store follows the route a tick late, so the old folder's view can sit under the new folder's id.
 143. **Every automatic step-back must prove it moves strictly earlier**, or inconsistent server data turns it into a request loop.
 144. **A cached "last known" value must be dropped when the load fails**, or a Retry briefly shows controls for something the user may no longer reach.
+145. **Put secrets in request bodies or URL fragments, never in the path or query**: access logs record paths, and a link token in a path is a secret in a log.
+146. **Public failure paths must be one answer**: unknown, expired, revoked and deleted all return the same body, or the endpoint becomes an oracle.
+147. **Alembic `op.f()` is needed when dropping a named constraint under a naming convention**, or the convention prefix is applied twice.
+148. **An anonymous endpoint that writes anything needs its own throttle on the write**, not just a rate limit on the request.
+149. **Lock the parent row before enforcing a per-parent cap**, or concurrent creates pass the count together.
+150. **Decide "once per window" with one conditional UPDATE ... RETURNING on the database clock**, not a read-then-write on the app clock.
+151. **When adding a line to a doc by string anchor, check which entity it landed in** (the first match was a different table).

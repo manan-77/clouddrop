@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -41,3 +42,23 @@ class Permission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     role: Mapped[str] = mapped_column(String(10))
+
+
+class ShareLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """A view-only link to one file for anyone who holds the token. Only a hash of the token is
+    stored; the raw token is shown once, when the link is created."""
+
+    __tablename__ = "share_links"
+    __table_args__ = (Index("ix_share_links_file_id", "file_id"),)
+
+    file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"))
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # clock_timestamp(): links made in one transaction still list in the order they were made.
+    created_at: Mapped[datetime] = mapped_column(server_default=text("clock_timestamp()"))
+    expires_at: Mapped[datetime]
+    revoked_at: Mapped[datetime | None]
+    # When a download was last recorded in the audit trail (throttles those rows).
+    last_downloaded_at: Mapped[datetime | None]

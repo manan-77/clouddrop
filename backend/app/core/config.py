@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     rate_limit_register_window_seconds: int = 3600
     rate_limit_refresh_per_ip: int = 60
     rate_limit_refresh_window_seconds: int = 60
+    rate_limit_public_link_per_ip: int = 60
+    rate_limit_public_link_window_seconds: int = 60
+    rate_limit_public_link_per_token: int = 120
+    # At most one download event per link in this window, so a token holder cannot fill a trail.
+    share_link_audit_window_seconds: int = 60
+    share_link_max_days: int = 30
+    share_link_max_active_per_file: int = 20
     rate_limit_download_per_user: int = 600
     rate_limit_download_window_seconds: int = 3600
     rate_limit_grant_per_user: int = 60

@@ -15,3 +15,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0009](0009-server-side-multipart-part-listing.md) | The server lists multipart parts; the browser never reads ETag | Accepted |
 | [0010](0010-folder-grants-inherit-to-descendants.md) | Folder grants inherit to descendants; access evaluated live | Accepted |
 | [0011](0011-audit-events-in-the-same-transaction.md) | Audit events commit with the action and hold ids only | Accepted |
+| [0012](0012-share-links-for-files.md) | Share links are token links to one file | Accepted |

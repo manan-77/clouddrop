@@ -14,6 +14,8 @@ erDiagram
     file_versions ||--o{ processing_jobs : "has one per stage"
     file_versions ||--o{ document_chunks : "has many"
     workspaces ||--o{ audit_events : "trail of"
+    files ||--o{ share_links : "linked by"
+    users ||--o{ share_links : "created by"
     folders ||--o{ permissions : "granted on"
     files ||--o{ permissions : "granted on"
     users ||--o{ permissions : "grantee"
@@ -98,6 +100,17 @@ erDiagram
         uuid grantee_id FK
         uuid granted_by FK "SET NULL"
         string role "viewer or editor; the owner is implicit"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    share_links {
+        uuid id PK
+        uuid file_id FK "CASCADE"
+        uuid created_by FK "SET NULL"
+        string token_hash "sha256 of the token, unique"
+        timestamptz expires_at
+        timestamptz revoked_at
+        timestamptz last_downloaded_at "throttles download audit rows"
         timestamptz created_at
         timestamptz updated_at
     }

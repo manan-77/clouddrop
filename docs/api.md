@@ -68,6 +68,21 @@ Every file and folder response carries `role` (`owner`, `editor` or `viewer`): w
 
 Existing folder and file endpoints now accept resources in a shared tree according to the caller's role. Breadcrumbs for a grantee start at the folder they were given and the hidden parent id is `null`. Non-owners see and download only `ready` files (plus their own unfinished uploads). Upload init endpoints are rate limited per user (429).
 
+## Share links (`/api/v1`)
+
+View-only links to one `ready` file for anyone who holds the token (decisions in `docs/permissions.md` and ADR 0012).
+
+| Method | Path | Success | Notes |
+|---|---|---|---|
+| POST | `/files/{id}/share-links` | 201 + `Location` | Owner only. Body `expires_in_days` (1 to 30, default 7). Returns `id`, `expires_at`, `revoked_at`, `created_at` and `token`, **shown once**; only a hash is stored. `Location` points at the GET below. 409 `file_not_ready`, 422 `link_too_long` (every value over 30; below 1 is `validation_error`), `too_many_links` (20 active per file) |
+| GET | `/files/{id}/share-links` | 200 paginated | Owner only. Never includes the token |
+| GET | `/files/{id}/share-links/{link_id}` | 200 | Owner only; never includes the token |
+| DELETE | `/files/{id}/share-links/{link_id}` | 204 | Owner only; repeating it changes nothing |
+| POST | `/public/share-links/resolve` | 200 | No sign-in. Body `token`. Returns `file_name`, `size_bytes`, `content_type`, `expires_at` |
+| POST | `/public/share-links/download` | 200 | No sign-in. Body `token`. Returns a short-lived download `url` and `expires_in`; the download is recorded in the owner's trail as `share_link.downloaded` with no actor |
+
+The token travels in the request **body**, never the URL, so it stays out of access logs; a link given to a person should put the token in the URL fragment (`/s#<token>`), which browsers never send to a server. Every unusable link (unknown, expired, revoked, file deleted or not ready) is the same `404 link_not_found`. The public endpoints are limited to 60 requests per minute per client address (`RATE_LIMIT_PUBLIC_LINK_PER_IP`) and 120 per minute per token (`RATE_LIMIT_PUBLIC_LINK_PER_TOKEN`); a malformed body is a 422 `validation_error`, any other bad token the same 404. At most one `share_link.downloaded` event is recorded per link per minute. Responses that carry a token or a download URL are `Cache-Control: no-store`. Audit actions added: `share_link.created`, `share_link.revoked`, `share_link.downloaded`.
+
 ## Audit trail (`/api/v1/audit-events`) - authenticated
 
 | Method | Path | Success | Notes |
