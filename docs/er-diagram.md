@@ -15,6 +15,7 @@ erDiagram
     file_versions ||--o{ document_chunks : "has many"
     workspaces ||--o{ audit_events : "trail of"
     files ||--o{ share_links : "linked by"
+    users ||--o{ share_links : "created by"
     folders ||--o{ permissions : "granted on"
     files ||--o{ permissions : "granted on"
     users ||--o{ permissions : "grantee"
@@ -36,6 +37,7 @@ erDiagram
         string token_hash UK "sha-256, never the raw token"
         timestamptz expires_at
         timestamptz revoked_at
+        timestamptz last_downloaded_at "throttles download audit rows"
         timestamptz created_at
     }
     workspaces {

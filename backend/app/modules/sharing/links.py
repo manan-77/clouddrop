@@ -3,7 +3,6 @@ import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -12,6 +11,7 @@ from app.core.pagination import PageParams
 from app.modules.audit.constants import AuditAction, ResourceType
 from app.modules.audit.service import AuditService
 from app.modules.sharing.models import ShareLink
+from app.modules.sharing.repository import ShareLinkRepository
 from app.modules.sharing.service import AccessService, Action
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File
@@ -19,7 +19,7 @@ from app.modules.storage.repository import FileRepository, FileVersionRepository
 from app.modules.storage.s3 import S3Storage
 
 
-def _hash(token: str) -> str:
+def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
@@ -35,15 +35,19 @@ class ShareLinkService:
         self.audit = AuditService(session)
         self.files = FileRepository(session)
         self.versions = FileVersionRepository(session)
+        self.links = ShareLinkRepository(session)
 
-    def _owned_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> File:
-        file = self.files.get_any(file_id)
+    def _owned_file(
+        self, user_id: uuid.UUID, file_id: uuid.UUID, *, for_update: bool = False
+    ) -> File:
+        file = self.files.get_any(file_id, for_update=for_update)
         if file is None or not self.access.can_on_file(user_id, file, Action.SHARE):
             raise NotFoundError("File not found", code="file_not_found")
         return file
 
     def create(self, user_id: uuid.UUID, file_id: uuid.UUID, days: int) -> tuple[ShareLink, str]:
-        file = self._owned_file(user_id, file_id)
+        # The row lock serialises creates for one file, so the cap below cannot be raced past.
+        file = self._owned_file(user_id, file_id, for_update=True)
         if days > self.settings.share_link_max_days:
             raise UnprocessableError(
                 f"A link can last at most {self.settings.share_link_max_days} days",
@@ -51,26 +55,17 @@ class ShareLinkService:
             )
         if file.status != FileStatus.READY:
             raise ConflictError("The file is not available yet", code="file_not_ready")
-        active = self.session.scalar(
-            select(func.count())
-            .select_from(ShareLink)
-            .where(
-                ShareLink.file_id == file_id,
-                ShareLink.revoked_at.is_(None),
-                ShareLink.expires_at > datetime.now(UTC),
-            )
-        )
-        if (active or 0) >= self.settings.share_link_max_active_per_file:
+        now = datetime.now(UTC)
+        if self.links.count_active(file_id, now) >= self.settings.share_link_max_active_per_file:
             raise UnprocessableError("This file has too many active links", code="too_many_links")
         token = secrets.token_urlsafe(32)
         link = ShareLink(
             file_id=file_id,
             created_by=user_id,
-            token_hash=_hash(token),
-            expires_at=datetime.now(UTC) + timedelta(days=days),
+            token_hash=hash_token(token),
+            expires_at=now + timedelta(days=days),
         )
-        self.session.add(link)
-        self.session.flush()
+        self.links.add(link)
         self._audit(user_id, file, AuditAction.LINK_CREATED, link)
         self.session.commit()
         return link, token
@@ -79,24 +74,18 @@ class ShareLinkService:
         self, user_id: uuid.UUID, file_id: uuid.UUID, params: PageParams
     ) -> tuple[list[ShareLink], int]:
         self._owned_file(user_id, file_id)
-        where = [ShareLink.file_id == file_id]
-        total = self.session.scalar(select(func.count()).select_from(ShareLink).where(*where))
-        rows = self.session.scalars(
-            select(ShareLink)
-            .where(*where)
-            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
-            .limit(params.page_size)
-            .offset(params.offset)
-        )
-        return list(rows), int(total or 0)
+        return self.links.list_for_file(file_id, params.page_size, params.offset)
+
+    def get_link(self, user_id: uuid.UUID, file_id: uuid.UUID, link_id: uuid.UUID) -> ShareLink:
+        self._owned_file(user_id, file_id)
+        link = self.links.get(file_id, link_id)
+        if link is None:
+            raise NotFoundError("Link not found", code="link_not_found")
+        return link
 
     def revoke(self, user_id: uuid.UUID, file_id: uuid.UUID, link_id: uuid.UUID) -> None:
         file = self._owned_file(user_id, file_id)
-        link = self.session.scalar(
-            select(ShareLink)
-            .where(ShareLink.id == link_id, ShareLink.file_id == file_id)
-            .with_for_update()
-        )
+        link = self.links.get(file_id, link_id, lock=True)
         if link is None:
             raise NotFoundError("Link not found", code="link_not_found")
         if link.revoked_at is None:  # revoking twice is harmless and records nothing new
@@ -106,7 +95,7 @@ class ShareLinkService:
 
     def resolve(self, token: str) -> tuple[ShareLink, File]:
         """The link and its file, or the one generic 404 for anything that is not usable."""
-        link = self.session.scalar(select(ShareLink).where(ShareLink.token_hash == _hash(token)))
+        link = self.links.get_by_hash(hash_token(token))
         file = self.files.get_any(link.file_id) if link else None
         if (
             link is None
@@ -124,7 +113,18 @@ class ShareLinkService:
         if version is None:
             raise NotFoundError("This link is not available", code="link_not_found")
         url = storage.create_download_url(version.s3_key, file.name)
-        # An anonymous download is attributed to the link, in the owner's trail (no URL stored).
+        self._record_download(link, file)
+        self.session.commit()
+        return url, self.settings.presigned_download_ttl_seconds
+
+    def _record_download(self, link: ShareLink, file: File) -> None:
+        """At most one event per link per window: the link's holder is anonymous and must not be
+        able to fill the owner's trail (the rate limits only slow that down)."""
+        now = datetime.now(UTC)
+        window = timedelta(seconds=self.settings.share_link_audit_window_seconds)
+        if link.last_downloaded_at is not None and now - link.last_downloaded_at < window:
+            return
+        link.last_downloaded_at = now
         self.audit.record(
             workspace_id=file.workspace_id,
             actor_id=None,
@@ -133,8 +133,6 @@ class ShareLinkService:
             resource_id=file.id,
             detail=str(link.id),
         )
-        self.session.commit()
-        return url, self.settings.presigned_download_ttl_seconds
 
     def _audit(self, user_id: uuid.UUID, file: File, action: AuditAction, link: ShareLink) -> None:
         self.audit.record(

@@ -187,3 +187,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 145. **Put secrets in request bodies or URL fragments, never in the path or query**: access logs record paths, and a link token in a path is a secret in a log.
 146. **Public failure paths must be one answer**: unknown, expired, revoked and deleted all return the same body, or the endpoint becomes an oracle.
 147. **Alembic `op.f()` is needed when dropping a named constraint under a naming convention**, or the convention prefix is applied twice.
+148. **An anonymous endpoint that writes anything needs its own throttle on the write**, not just a rate limit on the request.
+149. **Lock the parent row before enforcing a per-parent cap**, or concurrent creates pass the count together.

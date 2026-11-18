@@ -1,14 +1,17 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ShareLinkCreate(BaseModel):
-    expires_in_days: int = Field(default=7, ge=1, le=365)
+    # The upper bound is a setting, checked in one place by the service (`link_too_long`).
+    expires_in_days: int = Field(default=7, ge=1)
 
 
 class ShareLinkRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     expires_at: datetime
     revoked_at: datetime | None
@@ -21,8 +24,9 @@ class ShareLinkCreated(ShareLinkRead):
 
 
 class LinkTokenBody(BaseModel):
-    # In the body, not the URL, so the secret never lands in an access log.
-    token: str = Field(min_length=20, max_length=200)
+    # In the body, not the URL, so the secret never lands in an access log. No minimum length:
+    # a short token must get the same 404 as any other unusable one, after the rate limit.
+    token: str = Field(max_length=200)
 
 
 class PublicLinkRead(BaseModel):

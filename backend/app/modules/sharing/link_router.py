@@ -42,13 +42,8 @@ def create_share_link(
 ) -> ShareLinkCreated:
     link, token = service.create(user.id, file_id, body.expires_in_days)
     response.headers["Location"] = f"/api/v1/files/{file_id}/share-links/{link.id}"
-    return ShareLinkCreated(
-        id=link.id,
-        expires_at=link.expires_at,
-        revoked_at=link.revoked_at,
-        created_at=link.created_at,
-        token=token,
-    )
+    response.headers["Cache-Control"] = "no-store"  # the one-time token
+    return ShareLinkCreated(**ShareLinkRead.model_validate(link).model_dump(), token=token)
 
 
 @router.get(
@@ -61,19 +56,22 @@ def list_share_links(
 ) -> Page[ShareLinkRead]:
     links, total = service.list_links(user.id, file_id, params)
     return Page[ShareLinkRead](
-        items=[
-            ShareLinkRead(
-                id=link.id,
-                expires_at=link.expires_at,
-                revoked_at=link.revoked_at,
-                created_at=link.created_at,
-            )
-            for link in links
-        ],
+        items=[ShareLinkRead.model_validate(link) for link in links],
         total=total,
         page=params.page,
         page_size=params.page_size,
     )
+
+
+@router.get(
+    "/files/{file_id}/share-links/{link_id}",
+    response_model=ShareLinkRead,
+    status_code=status.HTTP_200_OK,
+)
+def get_share_link(
+    file_id: uuid.UUID, link_id: uuid.UUID, user: CurrentUser, service: LinkServiceDep
+) -> ShareLinkRead:
+    return ShareLinkRead.model_validate(service.get_link(user.id, file_id, link_id))
 
 
 @router.delete("/files/{file_id}/share-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -86,14 +84,19 @@ def revoke_share_link(
 # Public: no sign-in. Rate limited per client address, and POST so the token stays out of URLs.
 
 
-def _limit_public(request: Request, limiter: RateLimiterDep, settings: SettingsDep) -> None:
+def _limit_public(
+    request: Request, token: str, limiter: RateLimiterDep, settings: SettingsDep
+) -> None:
+    window = settings.rate_limit_public_link_window_seconds
     enforce(
         limiter,
         "public-link:ip",
         client_ip(request),
         settings.rate_limit_public_link_per_ip,
-        settings.rate_limit_public_link_window_seconds,
+        window,
     )
+    # Per token as well: one leaked link cannot be hammered from many addresses.
+    enforce(limiter, "public-link:token", token, settings.rate_limit_public_link_per_token, window)
 
 
 @router.post(
@@ -102,11 +105,13 @@ def _limit_public(request: Request, limiter: RateLimiterDep, settings: SettingsD
 def resolve_share_link(
     body: LinkTokenBody,
     request: Request,
+    response: Response,
     service: LinkServiceDep,
     limiter: RateLimiterDep,
     settings: SettingsDep,
 ) -> PublicLinkRead:
-    _limit_public(request, limiter, settings)
+    _limit_public(request, body.token, limiter, settings)
+    response.headers["Cache-Control"] = "no-store"
     link, file = service.resolve(body.token)
     return PublicLinkRead(
         file_name=file.name,
@@ -122,11 +127,13 @@ def resolve_share_link(
 def download_via_share_link(
     body: LinkTokenBody,
     request: Request,
+    response: Response,
     service: LinkServiceDep,
     storage: StorageDep,
     limiter: RateLimiterDep,
     settings: SettingsDep,
 ) -> PublicDownload:
-    _limit_public(request, limiter, settings)
+    _limit_public(request, body.token, limiter, settings)
+    response.headers["Cache-Control"] = "no-store"  # a live download URL
     url, expires_in = service.download(body.token, storage)
     return PublicDownload(url=url, expires_in=expires_in)

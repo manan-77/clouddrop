@@ -21,7 +21,8 @@ OLD_ACTIONS = (
     "'file.uploaded', 'file.downloaded', 'file.deleted', 'folder.deleted', "
     "'permission.granted', 'permission.changed', 'permission.revoked', 'auth.login'"
 )
-NEW_ACTIONS = OLD_ACTIONS + ", 'share_link.created', 'share_link.revoked', 'share_link.downloaded'"
+LINK_ACTIONS = "'share_link.created', 'share_link.revoked', 'share_link.downloaded'"
+NEW_ACTIONS = OLD_ACTIONS + ", " + LINK_ACTIONS
 
 
 def upgrade() -> None:
@@ -32,11 +33,12 @@ def upgrade() -> None:
         sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_downloaded_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("id", sa.Uuid(), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
+            server_default=sa.text("clock_timestamp()"),
             nullable=False,
         ),
         sa.Column(
@@ -66,10 +68,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DELETE FROM audit_events WHERE action IN "
-        "('share_link.created', 'share_link.revoked', 'share_link.downloaded')"
-    )
+    op.execute(f"DELETE FROM audit_events WHERE action IN ({LINK_ACTIONS})")
     op.drop_constraint(op.f("ck_audit_events_action_valid"), "audit_events", type_="check")
     op.create_check_constraint(
         op.f("ck_audit_events_action_valid"), "audit_events", f"action IN ({OLD_ACTIONS})"

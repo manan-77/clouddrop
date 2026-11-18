@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from sqlalchemy import Select, func, literal, select
@@ -6,7 +7,7 @@ from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.db.soft_delete import only_active
 from app.modules.auth.models import User
-from app.modules.sharing.models import Permission
+from app.modules.sharing.models import Permission, ShareLink
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, Folder
 from app.modules.workspaces.models import Workspace
@@ -150,3 +151,48 @@ class PermissionRepository:
             select(union).order_by(union.c.name, union.c.id).limit(limit).offset(offset)
         )
         return [dict(row._mapping) for row in self.session.execute(query)], int(total or 0)
+
+
+class ShareLinkRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def add(self, link: ShareLink) -> None:
+        self.session.add(link)
+        self.session.flush()
+
+    def count_active(self, file_id: uuid.UUID, now: datetime) -> int:
+        total = self.session.scalar(
+            select(func.count())
+            .select_from(ShareLink)
+            .where(
+                ShareLink.file_id == file_id,
+                ShareLink.revoked_at.is_(None),
+                ShareLink.expires_at > now,
+            )
+        )
+        return int(total or 0)
+
+    def list_for_file(
+        self, file_id: uuid.UUID, limit: int, offset: int
+    ) -> tuple[list[ShareLink], int]:
+        total = self.session.scalar(
+            select(func.count()).select_from(ShareLink).where(ShareLink.file_id == file_id)
+        )
+        rows = self.session.scalars(
+            select(ShareLink)
+            .where(ShareLink.file_id == file_id)
+            .order_by(ShareLink.created_at.desc(), ShareLink.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(rows), int(total or 0)
+
+    def get(
+        self, file_id: uuid.UUID, link_id: uuid.UUID, *, lock: bool = False
+    ) -> ShareLink | None:
+        query = select(ShareLink).where(ShareLink.id == link_id, ShareLink.file_id == file_id)
+        return self.session.scalar(query.with_for_update() if lock else query)
+
+    def get_by_hash(self, token_hash: str) -> ShareLink | None:
+        return self.session.scalar(select(ShareLink).where(ShareLink.token_hash == token_hash))

@@ -56,5 +56,9 @@ class ShareLink(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    # clock_timestamp(): links made in one transaction still list in the order they were made.
+    created_at: Mapped[datetime] = mapped_column(server_default=text("clock_timestamp()"))
     expires_at: Mapped[datetime]
     revoked_at: Mapped[datetime | None]
+    # When a download was last recorded in the audit trail (throttles those rows).
+    last_downloaded_at: Mapped[datetime | None]
