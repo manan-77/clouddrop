@@ -21,6 +21,13 @@ export class FilesApi {
     return this.http.patch<FileRead>(`${API_BASE}/files/${encodeURIComponent(fileId)}`, { name });
   }
 
+  /** A null folder moves the file to the top level. */
+  move(fileId: string, folderId: string | null): Observable<FileRead> {
+    return this.http.patch<FileRead>(`${API_BASE}/files/${encodeURIComponent(fileId)}`, {
+      folder_id: folderId,
+    });
+  }
+
   remove(fileId: string): Observable<void> {
     return this.http.delete<void>(`${API_BASE}/files/${encodeURIComponent(fileId)}`);
   }

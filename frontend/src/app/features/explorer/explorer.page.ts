@@ -26,6 +26,7 @@ import { DropZoneDirective } from './drop-zone.directive';
 import { ExplorerStore } from './explorer.store';
 import { FileTableComponent } from './file-table.component';
 import { FolderTableComponent } from './folder-table.component';
+import { MoveDialogComponent } from './move-dialog.component';
 import { NameDialogComponent } from './name-dialog.component';
 import { SharingDialogsComponent } from './sharing-dialogs.component';
 import { UploadButtonComponent } from './upload-button.component';
@@ -42,6 +43,7 @@ import { UploadPanelComponent } from './upload-panel.component';
     ErrorStateComponent,
     FileTableComponent,
     FolderTableComponent,
+    MoveDialogComponent,
     NameDialogComponent,
     PagerComponent,
     SharingDialogsComponent,
@@ -175,6 +177,13 @@ export class ExplorerPage {
         break;
       default:
         break;
+    }
+  }
+
+  protected moveFile(folderId: string | null): void {
+    const dialog = this.dialog();
+    if (dialog?.kind === 'move-file') {
+      this.run(this.store.moveFile(dialog.file.id, folderId));
     }
   }
 

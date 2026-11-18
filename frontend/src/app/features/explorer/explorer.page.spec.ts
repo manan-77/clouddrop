@@ -291,6 +291,62 @@ describe('ExplorerPage', () => {
     backend.match(() => true).forEach((r) => r.flush(page([])));
   });
 
+  it('moveFile_choosingAFolderSendsItsIdAndReloads', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([file('a', 'old.pdf')]));
+    await settle();
+    click(root, 'button[aria-label="Move old.pdf"]');
+    await settle();
+    // The picker lists the top-level folders; the file is already there, so Move here is off.
+    backend.expectOne(isList('folders')).flush(page([folder('f1', 'Reports')]));
+    await settle();
+    const moveHere = () =>
+      [...root.querySelectorAll('cd-move-dialog button')].find(
+        (b) => b.textContent?.trim() === 'Move here',
+      ) as HTMLButtonElement;
+    expect(moveHere().disabled).toBe(true);
+    click(root, 'button[aria-label="Open folder Reports"]');
+    await settle();
+    backend
+      .expectOne((r) => isList('folders')(r) && r.params.get('parent_id') === 'f1')
+      .flush(page([]));
+    await settle();
+    expect(moveHere().disabled).toBe(false);
+    moveHere().click();
+    const patch = backend.expectOne((r) => r.method === 'PATCH' && r.url === '/api/v1/files/a');
+    expect(patch.request.body).toEqual({ folder_id: 'f1' });
+    patch.flush({ ...file('a', 'old.pdf'), folder_id: 'f1' });
+    await settle();
+    expect(root.querySelector('cd-move-dialog')).toBeNull();
+    backend.match(() => true).forEach((r) => r.flush(page([])));
+  });
+
+  it('moveFile_aRefusalIsShownAndTheDialogStaysOpen', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([file('a', 'old.pdf')]));
+    await settle();
+    click(root, 'button[aria-label="Move old.pdf"]');
+    await settle();
+    backend.expectOne(isList('folders')).flush(page([folder('f1', 'Reports')]));
+    await settle();
+    click(root, 'button[aria-label="Open folder Reports"]');
+    await settle();
+    backend
+      .expectOne((r) => isList('folders')(r) && r.params.get('parent_id') === 'f1')
+      .flush(page([]));
+    await settle();
+    (
+      [...root.querySelectorAll('cd-move-dialog button')].find(
+        (b) => b.textContent?.trim() === 'Move here',
+      ) as HTMLButtonElement
+    ).click();
+    backend
+      .expectOne((r) => r.method === 'PATCH')
+      .flush(ENVELOPE('folder_not_found'), { status: 404, statusText: 'x' });
+    await settle();
+    expect(text(root, 'cd-move-dialog [role="alert"]')).toContain('That folder no longer exists.');
+  });
+
   it('deleteFile_confirmed_deletesAndReloads_cancelledDoesNothing', async () => {
     const { root, backend, settle } = await setup();
     loadRoot(backend, page([]), page([file('a', 'old.pdf')]));

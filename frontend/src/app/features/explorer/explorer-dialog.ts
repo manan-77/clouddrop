@@ -5,6 +5,7 @@ export type Dialog =
   | { kind: 'create-folder' }
   | { kind: 'rename-folder'; folder: FolderRead }
   | { kind: 'rename-file'; file: FileRead }
+  | { kind: 'move-file'; file: FileRead }
   | { kind: 'delete-folder'; folder: FolderRead }
   | { kind: 'delete-file'; file: FileRead }
   | { kind: 'share-folder'; folder: FolderRead }

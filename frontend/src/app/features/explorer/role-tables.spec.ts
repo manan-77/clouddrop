@@ -31,8 +31,8 @@ const labels = (root: HTMLElement) =>
 
 describe('role-driven controls', () => {
   it.each([
-    ['owner', ['Download', 'Rename', 'Share', 'Activity', 'Delete']],
-    ['editor', ['Download', 'Rename']],
+    ['owner', ['Download', 'Rename', 'Move', 'Share', 'Activity', 'Delete']],
+    ['editor', ['Download', 'Rename', 'Move']],
     ['viewer', ['Download']],
   ] as const)('fileTable_%s_offersOnly_%j', (role, expected) => {
     const fixture = TestBed.createComponent(FileTableComponent);

@@ -92,6 +92,7 @@
               [downloading]="downloading()"
               (download)="download($event)"
               (rename)="show({ kind: 'rename-file', file: $event })"
+              (move)="show({ kind: 'move-file', file: $event })"
               (remove)="show({ kind: 'delete-file', file: $event })"
               (share)="show({ kind: 'share-file', file: $event })"
               (activity)="show({ kind: 'activity-file', file: $event })"
@@ -144,6 +145,14 @@
     [error]="dialogError()"
     (submitted)="submitName($event)"
     (edited)="dialogError.set(null)"
+    (dismissed)="closeDialog()"
+  />
+} @else if (open && open.kind === 'move-file') {
+  <cd-move-dialog
+    [file]="open.file"
+    [busy]="busy()"
+    [error]="dialogError()"
+    (moved)="moveFile($event)"
     (dismissed)="closeDialog()"
   />
 } @else if (open && open.kind === 'delete-folder') {

@@ -66,6 +66,15 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                   >
                     Rename
                   </button>
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
+                    [attr.aria-label]="'Move ' + file.name"
+                    (click)="move.emit(file)"
+                  >
+                    Move
+                  </button>
                 }
                 @if (file.role | canManage) {
                   <button
@@ -110,6 +119,7 @@ export class FileTableComponent {
   readonly downloading = input<readonly string[]>([]);
   readonly download = output<FileRead>();
   readonly rename = output<FileRead>();
+  readonly move = output<FileRead>();
   readonly remove = output<FileRead>();
   readonly share = output<FileRead>();
   readonly activity = output<FileRead>();
