@@ -72,6 +72,15 @@ describe('ShareLinksComponent', () => {
     expect(root().querySelectorAll('.links li button')).toHaveLength(1);
   });
 
+  it('theDefaultExpiryShownIsTheOneThatIsSent', () => {
+    setup();
+    const select = root().querySelector('#link-days') as HTMLSelectElement;
+    // Untouched: what the owner sees must be what is sent (7 days, not the first option).
+    expect(select.value).toBe('7');
+    make();
+    expect(backend.expectOne(POST).request.body).toEqual({ expires_in_days: 7 });
+  });
+
   it('create_sendsTheChosenExpiryAndShowsTheAddressOnceWithTheTokenInTheFragment', () => {
     setup();
     make('30');

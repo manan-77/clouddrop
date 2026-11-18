@@ -36,15 +36,12 @@ const DAY_CHOICES = [1, 7, 30] as const;
     <p class="hint">Anyone with the link can view and download this file until it expires.</p>
     <div class="make">
       <label for="link-days">Expires in</label>
-      <select
-        #days
-        id="link-days"
-        class="cd-input"
-        [value]="expiresInDays()"
-        (change)="expiresInDays.set(+days.value)"
-      >
+      <select #days id="link-days" class="cd-input" (change)="expiresInDays.set(+days.value)">
         @for (choice of dayChoices; track choice) {
-          <option [value]="choice">{{ choice === 1 ? '1 day' : choice + ' days' }}</option>
+          <!-- selected on the option: a value bound on the select runs before the options exist -->
+          <option [value]="choice" [selected]="choice === expiresInDays()">
+            {{ choice === 1 ? '1 day' : choice + ' days' }}
+          </option>
         }
       </select>
       <button cd-button type="button" [busy]="busy()" (click)="create()">Create link</button>
@@ -165,6 +162,7 @@ export class ShareLinksComponent implements OnInit {
     }
     this.busy.set(true);
     this.error.set(null);
+    this.announcement.set(''); // a repeated message must be a new change to be announced
     this.created.set(null);
     this.api
       .create(this.fileId(), this.expiresInDays())
@@ -174,7 +172,7 @@ export class ShareLinksComponent implements OnInit {
       )
       .subscribe({
         next: (link) => {
-          // The page route builds the address; the token rides in the fragment.
+          // The router builds the path (root deployment assumed); the token rides in the fragment.
           const path = this.router.serializeUrl(
             this.router.createUrlTree(['/s'], { fragment: link.token }),
           );
@@ -192,6 +190,7 @@ export class ShareLinksComponent implements OnInit {
     }
     this.revoking.set(link.id);
     this.error.set(null);
+    this.announcement.set('');
     this.api
       .revoke(this.fileId(), link.id)
       .pipe(
