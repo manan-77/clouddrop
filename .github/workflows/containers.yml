@@ -26,10 +26,25 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Build the images
-        run: |
-          docker build -t clouddrop-api backend
-          docker build -t clouddrop-web frontend
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      # Layer cache in the GitHub Actions cache: unchanged dependency layers are reused, so only
+      # the app layers rebuild. load: true puts the image in the local daemon for the smoke tests.
+      - name: Build the API image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          load: true
+          tags: clouddrop-api
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Build the web image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: frontend
+          load: true
+          tags: clouddrop-web
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
       - name: The API image runs as a non-root user and imports the app
         run: |
           test "$(docker run --rm --entrypoint id clouddrop-api -u)" != "0"

@@ -3,8 +3,15 @@ name: audit
 # Separate from the build checks: a new advisory can fail this without any code change, so do
 # not make these jobs required. A weekly run finds advisories published after a merge.
 on:
+  # Only when dependencies change; the weekly run covers advisories published after a merge.
   pull_request:
     branches: [develop, main]
+    paths:
+      - "backend/uv.lock"
+      - "backend/pyproject.toml"
+      - "frontend/package*.json"
+      - ".github/workflows/audit.yml"
+  workflow_dispatch:
   schedule:
     - cron: "17 5 * * 1"
 
