@@ -78,10 +78,11 @@ export class PublicLinkPage implements OnInit {
           this.link.set(null);
           this.error.set(null);
           this.downloadError.set(null);
-          this.loading.set(this.token !== '');
         }),
-        switchMap(() =>
-          this.token === ''
+        switchMap(() => {
+          // Set here, after switchMap has dropped the previous request (whose finalize clears it).
+          this.loading.set(this.token !== '');
+          return this.token === ''
             ? of(null)
             : this.api.resolve(this.token).pipe(
                 tap({
@@ -90,8 +91,8 @@ export class PublicLinkPage implements OnInit {
                 }),
                 catchError(() => of(null)),
                 finalize(() => this.loading.set(false)),
-              ),
-        ),
+              );
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((result) => {

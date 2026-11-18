@@ -146,6 +146,9 @@ describe('PublicLinkPage', () => {
     const older = backend.expectOne(RESOLVE);
     fragment$.next('second-token');
     expect(older.cancelled).toBe(true);
+    // Still loading (the skeleton shows) until the newer answer arrives: not a blank page.
+    fixture.detectChanges();
+    expect(root().querySelector('cd-skeleton')).not.toBeNull();
     backend.expectOne(RESOLVE).flush({ ...FILE, file_name: 'second.pdf' });
     fixture.detectChanges();
     expect(root().textContent).toContain('second.pdf');
