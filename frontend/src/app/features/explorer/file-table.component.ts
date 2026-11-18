@@ -66,6 +66,8 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                   >
                     Rename
                   </button>
+                }
+                @if (file.role | canManage) {
                   <button
                     cd-button
                     variant="secondary"
@@ -75,8 +77,6 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                   >
                     Move
                   </button>
-                }
-                @if (file.role | canManage) {
                   <button
                     cd-button
                     variant="secondary"

@@ -153,6 +153,7 @@
     [busy]="busy()"
     [error]="dialogError()"
     (moved)="moveFile($event)"
+    (navigated)="dialogError.set(null)"
     (dismissed)="closeDialog()"
   />
 } @else if (open && open.kind === 'delete-folder') {

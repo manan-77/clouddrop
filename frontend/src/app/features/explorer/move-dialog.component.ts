@@ -54,6 +54,7 @@ type Listing =
               variant="secondary"
               type="button"
               [disabled]="busy()"
+              [attr.aria-current]="trail().length === 0 ? 'location' : null"
               (click)="goTo(0)"
             >
               All files
@@ -66,6 +67,7 @@ type Listing =
                 variant="secondary"
                 type="button"
                 [disabled]="busy()"
+                [attr.aria-current]="index === trail().length - 1 ? 'location' : null"
                 (click)="goTo(index + 1)"
               >
                 {{ folder.name }}
@@ -75,45 +77,47 @@ type Listing =
         </ol>
       </nav>
       @let current = listing();
-      @switch (current.status) {
-        @case ('loading') {
-          <cd-skeleton [lines]="3" />
-        }
-        @case ('error') {
-          <cd-error-state [message]="errorMessage()" (retry)="reload()" />
-        }
-        @default {
-          @if (folders(); as page) {
-            @if (page.total === 0) {
-              <cd-empty-state title="No folders here" />
-            } @else {
-              <ul class="choices">
-                @for (folder of page.items; track folder.id) {
-                  <li>
-                    <button
-                      cd-button
-                      variant="secondary"
-                      type="button"
-                      [disabled]="busy()"
-                      [attr.aria-label]="'Open folder ' + folder.name"
-                      (click)="open(folder)"
-                    >
-                      {{ folder.name }}
-                    </button>
-                  </li>
-                }
-              </ul>
-              <cd-pager
-                label="Destination folders pagination"
-                [page]="page.page"
-                [pageSize]="page.page_size"
-                [total]="page.total"
-                (pageChange)="setPage($event)"
-              />
+      <div aria-live="polite">
+        @switch (current.status) {
+          @case ('loading') {
+            <cd-skeleton [lines]="3" />
+          }
+          @case ('error') {
+            <cd-error-state [message]="errorMessage()" (retry)="reload()" />
+          }
+          @default {
+            @if (folders(); as page) {
+              @if (page.total === 0) {
+                <cd-empty-state title="No folders here" />
+              } @else {
+                <ul class="choices">
+                  @for (folder of page.items; track folder.id) {
+                    <li>
+                      <button
+                        cd-button
+                        variant="secondary"
+                        type="button"
+                        [disabled]="busy()"
+                        [attr.aria-label]="'Open folder ' + folder.name"
+                        (click)="open(folder)"
+                      >
+                        {{ folder.name }}
+                      </button>
+                    </li>
+                  }
+                </ul>
+                <cd-pager
+                  label="Destination folders pagination"
+                  [page]="page.page"
+                  [pageSize]="page.page_size"
+                  [total]="page.total"
+                  (pageChange)="setPage($event)"
+                />
+              }
             }
           }
         }
-      }
+      </div>
       @if (error(); as text) {
         <p class="cd-form-error" role="alert">{{ text }}</p>
       }
@@ -156,6 +160,8 @@ export class MoveDialogComponent {
   readonly busy = input(false);
   readonly error = input<string | null>(null);
   readonly moved = output<string | null>();
+  /** The destination changed, so the parent can clear an error that belonged to the last one. */
+  readonly navigated = output<void>();
   readonly dismissed = output<void>();
 
   /** Folders opened so far, from the top level down; empty is the top level. */
@@ -198,17 +204,23 @@ export class MoveDialogComponent {
   /** Not offered for the folder the file is already in, or one the caller cannot write to. */
   protected readonly canMoveHere = computed(() => {
     const here = this.trail().at(-1);
-    return this.destinationId() !== this.file().folder_id && (!here || canWrite(here.role));
+    return (
+      this.listing().status === 'ready' &&
+      this.destinationId() !== this.file().folder_id &&
+      (!here || canWrite(here.role))
+    );
   });
 
   protected open(folder: FolderRead): void {
     this.trail.update((trail) => [...trail, folder]);
     this.pageNumber.set(1);
+    this.navigated.emit();
   }
 
   protected goTo(depth: number): void {
     this.trail.update((trail) => trail.slice(0, depth));
     this.pageNumber.set(1);
+    this.navigated.emit();
   }
 
   protected setPage(page: number): void {

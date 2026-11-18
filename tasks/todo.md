@@ -467,3 +467,4 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - backend/CLAUDE.md names `httpx` as the shared AI client; the backend dev group now uses `httpx2` (what Starlette's test client requires). Use `httpx2` for the AI client too so there is one HTTP library, or confirm otherwise.
 - frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.
 - backend/CLAUDE.md says repositories have no unscoped get-by-id and modules talk only through services; sharing uses `get_any` plus `AccessService` and reads storage tables (ADR 0010). Confirm this is acceptable or say how you want it shaped.
+- [ ] (PR 28) Editors cannot move files from the UI: the picker lists the caller's own folders, and the API only lets the owner move to the root or within one workspace. Moving inside a shared tree needs a picker that starts at the file's folder.

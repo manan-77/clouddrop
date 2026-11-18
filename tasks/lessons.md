@@ -199,3 +199,4 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 157. **A route fragment (or any route input) can change without a reload**: follow it as an observable with `switchMap` instead of reading it once, or the page keeps acting on the previous value.
 158. **A template reference on an element that carries a component points at the component, not the element**: use `viewChild(ref, { read: ElementRef })` to focus it.
 159. **`switchMap` unsubscribes the previous inner before it calls the projection**: state set before it can be undone by the old inner's `finalize`; set it inside the projection.
+160. **Check the backend rule before offering an action by role**: a button shown to editors must have a destination the server accepts for editors.
