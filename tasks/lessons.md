@@ -54,7 +54,9 @@ PR; a finding in review means a rule here was skipped or is missing.
 ## Process
 20. **Run the exact CI commands locally** (`scripts/verify.sh`), build after any bulk edit, tick a
     todo only when a test covers it, and say plainly what was not run. [26, 37, 47, 103]
-21. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
+21. **Pin third-party actions to a commit SHA and audit tools to a version; keep advisory checks
+    out of the required set.** [107, 108]
+22. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
 
 ## Review stop rule
 Review the local diff once before opening the PR (independent reviewer, no cap on findings). In the
