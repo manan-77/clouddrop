@@ -162,6 +162,13 @@ describe('MoveDialogComponent', () => {
     expect(root().querySelector('[role="status"]')?.textContent).toContain('Loading folders');
   });
 
+  it('theStatusLineUsesTheSingularForOneFolder', async () => {
+    await setup();
+    backend.expectOne(LIST).flush(page([folder('f1')]));
+    await settle();
+    expect(root().querySelector('[role="status"]')?.textContent?.trim()).toBe('1 folder');
+  });
+
   it('whileBusyEveryChoiceIsOff', async () => {
     await setup();
     backend.expectOne(LIST).flush(page([folder('f1')]));

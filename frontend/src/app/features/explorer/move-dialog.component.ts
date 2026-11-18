@@ -208,9 +208,11 @@ export class MoveDialogComponent {
     if (listing.status === 'loading') {
       return 'Loading folders';
     }
-    return listing.status === 'error'
-      ? 'Folders could not be loaded'
-      : `${listing.folders.total} folders`;
+    if (listing.status === 'error') {
+      return 'Folders could not be loaded';
+    }
+    const total = listing.folders.total;
+    return total === 1 ? '1 folder' : `${total} folders`;
   });
 
   /** Not offered for the folder the file is already in, or one the caller cannot write to. */
