@@ -72,6 +72,15 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                     cd-button
                     variant="secondary"
                     type="button"
+                    [attr.aria-label]="'Move ' + file.name"
+                    (click)="move.emit(file)"
+                  >
+                    Move
+                  </button>
+                  <button
+                    cd-button
+                    variant="secondary"
+                    type="button"
                     [disabled]="file.status !== 'ready'"
                     [attr.aria-label]="'Share ' + file.name"
                     (click)="share.emit(file)"
@@ -110,6 +119,7 @@ export class FileTableComponent {
   readonly downloading = input<readonly string[]>([]);
   readonly download = output<FileRead>();
   readonly rename = output<FileRead>();
+  readonly move = output<FileRead>();
   readonly remove = output<FileRead>();
   readonly share = output<FileRead>();
   readonly activity = output<FileRead>();

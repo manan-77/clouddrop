@@ -104,6 +104,10 @@ export class ExplorerStore {
     return this.filesApi.rename(fileId, name).pipe(tap(() => this.reload()));
   }
 
+  moveFile(fileId: string, folderId: string | null): Observable<FileRead> {
+    return this.filesApi.move(fileId, folderId).pipe(tap(() => this.reload()));
+  }
+
   deleteFile(fileId: string): Observable<void> {
     return this.filesApi.remove(fileId).pipe(tap(() => this.reload()));
   }
