@@ -189,3 +189,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 147. **Alembic `op.f()` is needed when dropping a named constraint under a naming convention**, or the convention prefix is applied twice.
 148. **An anonymous endpoint that writes anything needs its own throttle on the write**, not just a rate limit on the request.
 149. **Lock the parent row before enforcing a per-parent cap**, or concurrent creates pass the count together.
+150. **Decide "once per window" with one conditional UPDATE ... RETURNING on the database clock**, not a read-then-write on the app clock.
+151. **When adding a line to a doc by string anchor, check which entity it landed in** (the first match was a different table).

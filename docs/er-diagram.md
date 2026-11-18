@@ -37,7 +37,6 @@ erDiagram
         string token_hash UK "sha-256, never the raw token"
         timestamptz expires_at
         timestamptz revoked_at
-        timestamptz last_downloaded_at "throttles download audit rows"
         timestamptz created_at
     }
     workspaces {
@@ -111,6 +110,7 @@ erDiagram
         string token_hash "sha256 of the token, unique"
         timestamptz expires_at
         timestamptz revoked_at
+        timestamptz last_downloaded_at "throttles download audit rows"
         timestamptz created_at
         timestamptz updated_at
     }

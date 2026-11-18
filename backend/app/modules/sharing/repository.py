@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import Select, func, literal, select
+from sqlalchemy import Select, func, literal, or_, select, update
 from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from app.db.soft_delete import only_active
@@ -193,6 +193,20 @@ class ShareLinkRepository:
     ) -> ShareLink | None:
         query = select(ShareLink).where(ShareLink.id == link_id, ShareLink.file_id == file_id)
         return self.session.scalar(query.with_for_update() if lock else query)
+
+    def claim_download_event(self, link_id: uuid.UUID, window_seconds: int) -> bool:
+        """Atomically take this window's one download-event slot (database clock)."""
+        cutoff = func.clock_timestamp() - timedelta(seconds=window_seconds)
+        claimed = self.session.execute(
+            update(ShareLink)
+            .where(
+                ShareLink.id == link_id,
+                or_(ShareLink.last_downloaded_at.is_(None), ShareLink.last_downloaded_at < cutoff),
+            )
+            .values(last_downloaded_at=func.clock_timestamp())
+            .returning(ShareLink.id)
+        ).first()
+        return claimed is not None
 
     def get_by_hash(self, token_hash: str) -> ShareLink | None:
         return self.session.scalar(select(ShareLink).where(ShareLink.token_hash == token_hash))

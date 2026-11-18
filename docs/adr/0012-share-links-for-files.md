@@ -10,7 +10,7 @@ Owners want to hand a file to someone without an account. A link is a public sur
 - The token is 32 random bytes (`secrets.token_urlsafe`). **Only its SHA-256 is stored**; the raw token is returned once, when the link is created. Lookup is by the hash, so no token comparison happens in application code.
 - The token travels in the **body** of POST requests, not in the URL, so it does not appear in access logs; the shareable link puts it in the URL fragment, which is never sent to a server.
 - Every failure (unknown token, expired, revoked, file deleted, file not ready) is one identical `404 link_not_found`, so a caller learns nothing about which links exist.
-- The public endpoints are rate limited per client address. Each file has at most 20 active links.
+- The public endpoints are rate limited per client address and per token. Each file has at most 20 active links.
 - Link creation and revocation are recorded in the owner's audit trail (`share_link.*`). A download is recorded with no actor and the link id, **at most once per link per minute** (`last_downloaded_at`), and the endpoints are also limited per token, so a holder cannot fill the trail. Creating a link locks the file row, so the 20-link cap cannot be raced past.
 - A link follows the file: deleting it or any state other than `ready` makes the link unusable immediately. Revoking is immediate and idempotent.
 

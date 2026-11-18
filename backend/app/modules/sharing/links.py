@@ -119,12 +119,12 @@ class ShareLinkService:
 
     def _record_download(self, link: ShareLink, file: File) -> None:
         """At most one event per link per window: the link's holder is anonymous and must not be
-        able to fill the owner's trail (the rate limits only slow that down)."""
-        now = datetime.now(UTC)
-        window = timedelta(seconds=self.settings.share_link_audit_window_seconds)
-        if link.last_downloaded_at is not None and now - link.last_downloaded_at < window:
+        able to fill the owner's trail. One conditional UPDATE decides, so concurrent downloads
+        cannot both record and the database clock is the only clock."""
+        if not self.links.claim_download_event(
+            link.id, self.settings.share_link_audit_window_seconds
+        ):
             return
-        link.last_downloaded_at = now
         self.audit.record(
             workspace_id=file.workspace_id,
             actor_id=None,
