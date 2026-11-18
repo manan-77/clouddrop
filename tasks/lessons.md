@@ -191,3 +191,11 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 149. **Lock the parent row before enforcing a per-parent cap**, or concurrent creates pass the count together.
 150. **Decide "once per window" with one conditional UPDATE ... RETURNING on the database clock**, not a read-then-write on the app clock.
 151. **When adding a line to a doc by string anchor, check which entity it landed in** (the first match was a different table).
+152. **A component that adds requests to an existing dialog changes that dialog's specs**: every `expectOne` there must also flush (or expect) the new request, or `verify()` leaks into the next test.
+153. **Read a secret from the URL fragment and keep it in memory only**; never route to it, store it, or put it in a query.
+154. **A persistent `mockImplementation` that throws leaks past its test**; use `mockImplementationOnce` for a throwing double.
+155. **When a button is disabled by a binding, a click before change detection is ignored**: assert the request exists (`expectOne`) before asserting the DOM.
+156. **Bind a select's choice with `[selected]` on each option**, not `[value]` on the select: the value is applied before the options exist, so the screen can show a different choice than the one sent. Always test the untouched default.
+157. **A route fragment (or any route input) can change without a reload**: follow it as an observable with `switchMap` instead of reading it once, or the page keeps acting on the previous value.
+158. **A template reference on an element that carries a component points at the component, not the element**: use `viewChild(ref, { read: ElementRef })` to focus it.
+159. **`switchMap` unsubscribes the previous inner before it calls the projection**: state set before it can be undone by the old inner's `finalize`; set it inside the projection.

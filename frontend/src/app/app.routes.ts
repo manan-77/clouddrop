@@ -14,6 +14,12 @@ export const routes: Routes = [
       import('./features/shared-with-me/shared-with-me.page').then((m) => m.SharedWithMePage),
   },
   {
+    // No guard: anyone with a link can open it. The token is in the URL fragment.
+    path: 's',
+    loadComponent: () =>
+      import('./features/public-link/public-link.page').then((m) => m.PublicLinkPage),
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./features/auth/login.page').then((m) => m.LoginPage),

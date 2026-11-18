@@ -14,6 +14,8 @@ import { SessionStore } from './session.store';
 
 const RETRIED = new HttpContextToken<boolean>(() => false);
 const AUTH_ENDPOINT = new RegExp(`^${API_BASE}/auth/(login|register|refresh|logout)/?([?#].*)?$`);
+// Public calls (share links) need no session: no token is sent and a 401 never starts a refresh.
+const PUBLIC_ENDPOINT = new RegExp(`^${API_BASE}/public/`);
 // Dot segments and encoded dots could point a "same-origin API" URL somewhere else.
 const SUSPICIOUS = /%2e|\/\.\.?(\/|$|\?|#)/i;
 
@@ -37,7 +39,7 @@ function retryContext(original: HttpContext): HttpContext {
  * (see ADR 0006).
  */
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  if (!isApiRequest(req.url) || AUTH_ENDPOINT.test(req.url)) {
+  if (!isApiRequest(req.url) || AUTH_ENDPOINT.test(req.url) || PUBLIC_ENDPOINT.test(req.url)) {
     return next(req);
   }
   const auth = inject(AuthService);

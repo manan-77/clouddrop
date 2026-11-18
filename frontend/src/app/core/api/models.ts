@@ -149,3 +149,22 @@ export interface AuditEvent {
   detail: string | null;
   request_id: string | null;
 }
+
+export interface ShareLink {
+  id: string;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+/** Only the response to creating a link carries the token, and only once. */
+export interface ShareLinkCreated extends ShareLink {
+  token: string;
+}
+
+export interface PublicLink {
+  file_name: string;
+  size_bytes: number;
+  content_type: string;
+  expires_at: string;
+}

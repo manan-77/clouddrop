@@ -72,6 +72,9 @@
       }
     </ul>
   }
+  @if (kind() === 'files') {
+    <cd-share-links [fileId]="resourceId()" />
+  }
   <div class="cd-actions">
     <button
       cd-button

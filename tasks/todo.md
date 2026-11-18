@@ -215,7 +215,7 @@ Goal: owners can share files and folders with other people at viewer or editor l
 
 ### 7.4 Branch: feat/frontend-sharing (OK-NOW)
 - [x] Share dialog: add person by email, choose role, list current access, change and revoke.
-- [ ] (waits for the share-link backend) Share link creation with expiry and copy button, revoke button.
+- [x] Share link creation with expiry and copy button, revoke button (files; plus the public page at `/s#token`).
 - [x] Shared-with-me page and role-aware UI (hide controls the role cannot use, while the server stays the authority).
 - [x] Activity view for a file from the audit endpoint.
 - [x] Tests: dialog validation, role-driven controls, revoke flow.
