@@ -7,15 +7,17 @@ import {
   type OnInit,
   signal,
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DOCUMENT } from '@angular/common';
-import { catchError, defer, EMPTY, finalize, from, Subject, switchMap, tap } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Router } from '@angular/router';
+import { catchError, EMPTY, finalize, Subject, switchMap, tap } from 'rxjs';
 
 import { type ShareLink } from '@core/api/models';
 import { ShareLinksApi } from '@core/api/share-links-api.service';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
 import { ButtonComponent } from '@shared/ui/button/button.component';
+import { LinkAddressComponent } from './link-address.component';
 
 const PAGE_SIZE = 50;
 const DAY_CHOICES = [1, 7, 30] as const;
@@ -27,7 +29,7 @@ const DAY_CHOICES = [1, 7, 30] as const;
  */
 @Component({
   selector: 'cd-share-links',
-  imports: [ButtonComponent, DateTimePipe],
+  imports: [ButtonComponent, DateTimePipe, LinkAddressComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h3>Link anyone can open</h3>
@@ -49,16 +51,18 @@ const DAY_CHOICES = [1, 7, 30] as const;
     </div>
 
     <p class="cd-form-error" role="alert">{{ error() }}</p>
-    @if (created(); as address) {
-      <div class="created" role="status">
-        <p>Copy this link now. It is not shown again.</p>
-        <input class="cd-input" type="text" readonly aria-label="Link address" [value]="address" />
-        <button cd-button variant="secondary" type="button" (click)="copy(address)">Copy</button>
-        <span class="copied">{{ copied() }}</span>
-      </div>
+    <p class="cd-visually-hidden" role="status">{{ announcement() }}</p>
+    @if (created(); as made) {
+      <cd-link-address [address]="made.address" />
     }
 
-    @if (links().length > 0) {
+    @if (!loaded() && !listError()) {
+      <p class="hint">Loading links…</p>
+    } @else if (listError(); as message) {
+      <p class="cd-form-error" role="alert">{{ message }}</p>
+    } @else if (links().length === 0) {
+      <p class="hint">No links yet.</p>
+    } @else {
       <ul class="links">
         @for (link of links(); track link.id) {
           <li>
@@ -89,15 +93,11 @@ const DAY_CHOICES = [1, 7, 30] as const;
     .hint {
       color: var(--cd-text-muted);
     }
-    .make,
-    .created {
+    .make {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: var(--cd-space-2);
-    }
-    .created input {
-      flex: 1 1 14rem;
     }
     .links {
       list-style: none;
@@ -113,9 +113,6 @@ const DAY_CHOICES = [1, 7, 30] as const;
       justify-content: space-between;
       gap: var(--cd-space-2);
     }
-    .copied {
-      color: var(--cd-text-muted);
-    }
   `,
 })
 export class ShareLinksComponent implements OnInit {
@@ -124,15 +121,18 @@ export class ShareLinksComponent implements OnInit {
   protected readonly dayChoices = DAY_CHOICES;
   protected readonly expiresInDays = signal<number>(7);
   protected readonly links = signal<readonly ShareLink[]>([]);
+  protected readonly loaded = signal(false);
+  protected readonly listError = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly revoking = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
-  /** The full address of the link just made; held in memory only, never stored or logged. */
-  protected readonly created = signal<string | null>(null);
-  protected readonly copied = signal('');
+  protected readonly announcement = signal('');
+  /** The link just made and its full address; memory only, dropped when that link is turned off. */
+  protected readonly created = signal<{ id: string; address: string } | null>(null);
 
   private readonly api = inject(ShareLinksApi);
   private readonly resolver = inject(ErrorResolver);
+  private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly reloads = new Subject<void>();
@@ -140,11 +140,15 @@ export class ShareLinksComponent implements OnInit {
   ngOnInit(): void {
     this.reloads
       .pipe(
+        tap(() => this.listError.set(null)),
         switchMap(() =>
           this.api.list(this.fileId(), 1, PAGE_SIZE).pipe(
-            tap((page) => this.links.set(page.items)),
+            tap((page) => {
+              this.links.set(page.items);
+              this.loaded.set(true);
+            }),
             catchError((error: unknown) => {
-              this.error.set(this.resolver.resolve(error).message);
+              this.listError.set(this.resolver.resolve(error).message);
               return EMPTY;
             }),
           ),
@@ -161,7 +165,7 @@ export class ShareLinksComponent implements OnInit {
     }
     this.busy.set(true);
     this.error.set(null);
-    this.copied.set('');
+    this.created.set(null);
     this.api
       .create(this.fileId(), this.expiresInDays())
       .pipe(
@@ -170,7 +174,12 @@ export class ShareLinksComponent implements OnInit {
       )
       .subscribe({
         next: (link) => {
-          this.created.set(`${this.document.location.origin}/s#${link.token}`);
+          // The page route builds the address; the token rides in the fragment.
+          const path = this.router.serializeUrl(
+            this.router.createUrlTree(['/s'], { fragment: link.token }),
+          );
+          this.created.set({ id: link.id, address: `${this.document.location.origin}${path}` });
+          this.announcement.set('Link created. Copy it now.');
           this.reloads.next();
         },
         error: (error: unknown) => this.error.set(this.resolver.resolve(error).message),
@@ -190,23 +199,14 @@ export class ShareLinksComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: () => this.reloads.next(),
+        next: () => {
+          if (this.created()?.id === link.id) {
+            this.created.set(null); // a turned-off link's address must not stay on screen
+          }
+          this.announcement.set('Link turned off.');
+          this.reloads.next();
+        },
         error: (error: unknown) => this.error.set(this.resolver.resolve(error).message),
-      });
-  }
-
-  protected copy(address: string): void {
-    const clipboard = this.document.defaultView?.navigator.clipboard;
-    if (!clipboard) {
-      this.copied.set('Select the address and copy it.');
-      return;
-    }
-    // The clipboard API is promise-only, so it is wrapped at the boundary.
-    defer(() => from(clipboard.writeText(address)))
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: () => this.copied.set('Copied.'),
-        error: () => this.copied.set('Could not copy. Select the address and copy it.'),
       });
   }
 }

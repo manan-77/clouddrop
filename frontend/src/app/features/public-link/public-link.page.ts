@@ -100,7 +100,14 @@ export class PublicLinkPage implements OnInit {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: (result) => this.downloads.start(result.url),
+        next: (result) => {
+          try {
+            this.downloads.start(result.url);
+          } catch {
+            // The service refuses a link that is not plain http(s); say so instead of doing nothing.
+            this.downloadError.set('The download could not be started. Please try again.');
+          }
+        },
         error: (error: unknown) => this.downloadError.set(this.resolver.resolve(error).message),
       });
   }

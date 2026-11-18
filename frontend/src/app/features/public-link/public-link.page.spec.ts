@@ -1,4 +1,3 @@
-import { DOCUMENT } from '@angular/common';
 import { HttpTestingController } from '@angular/common/http/testing';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 
@@ -23,11 +22,7 @@ describe('PublicLinkPage', () => {
 
   const setup = (hash: string) => {
     TestBed.configureTestingModule({
-      providers: [
-        ...provideAuthTesting(),
-        { provide: DownloadService, useValue: downloads },
-        { provide: DOCUMENT, useValue: Object.assign(document, {}) },
-      ],
+      providers: [...provideAuthTesting(), { provide: DownloadService, useValue: downloads }],
     });
     window.location.hash = hash;
     backend = TestBed.inject(HttpTestingController);
@@ -96,5 +91,28 @@ describe('PublicLinkPage', () => {
     button.click();
     button.click();
     expect(backend.match(DOWNLOAD)).toHaveLength(1);
+  });
+
+  it('download_aRefusedUrlShowsAMessageInsteadOfDoingNothing', () => {
+    downloads.start.mockImplementationOnce(() => {
+      throw new Error('Refusing to download from a non-http link');
+    });
+    setup('#tok');
+    backend.expectOne(RESOLVE).flush(FILE);
+    fixture.detectChanges();
+    (root().querySelector('button') as HTMLButtonElement).click();
+    backend.expectOne(DOWNLOAD).flush({ url: 'javascript:alert(1)', expires_in: 300 });
+    fixture.detectChanges();
+    expect(root().textContent).toContain('The download could not be started.');
+    expect(root().textContent).not.toContain('javascript');
+  });
+
+  it('token_isReadOnceWhenThePageOpens', () => {
+    setup('#first-token');
+    backend.expectOne(RESOLVE).flush(FILE);
+    window.location.hash = '#second-token';
+    fixture.detectChanges();
+    (root().querySelector('button') as HTMLButtonElement).click();
+    expect(backend.expectOne(DOWNLOAD).request.body).toEqual({ token: 'first-token' });
   });
 });

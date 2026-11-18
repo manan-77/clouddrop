@@ -193,3 +193,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 151. **When adding a line to a doc by string anchor, check which entity it landed in** (the first match was a different table).
 152. **A component that adds requests to an existing dialog changes that dialog's specs**: every `expectOne` there must also flush (or expect) the new request, or `verify()` leaks into the next test.
 153. **Read a secret from the URL fragment and keep it in memory only**; never route to it, store it, or put it in a query.
+154. **A persistent `mockImplementation` that throws leaks past its test**; use `mockImplementationOnce` for a throwing double.
+155. **When a button is disabled by a binding, a click before change detection is ignored**: assert the request exists (`expectOne`) before asserting the DOM.

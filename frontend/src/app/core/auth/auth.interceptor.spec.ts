@@ -38,6 +38,22 @@ describe('authInterceptor', () => {
     expect(backend.expectOne('/api/v1/folders').request.headers.has('Authorization')).toBe(false);
   });
 
+  it('publicLinkCalls_neverCarryTheTokenAndANotFoundDoesNotStartARefresh', () => {
+    const { http, backend, session, router } = setup();
+    session.setAccessToken('t1');
+    let status = 0;
+    http.post('/api/v1/public/share-links/resolve', { token: 'x' }).subscribe({
+      error: (e: { status: number }) => (status = e.status),
+    });
+    const req = backend.expectOne('/api/v1/public/share-links/resolve');
+    expect(req.request.headers.has('Authorization')).toBe(false);
+    // Even a 401 (never sent today) must not trigger a refresh or a trip to the login page.
+    req.flush(null, { status: 401, statusText: 'Unauthorized' });
+    backend.expectNone('/api/v1/auth/refresh');
+    expect(status).toBe(401);
+    expect(router.navigateByUrl).not.toHaveBeenCalled();
+  });
+
   it('storageUpload_neverReceivesTheToken', () => {
     const { http, backend, session } = setup();
     session.setAccessToken('secret-token');
