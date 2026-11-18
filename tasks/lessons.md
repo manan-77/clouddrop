@@ -191,3 +191,5 @@ Rules I derive from review findings so the same mistake is not made twice. Read 
 149. **Lock the parent row before enforcing a per-parent cap**, or concurrent creates pass the count together.
 150. **Decide "once per window" with one conditional UPDATE ... RETURNING on the database clock**, not a read-then-write on the app clock.
 151. **When adding a line to a doc by string anchor, check which entity it landed in** (the first match was a different table).
+152. **A component that adds requests to an existing dialog changes that dialog's specs**: every `expectOne` there must also flush (or expect) the new request, or `verify()` leaks into the next test.
+153. **Read a secret from the URL fragment and keep it in memory only**; never route to it, store it, or put it in a query.

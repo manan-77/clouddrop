@@ -244,6 +244,10 @@ describe('ShareDialogComponent', () => {
     backend
       .expectOne((r) => r.url === '/api/v1/files/x1/permissions' && r.method === 'GET')
       .flush(emptyPage);
+    // A file's dialog also lists its share links.
+    backend
+      .expectOne((r) => r.url === '/api/v1/files/x1/share-links' && r.method === 'GET')
+      .flush({ items: [], total: 0, page: 1, page_size: 50 });
   });
 
   it('changeRole_refusedShowsTheSavedRoleAgain', () => {

@@ -23,6 +23,7 @@ import { ButtonComponent } from '@shared/ui/button/button.component';
 import { DialogComponent } from '@shared/ui/dialog/dialog.component';
 import { FieldErrorComponent } from '@shared/ui/field-error/field-error.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
+import { ShareLinksComponent } from './share-links.component';
 
 const PAGE_SIZE = 100;
 
@@ -38,6 +39,7 @@ const PAGE_SIZE = 100;
     ButtonComponent,
     DialogComponent,
     FieldErrorComponent,
+    ShareLinksComponent,
     SkeletonComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
