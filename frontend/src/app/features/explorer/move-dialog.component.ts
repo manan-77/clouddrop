@@ -77,7 +77,8 @@ type Listing =
         </ol>
       </nav>
       @let current = listing();
-      <div aria-live="polite">
+      <p class="cd-visually-hidden" role="status">{{ statusText() }}</p>
+      <div>
         @switch (current.status) {
           @case ('loading') {
             <cd-skeleton [lines]="3" />
@@ -201,6 +202,17 @@ export class MoveDialogComponent {
     return listing.status === 'error' ? listing.message : '';
   });
 
+  /** What a screen reader hears about the listing, instead of re-reading every folder name. */
+  protected readonly statusText = computed(() => {
+    const listing = this.listing();
+    if (listing.status === 'loading') {
+      return 'Loading folders';
+    }
+    return listing.status === 'error'
+      ? 'Folders could not be loaded'
+      : `${listing.folders.total} folders`;
+  });
+
   /** Not offered for the folder the file is already in, or one the caller cannot write to. */
   protected readonly canMoveHere = computed(() => {
     const here = this.trail().at(-1);
@@ -225,6 +237,7 @@ export class MoveDialogComponent {
 
   protected setPage(page: number): void {
     this.pageNumber.set(page);
+    this.navigated.emit();
   }
 
   protected reload(): void {

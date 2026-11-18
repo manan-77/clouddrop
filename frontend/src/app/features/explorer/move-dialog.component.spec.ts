@@ -148,6 +148,8 @@ describe('MoveDialogComponent', () => {
 
   it('nextPage_asksTheServerForPageTwo', async () => {
     await setup({ ...FILE, folder_id: null });
+    const navigated = vi.fn();
+    fixture.componentInstance.navigated.subscribe(navigated);
     backend.expectOne(LIST).flush({ ...page([folder('f1')], 40), page: 1 });
     await settle();
     const next = [...root().querySelectorAll('cd-pager button')].find((b) =>
@@ -156,6 +158,8 @@ describe('MoveDialogComponent', () => {
     next.click();
     await settle();
     expect(backend.expectOne(LIST).request.params.get('page')).toBe('2');
+    expect(navigated).toHaveBeenCalled();
+    expect(root().querySelector('[role="status"]')?.textContent).toContain('Loading folders');
   });
 
   it('whileBusyEveryChoiceIsOff', async () => {
