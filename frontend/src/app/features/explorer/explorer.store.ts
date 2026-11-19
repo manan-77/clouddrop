@@ -17,9 +17,7 @@ import { FoldersApi } from '@core/api/folders-api.service';
 import { type FileRead, type FolderRead, type Page } from '@core/api/models';
 import { DownloadService } from '@core/download/download.service';
 import { ErrorResolver } from '@core/error/error-resolver.service';
-
-export const FOLDER_PAGE_SIZE = 50;
-export const FILE_PAGE_SIZE = 20;
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
 export interface ExplorerView {
   status: 'loading' | 'ready' | 'error';
@@ -119,8 +117,8 @@ export class ExplorerStore {
   private load(query: Query): Observable<ExplorerView> {
     return forkJoin({
       path: query.folderId ? this.foldersApi.path(query.folderId) : of<FolderRead[]>([]),
-      folders: this.foldersApi.list(query.folderId, query.folderPage, FOLDER_PAGE_SIZE),
-      files: this.filesApi.list(query.folderId, query.filePage, FILE_PAGE_SIZE),
+      folders: this.foldersApi.list(query.folderId, query.folderPage, DEFAULT_PAGE_SIZE),
+      files: this.filesApi.list(query.folderId, query.filePage, DEFAULT_PAGE_SIZE),
     }).pipe(
       map((result): ExplorerView => ({ status: 'ready', error: null, ...result })),
       startWith(LOADING),

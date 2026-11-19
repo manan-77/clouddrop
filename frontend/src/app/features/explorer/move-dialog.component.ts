@@ -20,8 +20,7 @@ import { EmptyStateComponent } from '@shared/ui/empty-state/empty-state.componen
 import { ErrorStateComponent } from '@shared/ui/error-state/error-state.component';
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
-
-const PAGE_SIZE = 20;
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
 type Listing =
   | { status: 'loading' }
@@ -182,7 +181,7 @@ export class MoveDialogComponent {
   protected readonly listing = toSignal(
     toObservable(this.query).pipe(
       switchMap((query) =>
-        this.foldersApi.list(query.parentId, query.page, PAGE_SIZE).pipe(
+        this.foldersApi.list(query.parentId, query.page, DEFAULT_PAGE_SIZE).pipe(
           map((folders): Listing => ({ status: 'ready', folders })),
           startWith<Listing>({ status: 'loading' }),
           catchError((error: unknown) =>

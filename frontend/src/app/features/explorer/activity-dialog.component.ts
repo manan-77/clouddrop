@@ -18,8 +18,7 @@ import { DateTimePipe } from '@shared/pipes/date-time.pipe';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { DialogComponent } from '@shared/ui/dialog/dialog.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
-
-const PAGE_SIZE = 50;
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
 /** Recent activity on one file or folder, newest first. Owners only; the server enforces it. */
 @Component({
@@ -95,7 +94,7 @@ export class ActivityDialogComponent implements OnInit {
     this.loading.set(true);
     this.errorText.set(null);
     this.api
-      .forResource(this.resourceId(), 1, PAGE_SIZE)
+      .forResource(this.resourceId(), 1, DEFAULT_PAGE_SIZE)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (page) => {

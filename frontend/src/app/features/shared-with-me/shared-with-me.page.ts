@@ -23,8 +23,7 @@ import { EmptyStateComponent } from '@shared/ui/empty-state/empty-state.componen
 import { ErrorStateComponent } from '@shared/ui/error-state/error-state.component';
 import { PagerComponent } from '@shared/ui/pager/pager.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
-
-const PAGE_SIZE = 50;
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
 /** What other people shared with me: the top of each shared tree, opened in the normal explorer. */
 @Component({
@@ -119,7 +118,7 @@ const PAGE_SIZE = 50;
   `,
 })
 export class SharedWithMePage implements OnInit {
-  protected readonly pageSize = PAGE_SIZE;
+  protected readonly pageSize = DEFAULT_PAGE_SIZE;
   protected readonly loading = signal(true);
   protected readonly errorText = signal<string | null>(null);
   protected readonly items = signal<readonly SharedItem[]>([]);
@@ -146,11 +145,11 @@ export class SharedWithMePage implements OnInit {
           this.errorText.set(null);
         }),
         switchMap((page) =>
-          this.sharing.sharedWithMe(page, PAGE_SIZE).pipe(
+          this.sharing.sharedWithMe(page, DEFAULT_PAGE_SIZE).pipe(
             tap({
               next: (result) => {
                 // Items were revoked while on a later page: step back to the last page that exists.
-                const lastPage = Math.ceil(result.total / PAGE_SIZE);
+                const lastPage = Math.ceil(result.total / DEFAULT_PAGE_SIZE);
                 if (result.items.length === 0 && result.total > 0 && lastPage < page) {
                   this.requests.next(lastPage);
                   return;

@@ -24,8 +24,9 @@ import { DialogComponent } from '@shared/ui/dialog/dialog.component';
 import { FieldErrorComponent } from '@shared/ui/field-error/field-error.component';
 import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
 import { ShareLinksComponent } from './share-links.component';
+import { MAX_PAGE_SIZE } from '@core/api/pagination';
 
-const PAGE_SIZE = 100;
+// No pager here: ask for the most the API allows so the whole list shows (see todo).
 
 /**
  * Who can open a file or folder. Only the owner is offered this dialog and the server refuses
@@ -84,7 +85,7 @@ export class ShareDialogComponent implements OnInit {
       .pipe(
         tap(() => this.loadError.set(null)),
         switchMap(() =>
-          this.api.list(this.kind(), this.resourceId(), 1, PAGE_SIZE).pipe(
+          this.api.list(this.kind(), this.resourceId(), 1, MAX_PAGE_SIZE).pipe(
             tap({
               next: (page) => {
                 this.items.set(page.items);

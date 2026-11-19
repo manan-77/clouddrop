@@ -43,6 +43,17 @@ Load order: this file applies everywhere. `backend/CLAUDE.md` and `frontend/CLAU
 
 ---
 
+## Consistency (do not drift)
+
+A PR is reviewed as part of the whole repo, not only as a diff. Before adding a constant, helper, pattern, component or rule, **grep for an existing one** and reuse it; if the existing one is wrong, change it everywhere in the same PR.
+
+- **One owner per value.** A number, string or rule that appears twice (page size, limits, TTLs, status lists, error codes, labels) lives in one named constant, and every use imports it. A deliberate exception gets a one-line comment saying why.
+- **Same problem, same shape.** Lists, loading/empty/error states, dialogs, status announcements, role checks and spec setup are solved once and reused. A second hand-rolled version needs a stated reason.
+- **Prefer a mechanical guard** (lint rule, structural test, drift test) over a note when a rule can be checked by a tool. Add it in the PR that finds the drift and prove it fires on a deliberately bad file.
+- **Reviews include a repo-wide consistency pass**: the reviewer greps for the same constant, pattern or call elsewhere and reports every divergence, not only the ones in the diff.
+
+---
+
 ## Decisions
 
 ### Locked (do not relitigate in a task)
