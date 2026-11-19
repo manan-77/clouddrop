@@ -1,3 +1,4 @@
+import { MAX_PAGE_SIZE } from './pagination';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -19,7 +20,7 @@ describe('SharingApi', () => {
     expect(req.request.method).toBe('GET');
     expect(req.request.params.get('page')).toBe('2');
     expect(req.request.params.get('page_size')).toBe('100');
-    req.flush({ items: [], total: 0, page: 2, page_size: 100 });
+    req.flush({ items: [], total: 0, page: 2, page_size: MAX_PAGE_SIZE });
   });
 
   it('grant_postsEmailAndRole', () => {

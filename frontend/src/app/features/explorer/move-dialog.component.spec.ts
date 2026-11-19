@@ -2,6 +2,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { type ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { type CallerRole, type FileRead, type FolderRead } from '@core/api/models';
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
 import { MoveDialogComponent } from './move-dialog.component';
 
@@ -30,7 +31,7 @@ const page = (items: FolderRead[], total = items.length) => ({
   items,
   total,
   page: 1,
-  page_size: 20,
+  page_size: DEFAULT_PAGE_SIZE,
 });
 
 describe('MoveDialogComponent', () => {
@@ -150,7 +151,7 @@ describe('MoveDialogComponent', () => {
     await setup({ ...FILE, folder_id: null });
     const navigated = vi.fn();
     fixture.componentInstance.navigated.subscribe(navigated);
-    backend.expectOne(LIST).flush({ ...page([folder('f1')], 40), page: 1 });
+    backend.expectOne(LIST).flush({ ...page([folder('f1')], DEFAULT_PAGE_SIZE * 2), page: 1 });
     await settle();
     const next = [...root().querySelectorAll('cd-pager button')].find((b) =>
       /next/i.test(b.textContent ?? ''),

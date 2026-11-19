@@ -56,7 +56,8 @@ PR; a finding in review means a rule here was skipped or is missing.
     todo only when a test covers it, and say plainly what was not run. [26, 37, 47, 103]
 21. **Pin third-party actions to a commit SHA and audit tools to a version; keep advisory checks
     out of the required set.** [107, 108]
-22. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
+22. **Grep for an existing constant, helper or pattern before adding one; a value used twice has one owner** (page size drifted to 20/50/100 across screens), and prefer a lint rule over a note. See root `CLAUDE.md` > Consistency.
+23. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
 
 ## Review stop rule
 Review the local diff once before opening the PR (independent reviewer, no cap on findings). In the

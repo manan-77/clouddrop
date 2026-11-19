@@ -3,6 +3,7 @@ import { type ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
 import { type GrantRead } from '@core/api/models';
+import { MAX_PAGE_SIZE } from '@core/api/pagination';
 import { ShareDialogComponent } from './share-dialog.component';
 
 const grant = (id: string, email: string, role: GrantRead['role'] = 'viewer'): GrantRead => ({
@@ -15,7 +16,7 @@ const grant = (id: string, email: string, role: GrantRead['role'] = 'viewer'): G
 const LIST = (r: { url: string; method: string }) =>
   r.url === '/api/v1/folders/f1/permissions' && r.method === 'GET';
 const POST = '/api/v1/folders/f1/permissions';
-const emptyPage = { items: [], total: 0, page: 1, page_size: 100 };
+const emptyPage = { items: [], total: 0, page: 1, page_size: MAX_PAGE_SIZE };
 const pageOf = (...items: GrantRead[]) => ({ ...emptyPage, items, total: items.length });
 
 describe('ShareDialogComponent', () => {

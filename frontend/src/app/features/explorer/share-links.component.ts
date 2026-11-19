@@ -20,8 +20,8 @@ import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
 import { ButtonComponent } from '@shared/ui/button/button.component';
 import { LinkAddressComponent } from './link-address.component';
+import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
-const PAGE_SIZE = 50;
 const DAY_CHOICES = [1, 7, 30] as const;
 
 /**
@@ -146,7 +146,7 @@ export class ShareLinksComponent implements OnInit {
       .pipe(
         tap(() => this.listError.set(null)),
         switchMap(() =>
-          this.api.list(this.fileId(), 1, PAGE_SIZE).pipe(
+          this.api.list(this.fileId(), 1, DEFAULT_PAGE_SIZE).pipe(
             tap((page) => {
               this.links.set(page.items);
               this.loaded.set(true);

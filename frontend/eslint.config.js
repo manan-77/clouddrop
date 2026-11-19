@@ -28,6 +28,19 @@ const PROMISE_SYNTAX = [
   { selector: "MemberExpression[property.name='toPromise']", message: PROMISES },
 ];
 
+const PAGE_SIZE_MESSAGE =
+  'Page sizes live in core/api/pagination.ts: use DEFAULT_PAGE_SIZE or MAX_PAGE_SIZE.';
+const PAGE_SIZE_SYNTAX = [
+  {
+    selector: "VariableDeclarator[id.name=/page_?size/i][init.type='Literal']",
+    message: PAGE_SIZE_MESSAGE,
+  },
+  {
+    selector: "PropertyDefinition[key.name=/page_?size/i][value.type='Literal']",
+    message: PAGE_SIZE_MESSAGE,
+  },
+];
+
 const DEEP_RELATIVE = {
   group: ['../../../*'],
   message: 'Use the @core, @shared or @features aliases.',
@@ -64,7 +77,7 @@ module.exports = defineConfig([
         { fixStyle: 'inline-type-imports', disallowTypeAnnotations: false },
       ],
       'no-console': 'error',
-      'no-restricted-syntax': ['error', ...SECURITY_SYNTAX, ...PROMISE_SYNTAX],
+      'no-restricted-syntax': ['error', ...SECURITY_SYNTAX, ...PROMISE_SYNTAX, ...PAGE_SIZE_SYNTAX],
       'no-restricted-imports': ['error', { patterns: [DEEP_RELATIVE] }],
     },
   },
@@ -90,6 +103,10 @@ module.exports = defineConfig([
         },
       ],
     },
+  },
+  {
+    files: ['src/app/core/api/pagination.ts'],
+    rules: { 'no-restricted-syntax': ['error', ...SECURITY_SYNTAX, ...PROMISE_SYNTAX] },
   },
   {
     // Angular's own testing API is promise based (whenStable); the security bans still apply.

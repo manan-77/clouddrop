@@ -98,6 +98,9 @@ describe('ExplorerPage', () => {
       page([file('a', 'report.pdf')]),
     );
     expect(requests.folders.request.params.get('page')).toBe('1');
+    // One shared page size for both lists (core/api/pagination.ts).
+    expect(requests.folders.request.params.get('page_size')).toBe('50');
+    expect(requests.files.request.params.get('page_size')).toBe('50');
     expect(requests.folders.request.params.has('parent_id')).toBe(false);
     expect(requests.files.request.params.has('folder_id')).toBe(false);
     await settle();
