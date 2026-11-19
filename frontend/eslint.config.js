@@ -28,10 +28,16 @@ const PROMISE_SYNTAX = [
   { selector: "MemberExpression[property.name='toPromise']", message: PROMISES },
 ];
 
+const PAGE_SIZE_MESSAGE =
+  'Page sizes live in core/api/pagination.ts: use DEFAULT_PAGE_SIZE or MAX_PAGE_SIZE.';
 const PAGE_SIZE_SYNTAX = [
   {
-    selector: "VariableDeclarator[id.name=/PAGE_SIZE/][init.type='Literal']",
-    message: 'Page sizes live in core/api/pagination.ts: use DEFAULT_PAGE_SIZE or MAX_PAGE_SIZE.',
+    selector: "VariableDeclarator[id.name=/page_?size/i][init.type='Literal']",
+    message: PAGE_SIZE_MESSAGE,
+  },
+  {
+    selector: "PropertyDefinition[key.name=/page_?size/i][value.type='Literal']",
+    message: PAGE_SIZE_MESSAGE,
   },
 ];
 

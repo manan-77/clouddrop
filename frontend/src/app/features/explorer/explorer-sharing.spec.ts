@@ -5,6 +5,7 @@ import { By } from '@angular/platform-browser';
 import { BehaviorSubject } from 'rxjs';
 
 import { type CallerRole, type FileRead, type FolderRead } from '@core/api/models';
+import { MAX_PAGE_SIZE } from '@core/api/pagination';
 import { provideAuthTesting } from '@core/auth/auth-testing';
 import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { DropZoneDirective } from './drop-zone.directive';
@@ -91,7 +92,9 @@ describe('ExplorerPage sharing controls', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(root.querySelector('cd-share-dialog')).not.toBeNull();
-    backend.expectOne('/api/v1/folders/d1/permissions?page=1&page_size=100').flush(page([]));
+    backend
+      .expectOne(`/api/v1/folders/d1/permissions?page=1&page_size=${MAX_PAGE_SIZE}`)
+      .flush(page([]));
   });
 
   it('ownerActivityButton_opensTheActivityDialogForThatFile', async () => {
@@ -203,7 +206,9 @@ describe('ExplorerPage sharing controls', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     expect(root.querySelector('cd-share-dialog')).not.toBeNull();
-    backend.expectOne('/api/v1/folders/d1/permissions?page=1&page_size=100').flush(page([]));
+    backend
+      .expectOne(`/api/v1/folders/d1/permissions?page=1&page_size=${MAX_PAGE_SIZE}`)
+      .flush(page([]));
     const route = TestBed.inject(ActivatedRoute) as unknown as {
       paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
     };

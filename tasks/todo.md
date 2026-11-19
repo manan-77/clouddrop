@@ -416,6 +416,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 
 ## 12. Backlog and known gaps
 
+- [ ] The share dialog (people with access) and the share-links list show only page 1 (100 and 50 rows): add a pager or load all pages, so nothing is hidden past the cap.
 - [ ] The test client prints a deprecation notice about the HTTP library. Resolve during the dependency audit.
 - [ ] AI quotas and token budgets per user are not built (the storage quota exists as a soft limit).
 - [ ] Folder move (re-parenting) with cycle prevention is not built.

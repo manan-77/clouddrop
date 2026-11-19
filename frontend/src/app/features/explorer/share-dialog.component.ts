@@ -26,8 +26,6 @@ import { SkeletonComponent } from '@shared/ui/skeleton/skeleton.component';
 import { ShareLinksComponent } from './share-links.component';
 import { MAX_PAGE_SIZE } from '@core/api/pagination';
 
-// No pager here: ask for the most the API allows so the whole list shows (see todo).
-
 /**
  * Who can open a file or folder. Only the owner is offered this dialog and the server refuses
  * everyone else. Adding, changing and removing run one at a time, and the list is always the
@@ -85,6 +83,7 @@ export class ShareDialogComponent implements OnInit {
       .pipe(
         tap(() => this.loadError.set(null)),
         switchMap(() =>
+          // No pager yet: ask for the most the API allows (tasks/todo.md section 12).
           this.api.list(this.kind(), this.resourceId(), 1, MAX_PAGE_SIZE).pipe(
             tap({
               next: (page) => {
