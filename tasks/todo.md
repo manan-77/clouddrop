@@ -1,6 +1,6 @@
 # CloudDrop AI - Master Task Plan
 
-Last updated: 2026-11-06. This file is the single source of truth for what is done, what is next, and what is blocked.
+Last updated: 2026-11-22. This file is the single source of truth for what is done, what is next, and what is blocked.
 It contains tasks only. No code lives here.
 
 ## 0. Legend
@@ -24,7 +24,7 @@ It contains tasks only. No code lives here.
    - Backend: ruff check, ruff format check, mypy strict, pytest.
    - Frontend: build, test, lint, format.
 5. Push and open a PR into develop as the manan-77 account. Confirm the active GitHub account first, every time.
-6. PR review against our CLAUDE.md files (see 1.3).
+6. Review the local diff before opening the PR, then the PR review against our CLAUDE.md files (see 1.3 and the pre-PR checklist in tasks/lessons.md).
 7. Fix every blocker and major finding, re-run the gates, push.
 8. Squash merge, delete the remote branch and the local branch, switch to develop and pull.
 9. Tick the boxes in this file as part of the same PR, not after the merge.
@@ -40,6 +40,7 @@ It contains tasks only. No code lives here.
 ### 1.3 PR review rules
 - The reviewer is an independent agent that receives the diff, the changed files and the PR gate checklists from the root, backend and frontend CLAUDE.md files. It does not receive my conclusions.
 - Findings are classed as blocker, major or minor.
+- The local diff is reviewed once before the PR is opened. In the PR, another round runs only while the last round found a blocker or major.
 - Merge only when no blocker or major is open. Minor findings are fixed or logged in section 12.
 - If a gate fails or a blocker cannot be fixed, stop and report. Never merge a red PR. Never force-push.
 - A review by the same AI that wrote the code is biased. A human look from the owner is still the real safety net.
@@ -47,28 +48,43 @@ It contains tasks only. No code lives here.
 ### 1.4 Release rule
 - develop goes into main only through a separate release PR. Ask the owner before opening each one. main stays protected.
 
-## 2. Status snapshot (2026-11-06)
+## 2. Status snapshot (2026-11-22)
 
-Merged to develop (PRs #1 to #21): foundation and auth; workspaces, folders, files and S3 presigned upload/download; the Angular app (shell, auth, explorer, uploads); the Celery processing pipeline (verification, ClamAV scan, type detection, extraction and chunking); purge job; multipart upload (backend and frontend); Redis rate limiting and the CSRF header; CI workflows, container images and their CI smoke tests; security review, backup notes and architecture docs. Backend: 244 tests; frontend: 215 tests; all CI jobs green.
+Merged to develop (PRs #1 to #31): everything in the old snapshot (foundation and auth, workspaces, folders, files and S3 upload/download, the Angular app, the processing pipeline, purge job, multipart upload, rate limiting, CI and containers, docs), plus sharing with roles and folder-grant inheritance (#23), the audit trail (#24), the sharing UI with the per-caller role (#25), backend share links (#26), the share-link UI and public page (#27), the move-file folder picker (#28), CI speed-ups (#29), shared frontend page-size constants with a lint rule (#30), and local embeddings (#31). Files now reach `ready`. Test counts were not re-measured for this snapshot; run `scripts/verify.sh` for current numbers.
 
-Every remaining item is blocked on the owner or an external service:
+What is next: the AI features (sections 9.4 to 10.4), built in the order given in section 2.2. They no longer wait on the owner: AI runs locally for now.
 
-- **Phase 4 (sharing, permissions, audit logs, sharing UI):** needs the permission-inheritance decision (section 3.3), then `docs/permissions.md` before code.
-- **Phases 6 and 7 (embeddings, search, RAG chat, summaries, compare, AI UI):** need the embedding model and dimension (the `vector(N)` column) and the APIM details; fake-gateway work can start once the dimension is decided.
-- **Phase 8 leftovers:** error-tracking backend choice; real deploy (Azure subscription and secrets); restore check with a role that can create a database; load tests (need real services); release PR develop to main (ask the owner first).
-- **Never exercised for real:** AWS S3, ClamAV, a real browser session, APIM, concurrent workers.
-- **Phase 3 leftovers:** (file move UI done: folder picker dialog, PR below) status polling after upload (waits for statuses that advance to `ready`), real-browser check.
+Still never exercised for real: S3 from a browser, ClamAV, a real browser session, concurrent workers, Azure APIM.
+
+### 2.1 Changes since the last snapshot (2026-11-06)
+- Sharing, audit and share links are done end to end, backend and frontend (Phase 4 items in section 7 are ticked; only the optional email branch remains).
+- File move has a folder picker (#28). Editors still cannot use it (see the OWNER-DECISION log).
+- CI (#29): cheap Argon2 in tests, Docker layer cache, audit path filter, `scripts/verify.sh` (the exact CI commands), `tasks/lessons.md` distilled into a pre-PR checklist, history in `tasks/archive/`.
+- Consistency (#30): one shared frontend page-size constant, a lint rule that guards it, and a "Consistency" section in the root CLAUDE.md.
+- Embeddings (#31, ADR 0013): fastembed with `BAAI/bge-small-en-v1.5`, 384 dimensions (a permanent column size), migration 0012 with an HNSW cosine index, an embed stage, and files now reach `ready`.
+- Decision: AI runs locally for now. Embeddings through fastembed; chat through Ollama with `qwen3:4b-instruct`, `num_ctx` 8192 and a prompt-size check (`think: false` did not work on plain `qwen3:4b`; the instruct variant answers fast and cites). The provider stays behind one interface so Azure APIM can replace it by settings later. The chat decision needs its own ADR with the chat PR (not written yet).
+- Decision: review process is local diff first, further PR rounds only while the last found a blocker or major; minors go to this file.
+- Environment: AWS values are in the local `.env` (bucket in ap-southeast-2). S3 CORS and lifecycle rules were applied 2026-11-22 at the owner's request; verify with a real browser upload. ClamAV is installed but not configured, so `SCANNER_MODE=off` locally. Azure APIM keys are still empty and no longer block anything.
+
+### 2.2 Direction (in order)
+1. Semantic search backend (9.4): embed the query, permission filter in the same SQL query, cosine order, threshold, pagination, rate-limit hook, over-fetch for the approximate index.
+2. Ollama chat client behind an interface, with a fake for tests and a prompt-size check (9.2).
+3. RAG endpoint with streaming and citations (chunk ids and pages), with the untrusted-document-text prompt rules (10.1).
+4. Frontend search (9.5), then chat (10.4).
+5. Summaries and categories (10.2). Compare documents last and optional (10.3).
+6. Real-browser end-to-end check with real S3 (6.5, 6.6).
+7. Hardening: status polling after upload, trash and restore, folder move, editor moves, the share dialog pager (more than 100 grants or 50 links are hidden today), error-tracking choice, deploy decisions, and performance. Performance: run Lighthouse on the production build (an earlier score of 55 was measured on the dev server); target at least 98 per page as a CI gate once measured. Also CI path filters so backend CI skips frontend-only PRs (no branch protection exists, so nothing stalls).
 
 ## 3. Inputs needed from the owner
 
 ### 3.1 AWS (needed for real file uploads) - NEEDS-YOU
-- [ ] AWS account and region to use.
-- [ ] An S3 bucket name (private).
-- [ ] An IAM user or role restricted to that one bucket, with access key id and secret.
-- [ ] Bucket settings applied: Block Public Access on, default encryption on, CORS allowing browser POST from the app origin and exposing the ETag header, lifecycle rule to expire unfinished multipart uploads.
-- [ ] Values placed in the local .env file only. Never in git, never in chat.
+- [x] AWS account and region to use (ap-southeast-2).
+- [x] An S3 bucket name (private).
+- [x] An IAM user or role restricted to that one bucket, with access key id and secret.
+- [~] Bucket settings: Block Public Access on, default encryption on, CORS allowing browser POST/PUT from the app origin and exposing the ETag header, lifecycle rule to expire unfinished multipart uploads. CORS and lifecycle were applied 2026-11-22; verify with a real browser upload (6.5).
+- [x] Values placed in the local .env file only. Never in git, never in chat.
 
-### 3.2 Azure APIM and models (needed for all AI work) - NEEDS-YOU
+### 3.2 Azure APIM and models (no longer blocking: AI runs locally for now, see 2.1) - NEEDS-YOU
 - [ ] APIM base URL.
 - [ ] Subscription key.
 - [ ] Chat endpoint path and the deployment or model name behind it.
@@ -79,7 +95,8 @@ Every remaining item is blocked on the owner or an external service:
 
 ### 3.3 Decisions - DECISION
 - [x] Angular version pinned to 21.2 (ADR 0004) and the no-UI-kit default confirmed by default (ADR 0005). Owner may revisit.
-- [ ] Embedding model: Azure endpoint or a local sentence-transformers model (fixes the vector size forever).
+- [x] Embedding model: local fastembed `BAAI/bge-small-en-v1.5`, 384 dimensions (ADR 0013). Azure can replace it later only with a new column and a re-embed.
+- [x] Chat model for now: local Ollama `qwen3:4b-instruct`, behind one provider interface (ADR to be written with the chat PR).
 - [x] Permission inheritance: folder grants apply to everything inside (owner confirmed 2026-11-17; ADR 0010).
 - [ ] Display date format (assumed day/month/year with 24-hour time).
 - [ ] Whether email features (verification, password reset, share invitations) are in scope, and which provider.
@@ -90,9 +107,11 @@ Every remaining item is blocked on the owner or an external service:
 - [ ] Change the local database password from the placeholder to a real one (and update DATABASE_URL to match).
 - [ ] Optionally enable branch protection on main in GitHub (require a pull request).
 - [ ] Keep the MacBook awake while work runs unattended (charger plugged in, sleep prevented). The lid must stay open.
-- [ ] Install ClamAV locally before Phase 5 real scanning (OK-NOW work uses a fake scanner).
+- [~] ClamAV is installed but not configured; `SCANNER_MODE=off` locally. Configure clamd and run one real scan (see PR 12 in section 12).
 
 ## 4. Order of execution given the blockers
+
+Historical (phases 1 to 5 are done). The current order is in section 2.2.
 
 1. Pre-work: review and squash-merge PR number 1. OK-NOW.
 2. Phase 3 (Angular app). Mostly OK-NOW. Real upload from the browser needs AWS.
@@ -162,7 +181,7 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Explorer page for the root and for a folder id, with breadcrumbs from the new endpoint.
 - [x] Folder list and file list with server pagination and a page size control.
 - [x] Create folder dialog, rename, delete with confirmation, with the folder-not-empty and name-taken errors shown inline.
-- [x] File rename and delete. - [ ] Moving a file to another folder is NOT built yet: it needs a folder picker (tree navigation); the API supports it (PATCH folder_id).
+- [x] File rename and delete. Moving a file to another folder: folder picker dialog (#28, owners only; see the OWNER-DECISION log).
 - [x] Download: request a signed link on click and navigate to it, never fetch it into memory, never store or log the link.
 - [x] File status badge driven by the shared status union, with clear text for every status.
 - [x] Loading skeletons, empty states and error states with retry on every list.
@@ -176,10 +195,10 @@ Goal: a person can register, sign in, browse folders, upload, download and manag
 - [x] Flow: ask the API for upload instructions, send the form straight to storage with progress reporting and no auth header, then call complete.
 - [x] Cancel stops network work. A failed upload leaves the UI usable and shows the server message.
 - [x] Concurrency limit on parallel uploads.
-- [ ] After complete, poll the file status with backoff until it reaches a final state: DEFERRED to Phase 5, because nothing moves a file past 'uploaded' until the worker exists (polling now would only spin).
+- [ ] After complete, poll the file status with backoff until it reaches a final state: was deferred because nothing moved a file past 'uploaded'; since #31 files reach `ready`, so this is unblocked (Direction step 7).
 - [x] Never read the whole file into memory.
 - [x] Tests: queue state machine, cancel, failure recovery, polling stop conditions, the Authorization header is absent on the storage call.
-- [ ] Real upload test against the actual bucket once the owner provides AWS (BLOCKED-AWS), including verifying the bucket CORS settings.
+- [ ] Real upload test against the actual bucket (AWS values and CORS are now in place), including verifying the bucket CORS settings. Direction step 6.
 
 ### 6.6 Phase 3 exit criteria
 - [ ] A new user can register, sign in, create folders, upload a file (against fake or real storage), see it, download it, rename, move and delete it.
@@ -268,7 +287,7 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 - [x] Remove NUL characters from all extracted text before storing.
 - [x] Deterministic chunking with chunk index, page or section, content hash and a stable size and overlap.
 - [x] Chunks table migration and the replace-in-one-transaction write so re-processing is idempotent.
-- [ ] Final status ready only after chunks are stored. (Deferred: files stay in `processing` until embeddings exist in Phase 6; `ready` needs both.)
+- [x] Final status ready only after chunks and embeddings are stored (embed stage merged in #31).
 - [x] Tests: each format, zip bomb sample, corrupt file, empty file, NUL bytes, deterministic output, re-run gives identical chunks.
 
 ### 8.5 Branch: feat/purge-job (OK-NOW)
@@ -286,11 +305,12 @@ Goal: after upload, files are scanned, text is extracted and chunked, and the fi
 Goal: documents are searchable by meaning, and only by people allowed to see them.
 
 ### 9.1 Branch: docs/embedding-decision (DECISION, NEEDS-YOU)
-- [ ] Choose the embedding model and record its name and vector size in an ADR.
-- [ ] Define the single constants for model name and vector size.
+- [x] Choose the embedding model and record its name and vector size in an ADR (ADR 0013).
+- [x] Define the single constants for model name and vector size (`EMBEDDING_MODEL`, `EMBEDDING_DIM`).
 - [ ] Decide similarity threshold defaults and top-k defaults.
 
-### 9.2 Branch: feat/ai-gateway (OK-NOW against a fake; BLOCKED-APIM for real)
+### 9.2 Branch: feat/ai-gateway (OK-NOW against a fake; the first real implementation is local Ollama chat, Azure APIM later)
+- [ ] Ollama chat client (`qwen3:4b-instruct`, `num_ctx` 8192) behind one chat interface, with a fake for tests and a prompt-size check that refuses a prompt that would not fit the context. Direction step 2.
 - [ ] One gateway module that is the only caller of the AI service. Settings supply base address, paths, deployment names and key. Nothing hard-coded.
 - [ ] Shared pooled HTTP client with connect and read timeouts.
 - [ ] Retry only on rate-limit, server error and timeout with bounded exponential backoff that honours the Retry-After header.
@@ -303,14 +323,14 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - Done: local fastembed embedder (BAAI/bge-small-en-v1.5, 384), migration 0012 with HNSW cosine index, embed stage, files reach `ready`, tests with a fake embedder, real-model test behind RUN_LOCAL_MODEL_TESTS=1.
 - Minors from review: when two workers race on one stage, the loser's `_release` can set an already-succeeded job back to `pending` (cosmetic; guard it); the fallback block in `run_pipeline` is only reached if a task is delivered for such a file (the sweeper does not select it).
 - Still open from the list below: a gateway implementation of the embedder (Azure), the documented re-embed path.
-- [ ] Embedder interface with two implementations (gateway and local model) selected by settings.
-- [ ] Migration: enable the vector extension, embeddings table with model name, dimension, chunk reference, vector column, and an approximate-nearest-neighbour index using cosine distance. Verify the test database role can create the extension.
-- [ ] Embed task: batch chunks, assert the returned size equals the configured size, write idempotently, record the model name.
-- [ ] Pipeline stage after chunking, file ready only after embeddings exist.
+- [x] Embedder interface (#31: local model and a fake). [ ] A gateway implementation selected by settings stays open until APIM exists.
+- [x] Migration 0012: enable the vector extension, embeddings table with model name, dimension, chunk reference, vector column, and an approximate-nearest-neighbour index using cosine distance. Verify the test database role can create the extension.
+- [x] Embed task: batch chunks, assert the returned size equals the configured size, write idempotently, record the model name.
+- [x] Pipeline stage after chunking, file ready only after embeddings exist.
 - [ ] Re-embed path for a model change (documented, not automatic).
-- [ ] Tests: dimension mismatch rejected, batch boundaries, idempotent rewrite, fake embedder end-to-end.
+- [x] Tests: dimension mismatch rejected, batch boundaries, idempotent rewrite, fake embedder end-to-end.
 
-### 9.4 Branch: feat/semantic-search (OK-NOW)
+### 9.4 Branch: feat/semantic-search (OK-NOW, next up)
 - [ ] Search endpoint: embed the query, filter by accessible files in the same database query, order by cosine distance, apply threshold, paginate.
 - [ ] Handle the approximate-index under-fetch problem (over-fetch or iterative scan, version-checked).
 - [ ] Return file id, chunk id, page and a short snippet only. No storage keys.
@@ -325,13 +345,13 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - [ ] Tests: debounce, cancellation, state transitions.
 
 ### 9.6 Phase 6 exit criteria
-- [ ] Searching a paraphrase finds the right document in a real run (BLOCKED-APIM or local model), and tests prove permission filtering.
+- [ ] Searching a paraphrase finds the right document in a real run (local model), and tests prove permission filtering.
 
 ## 10. Phase 7 - AI features
 
 Goal: ask questions about files, get cited answers, summaries, categories and comparisons, safely and within budgets.
 
-### 10.1 Branch: feat/rag-chat (OK-NOW against fake; BLOCKED-APIM for real)
+### 10.1 Branch: feat/rag-chat (OK-NOW against the fake; real runs against local Ollama)
 - [ ] Conversations and messages tables migration (no document text copied beyond what is needed, with model name, prompt version and token counts).
 - [ ] Prompt module holding the system rules; retrieved chunks placed in a clearly delimited block labelled as untrusted document content.
 - [ ] Retrieval reuses the permission-filtered search, with a similarity threshold and a token budget for context.
@@ -363,7 +383,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Tests: streaming states, cancel, citation links built only from server ids.
 
 ### 10.5 Phase 7 exit criteria
-- [ ] Asking about a file returns a cited answer in a real run (BLOCKED-APIM). All injection tests pass. Budgets and limits enforced.
+- [ ] Asking about a file returns a cited answer in a real run (local Ollama). All injection tests pass. Budgets and limits enforced.
 
 ## 11. Phase 8 - Hardening, CI and deploy
 
@@ -378,6 +398,8 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] Cache dependencies. (Requiring the workflows to pass is a GitHub setting: NEEDS-YOU.)
 - [x] Dependency vulnerability scan jobs for both tiers.
 - [x] PR template added. Enable branch protection and require ONLY `backend / checks` and `frontend / checks` (NEEDS-YOU in GitHub settings). Do not require the `audit` workflow (an advisory published tomorrow would block every merge), and do not add `paths:` filters to the two check workflows without a fallback job, or a required check never reports.
+- [x] (#29) Faster CI: cheap Argon2 in tests, Docker layer cache, audit path filter, `scripts/verify.sh` runs the CI commands locally.
+- [ ] Path filters so backend CI skips frontend-only PRs (and the reverse). No branch protection exists today, so a skipped required check cannot stall anything; if protection is enabled later, add the fallback job described above first.
 - Note: CI runs Postgres 17 (matches the Homebrew install); `docker-compose.yml` still uses pg16 for optional local Docker use.
 - Note: `@emnapi/core` and `@emnapi/runtime` are devDependencies only because npm 11 omits these optional peers of `@napi-rs/wasm-runtime` from a lock written on macOS (npm/cli#4828), which breaks `npm ci` on Linux. Remove them when npm fixes this.
 
@@ -398,6 +420,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
 - [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
+- [ ] Performance: Lighthouse on the production build (an earlier 55 was the dev server, so it is not a baseline); record per-page scores, then gate CI at 98 or more per page.
 - [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
 - [x] Threat-model checklist walk-through against the CLAUDE.md security rules (docs/security-review.md).
 
@@ -419,10 +442,11 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 
 ## 12. Backlog and known gaps
 
-- [ ] The share dialog (people with access) and the share-links list show only page 1 (100 and 50 rows): add a pager or load all pages, so nothing is hidden past the cap.
+- [ ] The share dialog (people with access) and the share-links list show only page 1 (100 and 50 rows): add a pager or load all pages, so nothing is hidden past the cap. (Minor from the #25 and #27 reviews.)
 - [ ] The test client prints a deprecation notice about the HTTP library. Resolve during the dependency audit.
 - [ ] AI quotas and token budgets per user are not built (the storage quota exists as a soft limit).
 - [ ] Folder move (re-parenting) with cycle prevention is not built.
+- [ ] (#31, minor) The `_release` race and the `run_pipeline` fallback block: see 9.3.
 - [ ] File versions beyond version 1 (upload a new version, restore a version) are not built.
 - [ ] Trash view and restore for soft-deleted items are not built.
 - [ ] OCR for scanned documents is out of scope for the first release (files become needs_ocr).
@@ -459,8 +483,9 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 
 ## 13. Risks to watch
 
-- The AI design depends entirely on what the owner's gateway really exposes. Verify early (BLOCKED-APIM).
-- The embedding vector size cannot change without re-embedding everything. Decide before the first embedding migration.
+- Azure APIM is unverified. Keep the provider interface honest so it can replace local models by settings.
+- The embedding vector size is now fixed at 384 (ADR 0013); changing the model means a new column and re-embedding everything.
+- A 4B local chat model is weaker than a hosted one and runs on the owner's laptop: answer quality, latency and the 8192-token context are limits to measure in the first real RAG run.
 - Approximate vector search combined with permission filters can return too few rows. Needs the dedicated test in Phase 6.
 - Real S3 behaviour (CORS, multipart ETag exposure, presigned conditions) is only proven against a fake so far.
 - The development laptop sleeping stops all unattended work. Keep it awake and plugged in.
