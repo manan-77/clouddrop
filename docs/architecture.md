@@ -2,7 +2,7 @@
 
 CloudDrop AI is a modular monolith: one FastAPI API, one Celery worker image (worker and beat), one Angular app. Postgres is the source of truth (including processing state); Redis is only the Celery broker and the rate-limit counters; files live in S3.
 
-What is built today: authentication, folders and files, direct-to-S3 uploads (single and multipart), the processing pipeline (verify, scan, type detection, text extraction and chunking), purge, rate limiting. Planned and not built: sharing and permission inheritance, embeddings and semantic search, RAG chat, summaries and categories (see `tasks/todo.md`).
+What is built today: authentication, folders and files, direct-to-S3 uploads (single and multipart), the processing pipeline (verify, scan, type detection, text extraction and chunking, local embeddings), purge, rate limiting. Sharing and permission inheritance are built too. Planned and not built: semantic search, RAG chat, summaries and categories (see `tasks/todo.md`).
 
 ## System
 
@@ -70,10 +70,10 @@ stateDiagram-v2
   scanning --> processing: clean
   processing --> failed: corrupt, too large, type mismatch
   processing --> needs_ocr: no extractable text
-  processing --> ready: planned (after embeddings)
+  processing --> ready: after embeddings
 ```
 
-State is a row per stage in `processing_jobs`; stages are idempotent and claimed atomically; a beat sweeper re-enqueues files whose message was lost. Files rest in `processing` until embeddings exist.
+State is a row per stage in `processing_jobs`; stages are idempotent and claimed atomically; a beat sweeper re-enqueues files whose message was lost. A file becomes `ready` only after the last stage (embed) succeeds.
 
 ## RAG flow (planned)
 

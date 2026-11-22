@@ -6,6 +6,7 @@ class JobStage(StrEnum):
     SCAN = "scan"
     DETECT_TYPE = "detect_type"
     EXTRACT = "extract"
+    EMBED = "embed"
 
 
 class JobStatus(StrEnum):

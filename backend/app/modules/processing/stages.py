@@ -1,9 +1,11 @@
 import tempfile
+import uuid
 from collections.abc import Callable
 from typing import IO, Protocol
 
 from sqlalchemy.orm import Session
 
+from app.ai import embeddings as embeddings_module
 from app.core.config import get_settings
 from app.core.errors import ServiceUnavailableError
 from app.modules.processing import scanner as scanner_module
@@ -19,6 +21,7 @@ from app.modules.storage.models import File, FileVersion
 from app.modules.storage.s3 import ObjectChangedError, ObjectStream, S3Storage
 
 HEAD_BYTES = 4096
+EMBEDDING_INSERT_BATCH = 500
 
 
 class PermanentStageError(Exception):
@@ -171,6 +174,49 @@ class ExtractStage:
         if not pieces:
             raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
         PipelineRepository(session).replace_chunks(version.id, pieces)
+
+
+class EmbedStage:
+    """Turns every chunk of the version into a vector, in small batches.
+
+    A vector of the wrong size would corrupt search silently, so the size is checked on every batch
+    before anything is written. The whole version is rewritten, so a rerun is safe.
+    """
+
+    name = JobStage.EMBED
+    file_status = FileStatus.PROCESSING
+    # If the model cannot be loaded until the attempts cap (for example it was never downloaded),
+    # say so instead of a generic code.
+    exhausted_code = "embedding_unavailable"
+
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
+        # Looked up at call time so tests can replace it.
+        embedder = embeddings_module.get_embedder()
+        if embedder.dim != embeddings_module.EMBEDDING_DIM:
+            raise PermanentStageError("embedding_dimension_mismatch")
+        repo = PipelineRepository(session)
+        chunks = repo.chunk_texts(version.id)
+        if not chunks:
+            raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
+        size = get_settings().embedding_batch_size
+        # Embed everything first and write at the end: the slow part holds no database locks, and
+        # the delete-then-insert is one short step, so a slow run cannot collide with a retry.
+        # shortcut: every vector of the document is held in memory (about 12 KB per chunk), so a
+        # huge document costs RAM; write per batch instead if documents reach ~100k chunks.
+        embedded: list[tuple[uuid.UUID, list[float]]] = []
+        for start in range(0, len(chunks), size):
+            batch = chunks[start : start + size]
+            vectors = embedder.embed_documents([text for _, text in batch])
+            if len(vectors) != len(batch) or any(
+                len(vector) != embeddings_module.EMBEDDING_DIM for vector in vectors
+            ):
+                raise PermanentStageError("embedding_dimension_mismatch")
+            embedded.extend(
+                (chunk_id, vector) for (chunk_id, _), vector in zip(batch, vectors, strict=True)
+            )
+        repo.clear_embeddings(version.id)
+        for start in range(0, len(embedded), EMBEDDING_INSERT_BATCH):
+            repo.add_embeddings(embedder.model, embedded[start : start + EMBEDDING_INSERT_BATCH])
 
 
 def _spool(stream: ObjectStream, target: IO[bytes]) -> None:

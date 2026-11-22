@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Longest wait between task retries; part of the visibility-timeout rule enforced below.
@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     extract_max_xml_part_bytes: int = 50 * 1024 * 1024
     extract_max_sheets: int = 50
     extract_max_cells: int = 2_000_000
+    # fastembed downloads the model here once; leave unset only where the default (a temp dir)
+    # survives restarts.
+    embedding_cache_dir: str | None = None
+    embedding_batch_size: int = Field(default=32, ge=1, le=256)
     chunk_size_chars: int = 1000
     chunk_overlap_chars: int = 150
     sweeper_stuck_after_seconds: int = 600

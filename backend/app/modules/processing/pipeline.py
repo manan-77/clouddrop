@@ -9,6 +9,7 @@ from app.modules.processing.models import ProcessingJob
 from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.stages import (
     DetectTypeStage,
+    EmbedStage,
     ExtractStage,
     PermanentStageError,
     ScanStage,
@@ -22,17 +23,17 @@ from app.modules.storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
 
-# Order matters. Later branches add the malware scan, text extraction, chunking and embedding.
+# Order matters: a file is `ready` only after its last stage (the embeddings) has succeeded.
 PIPELINE: tuple[Stage, ...] = (
     VerifyObjectStage(),
     ScanStage(),
     DetectTypeStage(),
     ExtractStage(),
+    EmbedStage(),
 )
 
-# Set when the last stage exists. Until text extraction and embeddings are built a file rests in
-# `processing`: marking it `ready` now would claim it is searchable when it is not.
-FINAL_STATUS: FileStatus | None = None
+# Searchable and readable by everyone with access once every stage has succeeded.
+FINAL_STATUS: FileStatus | None = FileStatus.READY
 
 RUNNABLE = (FileStatus.UPLOADED, FileStatus.SCANNING, FileStatus.PROCESSING)
 
@@ -55,6 +56,11 @@ def _fail(
 def _release(session: Session, job: ProcessingJob) -> None:
     job.status = JobStatus.PENDING
     session.commit()
+
+
+def _is_last_of_the_pipeline(stage: Stage, stages: tuple[Stage, ...]) -> bool:
+    # A subset of stages (tests) never completes the file: ready means the whole pipeline ran.
+    return stages == PIPELINE and stage is stages[-1]
 
 
 def run_pipeline(
@@ -112,9 +118,13 @@ def run_pipeline(
             raise TransientStageError("unexpected error") from exc
         job.status = JobStatus.SUCCEEDED
         job.finished_at = datetime.now(UTC)
+        if FINAL_STATUS is not None and _is_last_of_the_pipeline(stage, stages):
+            # Same commit as the last job: a crash cannot leave every job done and the file unready.
+            file.status = FINAL_STATUS
         session.commit()
         logger.debug("Stage %s succeeded for file %s", stage.name, file.id)
 
-    if FINAL_STATUS is not None:
+    # Every job already succeeded but the file never got its final status (older rows).
+    if FINAL_STATUS is not None and stages == PIPELINE and file.status != FINAL_STATUS:
         file.status = FINAL_STATUS
         session.commit()
