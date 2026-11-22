@@ -2,17 +2,18 @@ import os
 import uuid
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.ai.embeddings import EMBEDDING_DIM, EMBEDDING_MODEL, LocalEmbedder
 from app.core.config import get_settings
 from app.modules.processing.constants import JobStage, JobStatus
-from app.modules.processing.models import ChunkEmbedding, DocumentChunk
+from app.modules.processing.models import ChunkEmbedding, DocumentChunk, ProcessingJob
 from app.modules.processing.pipeline import run_pipeline
 from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.stages import EmbedStage, TransientStageError
+from app.modules.storage.models import File
 from app.modules.storage.s3 import S3Storage
 from tests.conftest import FakeEmbedder
 from tests.documents import make_pdf
@@ -22,6 +23,15 @@ from tests.test_pipeline import PDF_TYPE, _jobs, _status, _upload
 def _count(session: Session) -> int:
     session.expire_all()
     return session.scalar(select(func.count()).select_from(ChunkEmbedding)) or 0
+
+
+def _jobs_now(session: Session) -> dict[str, ProcessingJob]:
+    rows = session.execute(select(ProcessingJob)).scalars()
+    return {job.stage: job for job in rows}
+
+
+def _file_status_now(session: Session, file_id: uuid.UUID) -> str:
+    return session.execute(select(File.status).where(File.id == file_id)).scalar_one()
 
 
 def _processed(client, make_user, s3_client, dispatcher, session, storage, pages=("a", "b", "c")):
@@ -128,6 +138,44 @@ class TestEmbedStage:
         assert _status(session, file_id) == "ready"
         assert _jobs(session)[JobStage.EMBED].attempts == 2
         assert _jobs(session)[JobStage.EXTRACT].attempts == 1
+
+
+class TestReadyIsAtomic:
+    def test_theFileIsReadyInTheSameCommitAsTheLastJob(
+        self,
+        client,
+        make_user,
+        s3_client,
+        dispatcher,
+        session: Session,
+        storage: S3Storage,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        file_id, _ = _upload(client, make_user(), s3_client, make_pdf(["a"]), PDF_TYPE, "a.pdf")
+        version_id = dispatcher.calls[-1]
+        seen: list[tuple[str, str]] = []
+        real_commit = session.commit
+
+        def watching_commit() -> None:
+            embed = _jobs_now(session).get(JobStage.EMBED)
+            if embed is not None and embed.status == JobStatus.SUCCEEDED:
+                seen.append((embed.status, _file_status_now(session, file_id)))
+            real_commit()
+
+        monkeypatch.setattr(session, "commit", watching_commit)
+        run_pipeline(session, storage, version_id)
+        assert seen == [(JobStatus.SUCCEEDED, "ready")], (
+            "a commit had the job done but the file not ready"
+        )
+
+    def test_everyJobDoneButTheFileNotReady_isCompletedByTheNextRun(
+        self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
+    ) -> None:
+        file_id, version_id = _processed(client, make_user, s3_client, dispatcher, session, storage)
+        session.execute(update(File).where(File.id == file_id).values(status="processing"))
+        assert _status(session, file_id) == "processing"
+        run_pipeline(session, storage, version_id)
+        assert _status(session, file_id) == "ready"
 
 
 class TestStorage:

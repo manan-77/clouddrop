@@ -58,6 +58,11 @@ def _release(session: Session, job: ProcessingJob) -> None:
     session.commit()
 
 
+def _is_last_of_the_pipeline(stage: Stage, stages: tuple[Stage, ...]) -> bool:
+    # A subset of stages (tests) never completes the file: ready means the whole pipeline ran.
+    return stages == PIPELINE and stage is stages[-1]
+
+
 def run_pipeline(
     session: Session,
     storage: S3Storage,
@@ -113,10 +118,13 @@ def run_pipeline(
             raise TransientStageError("unexpected error") from exc
         job.status = JobStatus.SUCCEEDED
         job.finished_at = datetime.now(UTC)
+        if FINAL_STATUS is not None and _is_last_of_the_pipeline(stage, stages):
+            # Same commit as the last job: a crash cannot leave every job done and the file unready.
+            file.status = FINAL_STATUS
         session.commit()
         logger.debug("Stage %s succeeded for file %s", stage.name, file.id)
 
-    # A subset of stages (tests) never completes the file: ready means the whole pipeline ran.
-    if FINAL_STATUS is not None and stages == PIPELINE:
+    # Every job already succeeded but the file never got its final status (older rows).
+    if FINAL_STATUS is not None and stages == PIPELINE and file.status != FINAL_STATUS:
         file.status = FINAL_STATUS
         session.commit()

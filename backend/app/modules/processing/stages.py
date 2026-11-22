@@ -1,4 +1,5 @@
 import tempfile
+import uuid
 from collections.abc import Callable
 from typing import IO, Protocol
 
@@ -183,6 +184,9 @@ class EmbedStage:
 
     name = JobStage.EMBED
     file_status = FileStatus.PROCESSING
+    # If the model cannot be loaded until the attempts cap (for example it was never downloaded),
+    # say so instead of a generic code.
+    exhausted_code = "embedding_unavailable"
 
     def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
         # Looked up at call time so tests can replace it.
@@ -193,8 +197,10 @@ class EmbedStage:
         chunks = repo.chunk_texts(version.id)
         if not chunks:
             raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
-        repo.clear_embeddings(version.id)
         size = get_settings().embedding_batch_size
+        # Embed everything first and write at the end: the slow part holds no database locks, and
+        # the delete-then-insert is one short step, so a slow run cannot collide with a retry.
+        embedded: list[tuple[uuid.UUID, list[float]]] = []
         for start in range(0, len(chunks), size):
             batch = chunks[start : start + size]
             vectors = embedder.embed_documents([text for _, text in batch])
@@ -202,10 +208,12 @@ class EmbedStage:
                 len(vector) != embeddings_module.EMBEDDING_DIM for vector in vectors
             ):
                 raise PermanentStageError("embedding_dimension_mismatch")
-            repo.add_embeddings(
-                embedder.model,
-                [(chunk_id, vec) for (chunk_id, _), vec in zip(batch, vectors, strict=True)],
+            embedded.extend(
+                (chunk_id, vector) for (chunk_id, _), vector in zip(batch, vectors, strict=True)
             )
+        repo.clear_embeddings(version.id)
+        for start in range(0, len(embedded), 500):
+            repo.add_embeddings(embedder.model, embedded[start : start + 500])
 
 
 def _spool(stream: ObjectStream, target: IO[bytes]) -> None:

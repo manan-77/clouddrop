@@ -13,10 +13,6 @@ EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDING_DIM = 384
 
 
-class EmbeddingError(Exception):
-    """The embedder could not produce usable vectors (never carries document text)."""
-
-
 class Embedder(Protocol):
     model: str
     dim: int

@@ -16,7 +16,7 @@ Semantic search needs every chunk turned into a vector. The AI gateway (Azure AP
 ## Consequences
 
 - Moving to another model (for example an Azure embedding model) means a new column or table with its own size, a re-embed of every chunk, and a new migration. This is documented, not automatic.
-- English-oriented quality; the model is about 70 MB, downloaded once into `EMBEDDING_CACHE_DIR`. Set that directory somewhere that survives restarts (a container volume in production), or every start downloads it again.
+- English-oriented quality; the model is about 70 MB, downloaded once into `EMBEDDING_CACHE_DIR`. Set that directory somewhere that survives restarts (a container volume in production) and **pre-populate it** where the container cannot reach the internet: if the model cannot be loaded, files end as `failed` with `embedding_unavailable` once the retries run out.
 - fastembed adds about 150 MB to the backend environment (onnxruntime, tokenizers, numpy); `pgvector` adds the SQLAlchemy vector type.
 - Embedding runs on the CPU in the worker. Throughput is modest and bounded by `EMBEDDING_BATCH_SIZE`; a very large document takes minutes, which the stage's stale-job and retry rules already cover.
 - The database role that runs migrations must be allowed to `CREATE EXTENSION vector`, or the extension must be created once by an administrator (CI and local setup do this).
