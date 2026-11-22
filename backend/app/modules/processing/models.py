@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, String, Text, UniqueConstraint, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.ai.embeddings import EMBEDDING_DIM
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.modules.processing.constants import JobStatus
 
@@ -51,3 +53,27 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     page: Mapped[int | None]
     content: Mapped[str] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64))
+
+
+class ChunkEmbedding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The vector for one chunk. Model and size are stored so a model change is detectable."""
+
+    __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint("chunk_id"),
+        CheckConstraint("dim > 0", name="dim_positive"),
+        # Approximate nearest neighbours by cosine distance (see docs/adr/0013).
+        Index(
+            "ix_chunk_embeddings_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+
+    chunk_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("document_chunks.id", ondelete="CASCADE")
+    )
+    model: Mapped[str] = mapped_column(String(100))
+    dim: Mapped[int]
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))

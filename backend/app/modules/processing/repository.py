@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, aliased
 from app.db.soft_delete import only_active
 from app.modules.processing.constants import JobStatus
 from app.modules.processing.extraction.chunking import Chunk
-from app.modules.processing.models import DocumentChunk, ProcessingJob
+from app.modules.processing.models import ChunkEmbedding, DocumentChunk, ProcessingJob
 from app.modules.storage.models import File, FileVersion
 
 
@@ -135,3 +135,25 @@ class PipelineRepository:
         ]
         for start in range(0, len(rows), 500):
             self.session.execute(insert(DocumentChunk), rows[start : start + 500])
+
+    def chunk_texts(self, version_id: uuid.UUID) -> list[tuple[uuid.UUID, str]]:
+        rows = self.session.execute(
+            select(DocumentChunk.id, DocumentChunk.content)
+            .where(DocumentChunk.file_version_id == version_id)
+            .order_by(DocumentChunk.chunk_index)
+        )
+        return [(row.id, row.content) for row in rows]
+
+    def clear_embeddings(self, version_id: uuid.UUID) -> None:
+        """Delete in the caller's transaction so a rerun writes exactly one vector per chunk."""
+        chunk_ids = select(DocumentChunk.id).where(DocumentChunk.file_version_id == version_id)
+        self.session.execute(delete(ChunkEmbedding).where(ChunkEmbedding.chunk_id.in_(chunk_ids)))
+
+    def add_embeddings(self, model: str, vectors: Sequence[tuple[uuid.UUID, list[float]]]) -> None:
+        self.session.execute(
+            insert(ChunkEmbedding),
+            [
+                {"chunk_id": chunk_id, "model": model, "dim": len(vector), "embedding": vector}
+                for chunk_id, vector in vectors
+            ],
+        )

@@ -258,7 +258,7 @@ class TestScanStage:
         run_pipeline(session, storage, version_id)
         assert fake_scanner.scanned == [PDF]
         assert {j.status for j in _jobs(session).values()} == {JobStatus.SUCCEEDED}
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
 
     def test_infectedFile_endsInfectedStopsThePipelineAndCannotBeDownloaded(
         self,
@@ -301,7 +301,7 @@ class TestScanStage:
         assert _status(session, file_id) == "scanning"
         fake_scanner.error = None
         run_pipeline(session, storage, version_id)
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
         assert (
             _jobs(session)[JobStage.VERIFY_OBJECT].attempts == 1
         )  # finished stages are not redone
@@ -348,7 +348,7 @@ class TestScanStage:
         assert len(reads) == 1, "only the extract stage may read the object when scanning is off"
         assert _jobs(session)[JobStage.SCAN].status == JobStatus.SUCCEEDED
         assert fake_scanner.scanned == []
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
 
     def test_objectSwappedAfterVerify_isRejectedAsChanged(
         self,

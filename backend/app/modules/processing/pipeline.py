@@ -9,6 +9,7 @@ from app.modules.processing.models import ProcessingJob
 from app.modules.processing.repository import PipelineRepository
 from app.modules.processing.stages import (
     DetectTypeStage,
+    EmbedStage,
     ExtractStage,
     PermanentStageError,
     ScanStage,
@@ -22,17 +23,17 @@ from app.modules.storage.s3 import S3Storage
 
 logger = logging.getLogger(__name__)
 
-# Order matters. Later branches add the malware scan, text extraction, chunking and embedding.
+# Order matters: a file is `ready` only after its last stage (the embeddings) has succeeded.
 PIPELINE: tuple[Stage, ...] = (
     VerifyObjectStage(),
     ScanStage(),
     DetectTypeStage(),
     ExtractStage(),
+    EmbedStage(),
 )
 
-# Set when the last stage exists. Until text extraction and embeddings are built a file rests in
-# `processing`: marking it `ready` now would claim it is searchable when it is not.
-FINAL_STATUS: FileStatus | None = None
+# Searchable and readable by everyone with access once every stage has succeeded.
+FINAL_STATUS: FileStatus | None = FileStatus.READY
 
 RUNNABLE = (FileStatus.UPLOADED, FileStatus.SCANNING, FileStatus.PROCESSING)
 
@@ -115,6 +116,7 @@ def run_pipeline(
         session.commit()
         logger.debug("Stage %s succeeded for file %s", stage.name, file.id)
 
-    if FINAL_STATUS is not None:
+    # A subset of stages (tests) never completes the file: ready means the whole pipeline ran.
+    if FINAL_STATUS is not None and stages == PIPELINE:
         file.status = FINAL_STATUS
         session.commit()

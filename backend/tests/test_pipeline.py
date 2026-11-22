@@ -133,18 +133,19 @@ class TestPipeline:
         file_id, key = _upload(client, make_user(), s3_client, **kwargs)  # type: ignore[arg-type]
         return file_id, dispatcher.calls[-1], key
 
-    def test_validPdf_runsEveryStageAndRestsInProcessing(
+    def test_validPdf_runsEveryStageAndEndsReady(
         self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
     ) -> None:
         file_id, version_id, _ = self._setup(client, make_user, s3_client, dispatcher)
         run_pipeline(session, storage, version_id)
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
         jobs = _jobs(session)
         assert set(jobs) == {
             JobStage.VERIFY_OBJECT,
             JobStage.SCAN,
             JobStage.DETECT_TYPE,
             JobStage.EXTRACT,
+            JobStage.EMBED,
         }
         assert {job.status for job in jobs.values()} == {JobStatus.SUCCEEDED}
         assert all(job.attempts == 1 and job.error_code is None for job in jobs.values())
@@ -158,7 +159,7 @@ class TestPipeline:
         jobs = _jobs(session)
         assert len(jobs) == len(PIPELINE)
         assert all(job.attempts == 1 for job in jobs.values())
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
 
     def test_objectOverwrittenAfterCompletion_failsWithObjectChanged(
         self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage
@@ -222,7 +223,7 @@ class TestPipeline:
         )
         run_pipeline(session, storage, version_id)
         expected = (
-            "needs_ocr" if ok and content_type == "image/png" else "processing" if ok else "failed"
+            "needs_ocr" if ok and content_type == "image/png" else "ready" if ok else "failed"
         )
         assert _status(session, file_id) == expected
         if not ok:
@@ -242,7 +243,7 @@ class TestPipeline:
         assert _jobs(session)[JobStage.VERIFY_OBJECT].status == JobStatus.PENDING
         assert _status(session, file_id) == "scanning"
         run_pipeline(session, storage, version_id)  # storage is back: the same job resumes
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
         assert _jobs(session)[JobStage.VERIFY_OBJECT].attempts == 2
 
     def test_alreadyFailedOrDeletedOrUnknown_areSkipped(
@@ -273,7 +274,7 @@ class TestPipeline:
         )
         run_pipeline(session, storage, version_id, stale_after=timedelta(minutes=15))
         assert _jobs(session)[JobStage.VERIFY_OBJECT].status == JobStatus.SUCCEEDED
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
 
     def test_freshRunningJob_isLeftToItsOwnWorker(
         self, client, make_user, s3_client, dispatcher, session: Session, storage: S3Storage

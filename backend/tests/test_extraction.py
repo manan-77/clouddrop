@@ -48,7 +48,7 @@ class TestExtraction:
         file_id = _run(
             client, make_user, s3_client, dispatcher, session, storage, body, PDF_TYPE, "a.pdf"
         )
-        assert _status(session, file_id) == "processing"
+        assert _status(session, file_id) == "ready"
         assert [(c.page, c.content) for c in _chunks(session)] == [
             (1, "alpha page"),
             (2, "beta page"),

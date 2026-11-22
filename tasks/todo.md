@@ -299,7 +299,9 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - [ ] Fake gateway for tests. Tests never call the real service.
 - [ ] Run the APIM check script with the owner's values and record the real results (BLOCKED-APIM).
 
-### 9.3 Branch: feat/embeddings (OK-NOW with fake; BLOCKED-APIM for real)
+### 9.3 Branch: feat/embeddings-stage (DONE, local model; see ADR 0013)
+- Done: local fastembed embedder (BAAI/bge-small-en-v1.5, 384), migration 0012 with HNSW cosine index, embed stage, files reach `ready`, tests with a fake embedder, real-model test behind RUN_LOCAL_MODEL_TESTS=1.
+- Still open from the list below: a gateway implementation of the embedder (Azure), the documented re-embed path.
 - [ ] Embedder interface with two implementations (gateway and local model) selected by settings.
 - [ ] Migration: enable the vector extension, embeddings table with model name, dimension, chunk reference, vector column, and an approximate-nearest-neighbour index using cosine distance. Verify the test database role can create the extension.
 - [ ] Embed task: batch chunks, assert the returned size equals the configured size, write idempotently, record the model name.

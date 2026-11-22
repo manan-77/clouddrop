@@ -1,5 +1,6 @@
+import hashlib
 import uuid
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING
 
 import boto3
@@ -14,6 +15,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.ai import embeddings as embeddings_module
+from app.ai.embeddings import EMBEDDING_DIM, EMBEDDING_MODEL
 from app.core import security
 from app.core.config import get_settings
 from app.core.ratelimit import RateLimitResult, get_rate_limiter
@@ -113,6 +116,48 @@ def fake_scanner(monkeypatch: pytest.MonkeyPatch) -> FakeScanner:
     scanner = FakeScanner()
     monkeypatch.setattr(scanner_module, "get_scanner", lambda: scanner)
     return scanner
+
+
+class FakeEmbedder:
+    """Stands in for the local model. Texts that share words get similar vectors (a hashed
+    bag of words, normalised), so search tests can rank without the real model."""
+
+    model = EMBEDDING_MODEL
+    dim = EMBEDDING_DIM
+
+    def __init__(self) -> None:
+        self.document_batches: list[list[str]] = []
+        self.queries: list[str] = []
+        self.error: Exception | None = None
+        # Tests set this to return vectors of the wrong size.
+        self.vector_size = EMBEDDING_DIM
+
+    def _vector(self, text: str) -> list[float]:
+        vector = [0.0] * self.vector_size
+        for word in text.lower().split():
+            digest = hashlib.sha256(word.encode()).digest()
+            vector[int.from_bytes(digest[:4], "big") % self.vector_size] += 1.0
+        norm = sum(value * value for value in vector) ** 0.5 or 1.0
+        return [value / norm for value in vector]
+
+    def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
+        if self.error:
+            raise self.error
+        self.document_batches.append(list(texts))
+        return [self._vector(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        if self.error:
+            raise self.error
+        self.queries.append(text)
+        return self._vector(text)
+
+
+@pytest.fixture(autouse=True)
+def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> FakeEmbedder:
+    embedder = FakeEmbedder()
+    monkeypatch.setattr(embeddings_module, "get_embedder", lambda: embedder)
+    return embedder
 
 
 @pytest.fixture

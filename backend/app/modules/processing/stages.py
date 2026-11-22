@@ -4,6 +4,7 @@ from typing import IO, Protocol
 
 from sqlalchemy.orm import Session
 
+from app.ai import embeddings as embeddings_module
 from app.core.config import get_settings
 from app.core.errors import ServiceUnavailableError
 from app.modules.processing import scanner as scanner_module
@@ -171,6 +172,40 @@ class ExtractStage:
         if not pieces:
             raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
         PipelineRepository(session).replace_chunks(version.id, pieces)
+
+
+class EmbedStage:
+    """Turns every chunk of the version into a vector, in small batches.
+
+    A vector of the wrong size would corrupt search silently, so the size is checked on every batch
+    before anything is written. The whole version is rewritten, so a rerun is safe.
+    """
+
+    name = JobStage.EMBED
+    file_status = FileStatus.PROCESSING
+
+    def run(self, file: File, version: FileVersion, storage: S3Storage, session: Session) -> None:
+        # Looked up at call time so tests can replace it.
+        embedder = embeddings_module.get_embedder()
+        if embedder.dim != embeddings_module.EMBEDDING_DIM:
+            raise PermanentStageError("embedding_dimension_mismatch")
+        repo = PipelineRepository(session)
+        chunks = repo.chunk_texts(version.id)
+        if not chunks:
+            raise PermanentStageError("no_text", FileStatus.NEEDS_OCR)
+        repo.clear_embeddings(version.id)
+        size = get_settings().embedding_batch_size
+        for start in range(0, len(chunks), size):
+            batch = chunks[start : start + size]
+            vectors = embedder.embed_documents([text for _, text in batch])
+            if len(vectors) != len(batch) or any(
+                len(vector) != embeddings_module.EMBEDDING_DIM for vector in vectors
+            ):
+                raise PermanentStageError("embedding_dimension_mismatch")
+            repo.add_embeddings(
+                embedder.model,
+                [(chunk_id, vec) for (chunk_id, _), vec in zip(batch, vectors, strict=True)],
+            )
 
 
 def _spool(stream: ObjectStream, target: IO[bytes]) -> None:
