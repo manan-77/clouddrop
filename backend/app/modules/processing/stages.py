@@ -21,6 +21,7 @@ from app.modules.storage.models import File, FileVersion
 from app.modules.storage.s3 import ObjectChangedError, ObjectStream, S3Storage
 
 HEAD_BYTES = 4096
+EMBEDDING_INSERT_BATCH = 500
 
 
 class PermanentStageError(Exception):
@@ -200,6 +201,8 @@ class EmbedStage:
         size = get_settings().embedding_batch_size
         # Embed everything first and write at the end: the slow part holds no database locks, and
         # the delete-then-insert is one short step, so a slow run cannot collide with a retry.
+        # shortcut: every vector of the document is held in memory (about 12 KB per chunk), so a
+        # huge document costs RAM; write per batch instead if documents reach ~100k chunks.
         embedded: list[tuple[uuid.UUID, list[float]]] = []
         for start in range(0, len(chunks), size):
             batch = chunks[start : start + size]
@@ -212,8 +215,8 @@ class EmbedStage:
                 (chunk_id, vector) for (chunk_id, _), vector in zip(batch, vectors, strict=True)
             )
         repo.clear_embeddings(version.id)
-        for start in range(0, len(embedded), 500):
-            repo.add_embeddings(embedder.model, embedded[start : start + 500])
+        for start in range(0, len(embedded), EMBEDDING_INSERT_BATCH):
+            repo.add_embeddings(embedder.model, embedded[start : start + EMBEDDING_INSERT_BATCH])
 
 
 def _spool(stream: ObjectStream, target: IO[bytes]) -> None:
