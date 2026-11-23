@@ -10,6 +10,7 @@ from app.core.logging import RequestIdMiddleware, configure_logging
 from app.modules.audit.router import router as audit_router
 from app.modules.auth.router import router as auth_router
 from app.modules.health.router import router as health_router
+from app.modules.search.router import router as search_router
 from app.modules.sharing.link_router import router as link_router
 from app.modules.sharing.router import router as sharing_router
 from app.modules.storage.file_router import router as file_router
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(sharing_router)
     app.include_router(link_router)
     app.include_router(audit_router)
+    app.include_router(search_router)
     return app
 
 

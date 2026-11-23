@@ -17,3 +17,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0011](0011-audit-events-in-the-same-transaction.md) | Audit events commit with the action and hold ids only | Accepted |
 | [0012](0012-share-links-for-files.md) | Share links are token links to one file | Accepted |
 | [0013](0013-local-embeddings-and-vector-size.md) | Local embeddings, fixed 384-dimension vector | Accepted |
+| [0014](0014-semantic-search-query.md) | Semantic search is one permission-filtered SQL query | Accepted |
