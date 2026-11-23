@@ -1,3 +1,4 @@
+import gc
 import json
 import logging
 import os
@@ -7,12 +8,21 @@ from typing import TYPE_CHECKING
 import httpx2 as httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.ai.chat import ChatUnavailableError, max_prompt_tokens, prompt_token_budget
+from app.ai.chat import (
+    ChatUnavailableError,
+    PromptTooLargeError,
+    max_prompt_tokens,
+    prompt_token_budget,
+)
 from app.core.config import get_settings
+from app.core.errors import ServiceUnavailableError, TooManyRequestsError
+from app.modules.auth.models import User
+from app.modules.rag import service as rag_service
 from app.modules.rag.prompts import NOT_FOUND_ANSWER, SYSTEM_PROMPT
-from app.modules.rag.service import Answer
+from app.modules.rag.service import Answer, RagService
 from tests.conftest import FakeChat, FakeChatStream, FakeEmbedder
 from tests.test_search import _index
 from tests.test_sharing import Person, _file, _folder, _grant, _person
@@ -28,6 +38,12 @@ OTHER = "the office is closed for the winter holiday until january"
 def low_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
     # The fake embedder is a bag of words, so related texts score far lower than the real model.
     monkeypatch.setattr(get_settings(), "search_min_score", 0.35)
+
+
+@pytest.fixture(autouse=True)
+def no_answers_in_progress() -> None:
+    "The in-progress count is process-wide state: every test starts and ends with none running."
+    rag_service._in_progress._counts.clear()
 
 
 @pytest.fixture
@@ -330,6 +346,121 @@ class TestFailures:
         fake_chat.on_stream = lambda: seen.append(session.in_transaction())
         _events(_ask(client, owner))
         assert seen == [False]
+
+
+class TestMoreFailures:
+    def test_aMidStreamFailureIsLoggedByCodeOnly(
+        self,
+        client,
+        people,
+        s3_client,
+        session: Session,
+        fake_embedder,
+        fake_chat: FakeChat,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        owner = people["owner"]
+        _owned_file(client, session, s3_client, fake_embedder, owner)
+        fake_chat.reply = "SECRETWORDS"
+        fake_chat.error_while_streaming = ChatUnavailableError()
+        with caplog.at_level(logging.DEBUG):
+            _events(_ask(client, owner))
+        assert "Answer stream failed: chat_unavailable" in caplog.text
+        assert "SECRETWORDS" not in caplog.text
+
+    def test_whenTheServerRefusesThePromptSizeItIsTheSameClearError_notA500(
+        self, client, people, s3_client, session: Session, fake_embedder, fake_chat: FakeChat
+    ) -> None:
+        owner = people["owner"]
+        _owned_file(client, session, s3_client, fake_embedder, owner)
+        fake_chat.error = PromptTooLargeError(1000)
+        response = _ask(client, owner)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "question_too_long"
+
+
+def _user(session: Session, person: Person) -> User:
+    return session.scalars(select(User).where(User.email == person.email)).one()
+
+
+class TestAnswersInProgress:
+    def _service(self, session: Session) -> RagService:
+        return RagService(session, get_settings())
+
+    def _setup(
+        self, client, people, s3_client, session, fake_embedder, monkeypatch, limit: int = 2
+    ) -> User:
+        monkeypatch.setattr(get_settings(), "rag_max_concurrent_per_user", limit)
+        owner = people["owner"]
+        _owned_file(client, session, s3_client, fake_embedder, owner)
+        return _user(session, owner)
+
+    def test_aUserCannotHoldMoreAnswersOpenThanTheLimit_andOthersAreUnaffected(
+        self, client, people, s3_client, session: Session, fake_embedder, monkeypatch
+    ) -> None:
+        user = self._setup(client, people, s3_client, session, fake_embedder, monkeypatch)
+        service = self._service(session)
+        first = service.start(user.id, "when is the invoice due")
+        second = service.start(user.id, "when is the invoice due")
+        with pytest.raises(TooManyRequestsError):
+            service.start(user.id, "when is the invoice due")
+        other = _user(session, people["viewer"])
+        service.start(other.id, "when is the invoice due").close()  # not the same user's budget
+        first.close()
+        service.start(user.id, "when is the invoice due").close()  # a slot is free again
+        second.close()
+
+    def test_theSlotIsFreedWhenTheAnswerFinishesStreaming(
+        self, client, people, s3_client, session: Session, fake_embedder, monkeypatch
+    ) -> None:
+        user = self._setup(client, people, s3_client, session, fake_embedder, monkeypatch, 1)
+        service = self._service(session)
+        list(service.start(user.id, "when is the invoice due").events())
+        service.start(user.id, "when is the invoice due").close()
+
+    def test_theSlotIsFreedWhenTheAnswerIsDroppedWithoutEverBeingClosed(
+        self, client, people, s3_client, session: Session, fake_embedder, monkeypatch
+    ) -> None:
+        # A client that disappears before the response starts: nothing ever calls close().
+        user = self._setup(client, people, s3_client, session, fake_embedder, monkeypatch, 1)
+        service = self._service(session)
+        answer = service.start(user.id, "when is the invoice due")
+        del answer
+        gc.collect()
+        service.start(user.id, "when is the invoice due").close()
+
+    def test_aFailureWhileStartingNeverLeaksASlot(
+        self,
+        client,
+        people,
+        s3_client,
+        session: Session,
+        fake_embedder: FakeEmbedder,
+        fake_chat: FakeChat,
+        monkeypatch,
+    ) -> None:
+        user = self._setup(client, people, s3_client, session, fake_embedder, monkeypatch, 1)
+        service = self._service(session)
+        fake_embedder.error = RuntimeError("model gone")
+        with pytest.raises(ServiceUnavailableError):
+            service.start(user.id, "when is the invoice due")
+        fake_embedder.error = None
+        fake_chat.error = ChatUnavailableError()
+        with pytest.raises(ChatUnavailableError):
+            service.start(user.id, "when is the invoice due")
+        fake_chat.error = None
+        service.start(user.id, "when is the invoice due").close()
+
+    def test_overTheLimitTheEndpointAnswers429WithRetryAfter(
+        self, client, people, s3_client, session: Session, fake_embedder, monkeypatch
+    ) -> None:
+        user = self._setup(client, people, s3_client, session, fake_embedder, monkeypatch, 1)
+        held = self._service(session).start(user.id, "when is the invoice due")
+        response = _ask(client, people["owner"])
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == str(rag_service.BUSY_RETRY_AFTER_SECONDS)
+        held.close()
+        assert _ask(client, people["owner"]).status_code == 200
 
 
 class TestCleanup:

@@ -15,6 +15,8 @@ Users ask questions about their files. The model is small and local (ADR 0015), 
 - **Everything that can fail with a proper HTTP status happens before streaming:** retrieval, prompt building and opening the model request (429, 422, 503). A failure after the first byte is an `error` event. The database connection is released (commit) before streaming, because a stream can last minutes.
 - **Cancellation is real.** `Answer.close()` is idempotent and runs when the events finish, when the client disconnects mid-stream, and as a background task when the response never started.
 - The response is `text/event-stream`, `Cache-Control: no-store` and `X-Accel-Buffering: no` so a buffering proxy does not hold the stream.
+- **Answers in progress are capped per user** (2 by default, per process). The request rate limit counts starts, but an answer holds a server thread for as long as it streams, so without a cap one user could hold dozens open and starve everyone. The slot is freed when the answer finishes, when it is closed, when starting fails, and (as a last resort, through a finalizer) when the object is garbage collected without ever being closed, for example a client that vanished before the response began. Over the cap the answer is 429 with `Retry-After`.
+- A "context too large" refusal from the model server, which our own byte bound should make impossible, is mapped to the same 422 `question_too_long`, never a bare 500. A failure while streaming is logged by its code only.
 - Rate limited per user (30 per 10 minutes by default). Questions, answers and file text are never logged; the chat client logs token counts only.
 
 ## Consequences
