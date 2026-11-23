@@ -52,7 +52,7 @@ PR; a finding in review means a rule here was skipped or is missing.
     Redis DB, never a shared store or a destructive command. [57, 78, 89]
 
 ## Process
-20. **Run the exact CI commands locally** (`scripts/verify.sh`), build after any bulk edit, tick a
+20. **Run the exact CI commands locally** (`scripts/verify.sh`; CI does not run on PRs into `develop`, so this is the only gate before merge), build after any bulk edit, tick a
     todo only when a test covers it, and say plainly what was not run. [26, 37, 47, 103]
 21. **Pin third-party actions to a commit SHA and audit tools to a version; keep advisory checks
     out of the required set.** [107, 108]
