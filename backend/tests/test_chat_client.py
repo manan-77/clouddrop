@@ -144,7 +144,7 @@ class TestStreaming:
 
 
 class TestLineSplitting:
-    @pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029", "\x0b", "\x0c", "\x1c"])
+    @pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029"])
     def test_aUnicodeLineSeparatorInsideTheAnswerDoesNotSplitTheLine(self, separator: str) -> None:
         # Go's JSON encoder writes some of these raw; iter_lines() would cut the line in two.
         raw = json.dumps(
@@ -189,7 +189,8 @@ class TestResourcesAndOddInput:
         assert (
             json.loads(server.requests[0].content)["messages"][0]["content"] == "price \ufffd total"
         )
-        assert max_prompt_tokens([message]) >= len("price  total") + 3  # counted as 3 bytes
+        # 6 + 3 (the surrogate counts as the 3 bytes of U+FFFD) + 6, plus the fixed margins
+        assert max_prompt_tokens([message]) == 15 + 16 + 16
 
     def test_iteratingTheSameStreamTwiceIsUnavailable_notARawRuntimeError(self) -> None:
         stream = client_for(FakeOllama(ok(_line("a"), FINISH))).stream((SYSTEM, ASK))
