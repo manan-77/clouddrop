@@ -400,7 +400,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] PR template added. Enable branch protection and require ONLY `backend / checks` and `frontend / checks` (NEEDS-YOU in GitHub settings). Do not require the `audit` workflow (an advisory published tomorrow would block every merge), and do not add `paths:` filters to the two check workflows without a fallback job, or a required check never reports.
 - [x] (#29) Faster CI: cheap Argon2 in tests, Docker layer cache, audit path filter, `scripts/verify.sh` runs the CI commands locally.
 - [x] CI runs on pushes to develop and main and on PRs into main only, not on PRs into develop (owner decision 2026-11-23). Run `scripts/verify.sh` before every merge into develop.
-- [ ] Path filters so backend CI skips frontend-only PRs (and the reverse). No branch protection exists today, so a skipped required check cannot stall anything; if protection is enabled later, add the fallback job described above first.
+- [x] (2026-11-23) Path filters: the backend workflow runs only for `backend/**`, the frontend one only for `frontend/**`, containers for either (pushes) or Docker/dependency files (PRs into main). If branch protection with required checks is enabled later, add a fallback job so a skipped check cannot stall a merge.
 - Note: CI runs Postgres 17 (matches the Homebrew install); `docker-compose.yml` still uses pg16 for optional local Docker use.
 - Note: `@emnapi/core` and `@emnapi/runtime` are devDependencies only because npm 11 omits these optional peers of `@napi-rs/wasm-runtime` from a lock written on macOS (npm/cli#4828), which breaks `npm ci` on Linux. Remove them when npm fixes this.
 

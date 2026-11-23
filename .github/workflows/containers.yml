@@ -15,6 +15,10 @@ on:
       - ".github/workflows/containers.yml"
   push:
     branches: [develop, main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/containers.yml"
 
 permissions:
   contents: read

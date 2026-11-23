@@ -1,10 +1,14 @@
 name: backend
 
+# Only when this side (or this workflow) changes: a backend-only change never runs the frontend
+# job and the reverse. A contract change touches both sides, so both run.
 on:
   pull_request:
     branches: [main]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
   push:
     branches: [develop, main]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
 
 permissions:
   contents: read
