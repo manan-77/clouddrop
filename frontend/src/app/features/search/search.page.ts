@@ -3,7 +3,6 @@ import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-i
 import {
   catchError,
   debounceTime,
-  distinctUntilChanged,
   map,
   type Observable,
   of,
@@ -36,12 +35,12 @@ interface Request {
 
 type View =
   | { readonly status: 'idle' }
-  | { readonly status: 'searching' }
+  // `keep`: the previous answer for the same words, still shown while the next page loads.
+  | { readonly status: 'searching'; readonly keep: Page<SearchHit> | null }
   | { readonly status: 'ready'; readonly page: Page<SearchHit> }
   | { readonly status: 'error'; readonly message: string };
 
 const IDLE: View = { status: 'idle' };
-const SEARCHING: View = { status: 'searching' };
 
 /**
  * Find files by what they say, not what they are called. The words stay in this component: they
@@ -194,9 +193,10 @@ export class SearchPage {
     { initialValue: IDLE },
   );
 
-  /** The last answer, kept while another page of the same words loads so the list and the pager
-   * (and the keyboard focus on it) do not vanish. A different search replaces it. */
-  private readonly shown = signal<{ query: string; page: Page<SearchHit> } | null>(null);
+  // Not signals: only `run()` reads them, when a request starts. What to keep on screen is decided
+  // there, from the request just before this one, never from state that outlives it.
+  private previousQuery = '';
+  private lastAnswer: { query: string; page: Page<SearchHit> } | null = null;
 
   protected readonly loading = computed(() => this.view().status === 'searching');
   protected readonly failure = computed(() => {
@@ -208,8 +208,7 @@ export class SearchPage {
     if (view.status === 'ready') {
       return view.page;
     }
-    const shown = this.shown();
-    return view.status === 'searching' && shown?.query === this.request().query ? shown.page : null;
+    return view.status === 'searching' ? view.keep : null;
   });
   /** Nothing to show yet for these words: the placeholder, not a blank gap. */
   protected readonly skeleton = computed(() => this.loading() && this.results() === null);
@@ -230,8 +229,9 @@ export class SearchPage {
     toObservable(this.term)
       .pipe(
         debounceTime(TYPING_PAUSE_MS),
+        // No distinctUntilChanged here: `ask()` already ignores unchanged words, and a filter that
+        // remembers only what this stream emitted would swallow a real edit back to old words.
         map((words) => words.trim()),
-        distinctUntilChanged(),
         takeUntilDestroyed(),
       )
       .subscribe((query) => this.ask(query));
@@ -262,20 +262,30 @@ export class SearchPage {
   }
 
   private run(request: Request): Observable<View> {
+    // Keep the list only when this request directly follows one for the same words (another page
+    // of them). After other words, or after clearing the box, an older list would be stale.
+    const followsSameWords = request.query === this.previousQuery;
+    this.previousQuery = request.query;
     if (request.query === '') {
+      this.lastAnswer = null;
       return of(IDLE);
     }
+    const keep =
+      followsSameWords && this.lastAnswer?.query === request.query ? this.lastAnswer.page : null;
     return this.api.search(request.query, request.page, DEFAULT_PAGE_SIZE).pipe(
       tap((found) => {
-        this.shown.set({ query: request.query, page: found });
+        // An empty page of a non-empty result is the server contradicting itself: never keep it.
+        if (found.items.length > 0 || found.total === 0) {
+          this.lastAnswer = { query: request.query, page: found };
+        }
         this.stepBackIfPastTheEnd(request, found);
       }),
       map((found): View => ({ status: 'ready', page: found })),
       catchError((error: unknown) => {
-        this.shown.set(null); // a retry must not show an older page as if it were current
+        this.lastAnswer = null; // a retry must not show an older page as if it were current
         return of<View>({ status: 'error', message: this.resolver.resolve(error).message });
       }),
-      startWith(SEARCHING),
+      startWith<View>({ status: 'searching', keep }),
     );
   }
 

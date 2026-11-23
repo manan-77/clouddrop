@@ -162,6 +162,22 @@ describe('SearchPage', () => {
     expect(text('cd-empty-state')).toContain('Search your files');
   });
 
+  it('editingBackToEarlierWordsAfterEnter_isStillSearched_notLost', async () => {
+    (await search('abc')).flush(found([hit(1)]));
+    await settle();
+    await type('xyz');
+    input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle();
+    backend.expectOne(SEARCH); // "xyz" is in flight
+    await type('abc'); // edited back before the typing pause ended
+    await pause();
+    const again = backend.expectOne(SEARCH);
+    expect(again.request.body).toEqual({ query: 'abc' });
+    again.flush(found([hit(1)]));
+    await settle();
+    expect(input().value).toBe('abc');
+  });
+
   it('onlySpaces_isNotASearch', async () => {
     await type('    ');
     await pause();
@@ -253,6 +269,51 @@ describe('SearchPage', () => {
       await settle();
       backend.expectNone(SEARCH);
       expect(text('cd-empty-state')).toContain('No matching files');
+    });
+
+    it('whilePastTheEndIsBeingCorrected_neverSaysThereAreNoMatches', async () => {
+      await firstPage();
+      await click('Next');
+      backend.expectOne(SEARCH).flush(found([], 30, 2));
+      await settle();
+      const back = backend.expectOne(SEARCH);
+      expect(root().querySelector('cd-empty-state')).toBeNull();
+      expect(results()).toHaveLength(2); // the last good page stays until the right one arrives
+      back.flush(found([hit(1)], 30));
+    });
+
+    it('theSameWordsAgainAfterClearingTheBox_startFresh_notFromAnOldPage', async () => {
+      await firstPage();
+      await click('Next');
+      backend.expectOne(SEARCH).flush(found([hit(3)], DEFAULT_PAGE_SIZE * 3, 2));
+      await settle();
+      await type('');
+      await pause();
+      await type('invoice');
+      await pause();
+      const fresh = backend.expectOne(SEARCH);
+      await settle();
+      expect(fresh.request.params.get('page')).toBe('1');
+      expect(results()).toHaveLength(0); // not page 2's list under a pager that says page 1
+      expect(root().querySelector('cd-skeleton')).not.toBeNull();
+      fresh.flush(found([hit(1)]));
+    });
+
+    it('theSameWordsAgainAfterOtherWordsWereAsked_startFresh_too', async () => {
+      await firstPage();
+      await click('Next');
+      backend.expectOne(SEARCH).flush(found([hit(3)], DEFAULT_PAGE_SIZE * 3, 2));
+      await settle();
+      await type('other');
+      await pause();
+      const other = backend.expectOne(SEARCH); // still in flight
+      await type('invoice');
+      await pause();
+      expect(other.cancelled).toBe(true);
+      const fresh = backend.expectOne(SEARCH);
+      await settle();
+      expect(results()).toHaveLength(0);
+      fresh.flush(found([hit(1)]));
     });
 
     it('retryingAfterAFailedPage_neverShowsAnOlderPageAsIfItWereCurrent', async () => {
