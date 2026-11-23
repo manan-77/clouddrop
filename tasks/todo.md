@@ -421,6 +421,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
 - [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
+- [ ] When error tracking is chosen: scrub local variables as well as bodies, headers and query strings (a failing chat stream holds answer text in its frames; ADR 0015).
 - [ ] Performance: Lighthouse on the production build (an earlier 55 was the dev server, so it is not a baseline); record per-page scores, then gate CI at 98 or more per page.
 - [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
 - [x] Threat-model checklist walk-through against the CLAUDE.md security rules (docs/security-review.md).

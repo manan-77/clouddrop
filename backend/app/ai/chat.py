@@ -6,6 +6,7 @@ user text: they are never logged, never put in an exception message, only counte
 
 import json
 import logging
+import re
 import threading
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -27,6 +28,9 @@ MESSAGE_OVERHEAD_TOKENS = 16
 PROMPT_OVERHEAD_TOKENS = 16
 # The longest a server may ask us to wait before a retry.
 MAX_RETRY_WAIT_SECONDS = 10.0
+_LONE_SURROGATES = re.compile("[\ud800-\udfff]")
+# One streamed line is a few tokens; a line this long means something is wrong, not a long answer.
+MAX_LINE_BYTES = 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -84,7 +88,8 @@ def max_prompt_tokens(messages: Sequence[ChatMessage]) -> int:
     token measured 5 for English prose but 1.0 for ids, hashes and Hindi, so a ratio would let an
     id-heavy prompt overflow. The price is that English is counted about 5x too high.
     """
-    body = sum(len(message.content.encode("utf-8")) for message in messages)
+    # surrogatepass: a lone surrogate counts as 3 bytes, the size of U+FFFD, which is what is sent.
+    body = sum(len(message.content.encode("utf-8", errors="surrogatepass")) for message in messages)
     return body + MESSAGE_OVERHEAD_TOKENS * len(messages) + PROMPT_OVERHEAD_TOKENS
 
 
@@ -108,7 +113,7 @@ class OllamaStream:
 
     def __iter__(self) -> Iterator[str]:
         try:
-            for line in self._response.iter_lines():
+            for line in _lines(self._response):
                 if not line:
                     continue
                 data = _parse(line)
@@ -119,7 +124,7 @@ class OllamaStream:
                     self._finish(data)
                     return
             raise ChatUnavailableError  # the connection ended before the model said it was done
-        except httpx.TransportError as exc:
+        except (httpx.TransportError, httpx.StreamError) as exc:  # StreamError: iterated twice
             raise ChatUnavailableError from exc
         finally:
             self.close()
@@ -142,11 +147,38 @@ class OllamaStream:
             logger.warning("Chat prompt was larger than its budget; the answer may be unreliable")
 
 
+def _lines(response: httpx.Response) -> Iterator[str]:
+    """Splits the body on newline bytes only.
+
+    `iter_lines()` also splits on U+0085, U+2028 and other Unicode separators, which Ollama writes
+    raw inside JSON strings: one valid line would arrive as two broken ones. Lines are decoded
+    whole, so a character split across network chunks is never cut.
+    """
+    buffer = b""
+    for chunk in response.iter_bytes():
+        buffer += chunk
+        while (end := buffer.find(b"\n")) != -1:
+            line, buffer = buffer[:end], buffer[end + 1 :]
+            yield _decode(line)
+        if len(buffer) > MAX_LINE_BYTES:
+            raise ChatUnavailableError
+    if buffer.strip():
+        yield _decode(buffer)  # a last line without its newline
+
+
+def _decode(line: bytes) -> str:
+    try:
+        return line.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        raise ChatUnavailableError from None
+
+
 def _parse(line: str) -> dict[str, Any]:
     try:
         data = json.loads(line)
-    except ValueError as exc:
-        raise ChatUnavailableError from exc
+    except ValueError:
+        # `from None`: the decode error holds the whole line, which is answer text.
+        raise ChatUnavailableError from None
     # An {"error": ...} line is the server failing mid-answer; its text is not shown or logged.
     if not isinstance(data, dict) or "error" in data:
         raise ChatUnavailableError
@@ -191,6 +223,8 @@ class OllamaChatClient:
     def stream(self, messages: Sequence[ChatMessage]) -> OllamaStream:
         if not messages:
             raise ValueError("a chat needs at least one message")
+        # Text that cannot be encoded (a lone surrogate) is sent as the replacement character.
+        messages = [ChatMessage(m.role, _sendable(m.content)) for m in messages]
         check_prompt_fits(messages, self.settings)  # before any network call
         payload = {
             "model": self.settings.chat_model,
@@ -225,8 +259,10 @@ class OllamaChatClient:
             if response.status_code == 200:
                 return response
             status, retry_after = response.status_code, response.headers.get("Retry-After")
-            too_large = status == 400 and _says_context_overflow(response)
-            response.close()
+            try:
+                too_large = status == 400 and _says_context_overflow(response)
+            finally:
+                response.close()  # whatever reading the error body did
             if too_large:
                 raise PromptTooLargeError(prompt_token_budget(self.settings))
             if status != 429 and status < 500:
@@ -237,10 +273,14 @@ class OllamaChatClient:
         raise ChatUnavailableError  # unreachable: the loop returns or raises
 
 
+def _sendable(text: str) -> str:
+    return _LONE_SURROGATES.sub("\ufffd", text)
+
+
 def _says_context_overflow(response: httpx.Response) -> bool:
     try:
         body = response.read().decode("utf-8", errors="replace")
-    except httpx.TransportError:
+    except httpx.HTTPError:  # transport failure or an undecodable body
         return False
     return "context size" in body
 

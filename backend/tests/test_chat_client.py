@@ -102,7 +102,15 @@ class TestStreaming:
 
     def test_theRequestCarriesTheConfiguredModelAndLimits_andNoThinkSwitch(self) -> None:
         server = FakeOllama(ok(FINISH))
-        collect(client_for(server, chat_model="m", chat_num_ctx=4096, chat_max_output_tokens=300))
+        collect(
+            client_for(
+                server,
+                chat_model="m",
+                chat_num_ctx=4096,
+                chat_max_output_tokens=300,
+                chat_temperature=0.2,
+            )
+        )
         request = server.requests[0]
         body = json.loads(request.content)
         assert (request.method, request.url.path) == ("POST", "/api/chat")
@@ -133,6 +141,61 @@ class TestStreaming:
         server = FakeOllama(ok(_line("x"), _line("", True, prompt_eval_count="9", eval_count=-1)))
         usage = collect(client_for(server))[1]
         assert (usage.prompt_tokens, usage.completion_tokens) == (0, 0)  # type: ignore[attr-defined]
+
+
+class TestLineSplitting:
+    @pytest.mark.parametrize("separator", ["\u0085", "\u2028", "\u2029", "\x0b", "\x0c", "\x1c"])
+    def test_aUnicodeLineSeparatorInsideTheAnswerDoesNotSplitTheLine(self, separator: str) -> None:
+        # Go's JSON encoder writes some of these raw; iter_lines() would cut the line in two.
+        raw = json.dumps(
+            {"message": {"content": f"before{separator}after"}, "done": False}, ensure_ascii=False
+        )
+        server = FakeOllama(ok(raw.encode() + b"\n", FINISH))
+        assert collect(client_for(server))[0] == f"before{separator}after"
+
+    def test_windowsLineEndingsAndAMissingFinalNewlineAreAccepted(self) -> None:
+        server = FakeOllama(ok(_line("a").rstrip(b"\n") + b"\r\n", FINISH.rstrip(b"\n")))
+        assert collect(client_for(server))[0] == "a"
+
+    def test_aCharacterSplitAcrossNetworkChunksIsDecodedWhole(self) -> None:
+        whole = json.dumps({"message": {"content": "नमस्ते"}, "done": False}, ensure_ascii=False)
+        data = whole.encode() + b"\n"
+        cut = data.index("स".encode()) + 1  # the middle of a three-byte character
+        server = FakeOllama(ok(data[:cut], data[cut:], FINISH))
+        assert collect(client_for(server))[0] == "नमस्ते"
+
+    def test_aLineThatNeverEndsIsRefused_notBufferedForever(self) -> None:
+        server = FakeOllama(ok(*[b"x" * 600_000] * 3))
+        with pytest.raises(ChatUnavailableError):
+            collect(client_for(server))
+
+    def test_bytesThatAreNotUtf8AreUnavailable(self) -> None:
+        with pytest.raises(ChatUnavailableError):
+            collect(client_for(FakeOllama(ok(b"\xff\xfe\n", FINISH))))
+
+
+class TestResourcesAndOddInput:
+    def test_anErrorWhileReadingAnErrorBodyStillClosesTheConnection(self) -> None:
+        body = Stream([], then=httpx.DecodingError("bad encoding"))
+        server = FakeOllama(lambda request: httpx.Response(400, stream=body))
+        with pytest.raises(ChatUnavailableError):
+            client_for(server).stream((SYSTEM, ASK))
+        assert body.closed
+
+    def test_aLoneSurrogateIsSentAsTheReplacementCharacter_notACrash(self) -> None:
+        server = FakeOllama(ok(_line("ok"), FINISH))
+        message = ChatMessage("user", "price \ud800 total")
+        assert collect(client_for(server), message)[0] == "ok"
+        assert (
+            json.loads(server.requests[0].content)["messages"][0]["content"] == "price \ufffd total"
+        )
+        assert max_prompt_tokens([message]) >= len("price  total") + 3  # counted as 3 bytes
+
+    def test_iteratingTheSameStreamTwiceIsUnavailable_notARawRuntimeError(self) -> None:
+        stream = client_for(FakeOllama(ok(_line("a"), FINISH))).stream((SYSTEM, ASK))
+        assert "".join(stream) == "a"
+        with pytest.raises(ChatUnavailableError):
+            list(stream)
 
 
 class TestPromptSize:
