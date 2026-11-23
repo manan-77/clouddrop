@@ -5,7 +5,7 @@ name: audit
 on:
   # Only when dependencies change; the weekly run covers advisories published after a merge.
   pull_request:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - "backend/uv.lock"
       - "backend/pyproject.toml"

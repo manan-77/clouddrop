@@ -2,7 +2,7 @@ name: containers
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - "backend/Dockerfile"
       - "backend/.dockerignore"
