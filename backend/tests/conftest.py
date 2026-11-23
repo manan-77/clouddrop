@@ -187,9 +187,13 @@ class FakeChat:
         self.error_while_streaming: Exception | None = None
         self.calls: list[list[ChatMessage]] = []
         self.streams: list[FakeChatStream] = []
+        # Runs when a stream is opened, so a test can look at the world at that moment.
+        self.on_stream: Callable[[], None] | None = None
 
     def stream(self, messages: Sequence[ChatMessage]) -> FakeChatStream:
         self.calls.append(list(messages))
+        if self.on_stream:
+            self.on_stream()
         if self.error:
             raise self.error
         words = self.reply.split(" ")

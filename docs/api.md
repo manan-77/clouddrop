@@ -97,6 +97,20 @@ Recorded actions: `file.uploaded` (when complete succeeds), `file.downloaded` (w
 |---|---|---|---|
 | POST | `/search?page=1&page_size=50` | 200 paginated | Body `{"query": "..."}` (1 to 1000 characters). POST only so the search terms never appear in a URL or log. Finds the chunks closest in meaning to the query among `ready` files the caller may read (owned, directly granted, or below a granted folder; never below a deleted folder), and returns the best chunk per file, best first. Items: `file_id`, `file_name`, `chunk_id`, `page`, `snippet`, `score` (cosine similarity, 0 to 1). `total` counts the files among the best `SEARCH_POOL_SIZE` chunks, not every possible match. Below `SEARCH_MIN_SCORE` is not returned. 429 when over the per-user limit; 503 `search_unavailable` when the embedding model cannot run |
 
+## Answers (`/api/v1/answers`) - authenticated
+
+| Method | Path | Result | Notes |
+|---|---|---|---|
+| POST | `/answers` | 200 `text/event-stream` | Body `{"question": "...", "file_id": null}` (question 1 to 500 characters; `file_id` optional, narrows to one file the caller can read). POST only so the question never appears in a URL or log. Finds the best chunks among files the caller may read (the same query as search) and streams a short answer that cites its sources. Nothing relevant gives the fixed text "I couldn't find that in your files." and no model call. Nothing is stored (no history). 422 `question_too_long` if not even one chunk fits the prompt; 429 over the per-user limit; 503 `search_unavailable` or `chat_unavailable` when the embedding or chat model cannot run (these are real HTTP errors because they happen before streaming starts) |
+
+The body is a stream of server-sent events, each `data: {json}` followed by a blank line:
+
+| Event `type` | Fields | Meaning |
+|---|---|---|
+| `token` | `text` | The next piece of the answer. Concatenate them |
+| `done` | `citations`, `cut_off` | The answer is complete. `citations` lists only sources that were really retrieved: `label` (the `[s1]` style label used in the text), `file_id`, `file_name`, `chunk_id`, `page`. A label in the text that is not listed here is not a source and must not be shown as one. `cut_off` is true when the model stopped at the output limit |
+| `error` | `code` | The answer failed after it had started (the status was already 200), for example `chat_unavailable`. No `done` follows |
+
 ## Storage setup notes (S3)
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.

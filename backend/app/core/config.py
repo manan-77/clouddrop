@@ -102,12 +102,18 @@ class Settings(BaseSettings):
     rate_limit_download_window_seconds: int = 3600
     rate_limit_search_per_user: int = 120
     rate_limit_search_window_seconds: int = 300
-    # Cosine similarity needed to count as a match (BGE scores are compressed: unrelated text
-    # often scores about 0.5). Tune with real documents.
-    search_min_score: float = Field(default=0.55, ge=0, le=1)
+    # Cosine similarity needed to count as a match. Measured with the real model on short
+    # documents: related questions scored 0.73 to 0.82, unrelated ones 0.44 to 0.51. Longer or
+    # messier real documents may score lower, so re-measure before raising it.
+    search_min_score: float = Field(default=0.6, ge=0, le=1)
     # How many best chunks are considered per search; results are grouped by file and paged here.
     search_pool_size: int = Field(default=100, ge=1, le=500)
     search_snippet_chars: int = Field(default=300, ge=50, le=1000)
+    # Chunks offered to the model for one answer (fewer when the prompt budget is smaller).
+    rag_max_chunks: int = Field(default=8, ge=1, le=20)
+    # Answers are slow and use the one local model, so the budget is far below search's.
+    rate_limit_answer_per_user: int = 30
+    rate_limit_answer_window_seconds: int = 600
     rate_limit_grant_per_user: int = 60
     rate_limit_grant_window_seconds: int = 3600
     # Only uploads into someone else's shared folder are limited (they reserve the owner's quota).

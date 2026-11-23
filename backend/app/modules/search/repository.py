@@ -143,6 +143,7 @@ class SearchRepository:
         query_vector: list[float],
         min_score: float,
         limit: int,
+        only_file_id: uuid.UUID | None = None,
     ) -> list[ChunkMatch]:
         self._prepare_index_scan()
         distance = ChunkEmbedding.embedding.cosine_distance(query_vector)
@@ -172,6 +173,8 @@ class SearchRepository:
                 ChunkEmbedding.dim == len(query_vector),
                 distance <= 1 - min_score,
                 self._can_read(user_id),
+                # Narrowing never widens: the access rule above still has to hold for this file.
+                *([File.id == only_file_id] if only_file_id is not None else []),
             )
             .order_by(distance, DocumentChunk.id)
             .limit(limit)
