@@ -59,7 +59,8 @@ PR; a finding in review means a rule here was skipped or is missing.
 22. **A rule copied into SQL (access in search/RAG) gets a differential test against the original on random cases** (`tests/test_search_matches_access.py`), proven by breaking the copy once; hand-picked cases missed a deleted ancestor above a grant.
 23. **Grep for an existing constant, helper or pattern before adding one; a value used twice has one owner** (page size drifted to 20/50/100 across screens), and prefer a lint rule over a note. See root `CLAUDE.md` > Consistency.
 24. **Measure a number you would otherwise guess before building on it** (tokens per character was 5 for English and 1.0 for ids and Hindi, so a fixed ratio would have overflowed); prefer a bound that cannot be wrong over an estimate.
-25. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
+25. **A package the app imports belongs in `dependencies`, not the dev group.** Tests and type checks install both, so a missing runtime package only fails in the production image (httpx2 did, after the chat client was wired in). `scripts/verify.sh backend` now imports the app with runtime dependencies only; run it before every merge, because CI does not run on PRs into develop.
+26. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
 
 ## Review stop rule
 Review the local diff once before opening the PR (independent reviewer, no cap on findings). In the

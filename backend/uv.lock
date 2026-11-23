@@ -195,6 +195,7 @@ dependencies = [
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "fastembed" },
+    { name = "httpx2" },
     { name = "openpyxl" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
@@ -210,7 +211,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "boto3-stubs", extra = ["s3"] },
-    { name = "httpx2" },
     { name = "moto", extra = ["s3"] },
     { name = "mypy" },
     { name = "pytest" },
@@ -225,6 +225,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.162.0" },
     { name = "fastembed", specifier = ">=0.9.1" },
+    { name = "httpx2", specifier = ">=2.16.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.8" },
@@ -240,7 +241,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "boto3-stubs", extras = ["s3"], specifier = ">=1.43.124" },
-    { name = "httpx2", specifier = ">=2.16.0" },
     { name = "moto", extras = ["s3"], specifier = ">=5.2.5" },
     { name = "mypy", specifier = ">=2.4.1" },
     { name = "pytest", specifier = ">=9.2.0" },
