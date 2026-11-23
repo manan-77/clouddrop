@@ -12,7 +12,7 @@
   </div>
 
   <p class="cd-form-error" role="alert">
-    @if (notice(); as message) {
+    @if (downloads.error(); as message) {
       {{ message }}
     }
   </p>
@@ -89,8 +89,8 @@
             <h2 id="files-heading">Files</h2>
             <cd-file-table
               [files]="current.files.items"
-              [downloading]="downloading()"
-              (download)="download($event)"
+              [downloading]="downloads.busy()"
+              (download)="downloads.start($event.id)"
               (rename)="show({ kind: 'rename-file', file: $event })"
               (move)="show({ kind: 'move-file', file: $event })"
               (remove)="show({ kind: 'delete-file', file: $event })"

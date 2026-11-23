@@ -15,7 +15,6 @@ import {
 import { FilesApi } from '@core/api/files-api.service';
 import { FoldersApi } from '@core/api/folders-api.service';
 import { type FileRead, type FolderRead, type Page } from '@core/api/models';
-import { DownloadService } from '@core/download/download.service';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
@@ -50,7 +49,6 @@ const lastPage = (page: Page<unknown>): number =>
 export class ExplorerStore {
   private readonly foldersApi = inject(FoldersApi);
   private readonly filesApi = inject(FilesApi);
-  private readonly downloads = inject(DownloadService);
   private readonly resolver = inject(ErrorResolver);
 
   // Null until the page says which folder to open, so nothing loads (and gets cancelled) twice.
@@ -108,10 +106,6 @@ export class ExplorerStore {
 
   deleteFile(fileId: string): Observable<void> {
     return this.filesApi.remove(fileId).pipe(tap(() => this.reload()));
-  }
-
-  downloadFile(fileId: string): Observable<void> {
-    return this.filesApi.download(fileId).pipe(map((link) => this.downloads.start(link.url)));
   }
 
   private load(query: Query): Observable<ExplorerView> {

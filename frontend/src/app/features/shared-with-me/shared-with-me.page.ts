@@ -8,12 +8,11 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { catchError, EMPTY, finalize, Subject, switchMap, tap } from 'rxjs';
+import { catchError, EMPTY, Subject, switchMap, tap } from 'rxjs';
 
-import { FilesApi } from '@core/api/files-api.service';
 import { type SharedItem } from '@core/api/models';
 import { SharingApi } from '@core/api/sharing-api.service';
-import { DownloadService } from '@core/download/download.service';
+import { fileDownloads } from '@core/download/file-downloads';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DateTimePipe } from '@shared/pipes/date-time.pipe';
 import { FileSizePipe } from '@shared/pipes/file-size.pipe';
@@ -44,7 +43,7 @@ import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
     <div class="cd-toolbar">
       <h1>Shared with me</h1>
     </div>
-    @if (notice(); as message) {
+    @if (downloads.error(); as message) {
       <p class="cd-form-error" role="alert">{{ message }}</p>
     }
     @if (loading()) {
@@ -93,9 +92,9 @@ import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
                         cd-button
                         variant="secondary"
                         type="button"
-                        [busy]="item.id | isIn: downloading()"
+                        [busy]="item.id | isIn: downloads.busy()"
                         [attr.aria-label]="'Download ' + item.name"
-                        (click)="download(item)"
+                        (click)="downloads.start(item.id)"
                       >
                         Download
                       </button>
@@ -125,12 +124,9 @@ export class SharedWithMePage implements OnInit {
   protected readonly total = signal(0);
   /** The page asked for, so Retry after a failure repeats the same page. */
   protected readonly pageNumber = signal(1);
-  protected readonly notice = signal<string | null>(null);
-  protected readonly downloading = signal<readonly string[]>([]);
+  protected readonly downloads = fileDownloads();
 
   private readonly sharing = inject(SharingApi);
-  private readonly files = inject(FilesApi);
-  private readonly downloads = inject(DownloadService);
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
   private readonly requests = new Subject<number>();
@@ -174,23 +170,5 @@ export class SharedWithMePage implements OnInit {
 
   protected load(page: number): void {
     this.requests.next(page);
-  }
-
-  protected download(item: SharedItem): void {
-    if (this.downloading().includes(item.id)) {
-      return;
-    }
-    this.notice.set(null);
-    this.downloading.update((ids) => [...ids, item.id]);
-    this.files
-      .download(item.id)
-      .pipe(
-        finalize(() => this.downloading.update((ids) => ids.filter((id) => id !== item.id))),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: (link) => this.downloads.start(link.url),
-        error: (error: unknown) => this.notice.set(this.resolver.resolve(error).message),
-      });
   }
 }

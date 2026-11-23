@@ -337,12 +337,13 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - [ ] Per-user rate limit hook for search.
 - [ ] Tests: a user who can see only a small slice still gets correct results, shared-with-me results included, revoked results gone immediately, no cross-user leakage, threshold behaviour, empty result.
 
-### 9.5 Branch: feat/frontend-search (OK-NOW)
-- [ ] Search bar with debounce and request cancellation.
-- [ ] Results list with file name, snippet, page, open file action.
-- [ ] Search terms are kept in component state, never in the address bar or storage.
-- [ ] States: searching, no results, AI unavailable with retry.
-- [ ] Tests: debounce, cancellation, state transitions.
+### 9.5 Branch: feat/search-screen (DONE, PR for this branch)
+- [x] Search bar with debounce and request cancellation (300 ms pause, Enter searches at once, `switchMap`).
+- [x] Results list with file name, snippet, page and a download action (shared `fileDownloads()` helper, also used by the explorer and Shared with me).
+- [x] Search terms are kept in component state, never in the address bar or storage (the API takes them in the body).
+- [x] States: nothing typed, searching, results, no results, unavailable with retry; one persistent screen-reader announcement; the list and pager stay while another page loads.
+- [x] Tests: debounce, cancellation, every state, paging, step-back, retry, download.
+- [ ] Not checked in a real browser yet (light and dark, keyboard walk-through): do it in the real-upload run.
 
 ### 9.6 Phase 6 exit criteria
 - [ ] Searching a paraphrase finds the right document in a real run (local model), and tests prove permission filtering.

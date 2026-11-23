@@ -65,6 +65,16 @@ export interface Page<T> {
   page_size: number;
 }
 
+/** One file that matched a search: its best passage, never the whole text. */
+export interface SearchHit {
+  file_id: string;
+  file_name: string;
+  chunk_id: string;
+  page: number | null;
+  snippet: string;
+  score: number;
+}
+
 export interface DownloadResponse {
   url: string;
   expires_in: number;
