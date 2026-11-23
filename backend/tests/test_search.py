@@ -231,6 +231,23 @@ class TestAccess:
         assert client.get(f"/api/v1/folders/{shared}", headers=viewer.headers).status_code == 404
         assert _names(_search(client, viewer, "invoice due")[1]) == []
 
+    def test_aFileGrantBelowADeletedGrandparentIsNoLongerReachable(
+        self, client, people, s3_client: "S3Client", session: Session, fake_embedder: FakeEmbedder
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        top = _folder(client, owner, "Top")
+        middle = _folder(client, owner, "Middle", top)
+        leaf = _folder(client, owner, "Leaf", middle)
+        file_id = _file(client, owner, s3_client, session, leaf, "deep.txt")
+        _index(session, fake_embedder, file_id, INVOICE)
+        assert _grant(client, owner, "files", file_id, viewer, "viewer").status_code == 201
+        assert _names(_search(client, viewer, "invoice due")[1]) == ["deep.txt"]
+        session.execute(
+            update(Folder).where(Folder.id == uuid.UUID(top)).values(deleted_at=text("now()"))
+        )
+        session.commit()
+        assert _names(_search(client, viewer, "invoice due")[1]) == []
+
     def test_vectorsFromAnotherModelAreNeverComparedWithTheQuery(
         self, client, people, s3_client: "S3Client", session: Session, fake_embedder: FakeEmbedder
     ) -> None:
