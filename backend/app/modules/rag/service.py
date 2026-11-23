@@ -37,7 +37,9 @@ class _InProgress:
     """
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        # Re-entrant: a finalizer that runs during garbage collection on a thread already holding
+        # the lock must be able to release a slot instead of deadlocking.
+        self._lock = threading.RLock()
         self._counts: dict[uuid.UUID, int] = {}
 
     def acquire(self, user_id: uuid.UUID, limit: int) -> bool:

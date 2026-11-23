@@ -111,10 +111,10 @@ class Settings(BaseSettings):
     search_snippet_chars: int = Field(default=300, ge=50, le=1000)
     # Chunks offered to the model for one answer (fewer when the prompt budget is smaller).
     rag_max_chunks: int = Field(default=8, ge=1, le=20)
-    # Answers are slow and use the one local model, so the budget is far below search's.
     # An answer holds a server thread for as long as it streams, so one user may only run a few
     # at once (per process, which is what the threads belong to).
     rag_max_concurrent_per_user: int = Field(default=2, ge=1, le=10)
+    # Answers are slow and use the one local model, so the budget is far below search's.
     rate_limit_answer_per_user: int = 30
     rate_limit_answer_window_seconds: int = 600
     rate_limit_grant_per_user: int = 60
