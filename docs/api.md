@@ -91,6 +91,12 @@ The token travels in the request **body**, never the URL, so it stays out of acc
 
 Recorded actions: `file.uploaded` (when complete succeeds), `file.downloaded` (when a link is issued), `file.deleted`, `folder.deleted`, `permission.granted`, `permission.changed`, `permission.revoked`, and `auth.login` (successful sign-ins). **Not recorded:** failed logins, denied attempts and failed uploads (an unauthenticated caller must not be able to write into someone's trail, and extra work for known emails would be a timing oracle). Issuing a download link writes a row, so a repeated request is a repeated event; a grantee's link requests are limited to 600 per hour per user (`RATE_LIMIT_DOWNLOAD_PER_USER`); owners downloading their own files are not limited. Actions by editors are written to the owner's trail. Rows hold ids and short codes only, never names, emails, tokens or URLs; the request id is the one the request carried (letters, digits, `_` and `-`, at most 64).
 
+## Search (`/api/v1/search`) - authenticated
+
+| Method | Path | Result | Notes |
+|---|---|---|---|
+| POST | `/search?page=1&page_size=50` | 200 paginated | Body `{"query": "..."}` (1 to 1000 characters). POST only so the search terms never appear in a URL or log. Finds the chunks closest in meaning to the query among `ready` files the caller may read (owned, directly granted, or below a granted folder; never below a deleted folder), and returns the best chunk per file, best first. Items: `file_id`, `file_name`, `chunk_id`, `page`, `snippet`, `score` (cosine similarity, 0 to 1). `total` counts the files among the best `SEARCH_POOL_SIZE` chunks, not every possible match. Below `SEARCH_MIN_SCORE` is not returned. 429 when over the per-user limit; 503 `search_unavailable` when the embedding model cannot run |
+
 ## Storage setup notes (S3)
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.

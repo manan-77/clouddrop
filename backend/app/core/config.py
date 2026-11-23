@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     share_link_max_active_per_file: int = 20
     rate_limit_download_per_user: int = 600
     rate_limit_download_window_seconds: int = 3600
+    rate_limit_search_per_user: int = 120
+    rate_limit_search_window_seconds: int = 300
+    # Cosine similarity needed to count as a match (BGE scores are compressed: unrelated text
+    # often scores about 0.5). Tune with real documents.
+    search_min_score: float = Field(default=0.55, ge=0, le=1)
+    # How many best chunks are considered per search; results are grouped by file and paged here.
+    search_pool_size: int = Field(default=100, ge=1, le=500)
+    search_snippet_chars: int = Field(default=300, ge=50, le=1000)
     rate_limit_grant_per_user: int = 60
     rate_limit_grant_window_seconds: int = 3600
     # Only uploads into someone else's shared folder are limited (they reserve the owner's quota).
