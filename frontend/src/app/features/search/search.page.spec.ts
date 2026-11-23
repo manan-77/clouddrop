@@ -294,7 +294,8 @@ describe('SearchPage', () => {
       const fresh = backend.expectOne(SEARCH);
       await settle();
       expect(fresh.request.params.get('page')).toBe('1');
-      expect(results()).toHaveLength(0); // not page 2's list under a pager that says page 1
+      // Cleared in between, so the old list must not come back under the new request.
+      expect(results()).toHaveLength(0);
       expect(root().querySelector('cd-skeleton')).not.toBeNull();
       fresh.flush(found([hit(1)]));
     });
