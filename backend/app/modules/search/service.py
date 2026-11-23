@@ -18,13 +18,17 @@ class SearchService:
         self.repo = SearchRepository(session)
         self.settings = settings
 
-    def search(
-        self, user_id: uuid.UUID, query: str, params: PageParams
-    ) -> tuple[list[SearchHit], int]:
-        """The best chunk of each matching file, best first, paged over the top of the pool.
+    def matching_chunks(
+        self,
+        user_id: uuid.UUID,
+        query: str,
+        limit: int,
+        only_file_id: uuid.UUID | None = None,
+    ) -> list[ChunkMatch]:
+        """The chunks closest in meaning to `query` among files the caller may read, best first.
 
-        `total` counts the files found among the best `search_pool_size` chunks, not every file
-        that could ever match: a search shows the best results, not an exhaustive list.
+        The one retrieval path: search lists files from it and answers are built from it, so the
+        access rule, the similarity threshold and the embedder's failure handling live here only.
         """
         try:
             embedder = embeddings_module.get_embedder()
@@ -34,13 +38,19 @@ class SearchService:
             raise ServiceUnavailableError(
                 "Search is unavailable right now", code="search_unavailable"
             ) from exc
-        matches = self.repo.closest_chunks(
-            user_id,
-            embedder.model,
-            vector,
-            self.settings.search_min_score,
-            self.settings.search_pool_size,
+        return self.repo.closest_chunks(
+            user_id, embedder.model, vector, self.settings.search_min_score, limit, only_file_id
         )
+
+    def search(
+        self, user_id: uuid.UUID, query: str, params: PageParams
+    ) -> tuple[list[SearchHit], int]:
+        """The best chunk of each matching file, best first, paged over the top of the pool.
+
+        `total` counts the files found among the best `search_pool_size` chunks, not every file
+        that could ever match: a search shows the best results, not an exhaustive list.
+        """
+        matches = self.matching_chunks(user_id, query, self.settings.search_pool_size)
         best_per_file: dict[uuid.UUID, ChunkMatch] = {}
         for match in matches:  # already best first, so the first chunk seen per file is its best
             best_per_file.setdefault(match.file_id, match)

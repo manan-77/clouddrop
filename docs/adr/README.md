@@ -19,3 +19,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0013](0013-local-embeddings-and-vector-size.md) | Local embeddings, fixed 384-dimension vector | Accepted |
 | [0014](0014-semantic-search-query.md) | Semantic search is one permission-filtered SQL query | Accepted |
 | [0015](0015-local-chat-through-ollama.md) | Chat answers come from a local Ollama model behind one interface | Accepted |
+| [0016](0016-answers-are-grounded-streamed-and-verified.md) | Answers are grounded, streamed and verified | Accepted |

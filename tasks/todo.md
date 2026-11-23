@@ -352,16 +352,16 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 Goal: ask questions about files, get cited answers, summaries, categories and comparisons, safely and within budgets.
 
 ### 10.1 Branch: feat/rag-chat (OK-NOW against the fake; real runs against local Ollama)
-- [ ] Conversations and messages tables migration (no document text copied beyond what is needed, with model name, prompt version and token counts).
-- [ ] Prompt module holding the system rules; retrieved chunks placed in a clearly delimited block labelled as untrusted document content.
-- [ ] Retrieval reuses the permission-filtered search, with a similarity threshold and a token budget for context.
-- [ ] No relevant context means a fixed honest answer, never a guess.
-- [ ] Citations verified: only chunks actually retrieved may be cited, anything else dropped.
-- [ ] Streaming endpoint with cancellation support.
-- [ ] Per-user rate limit, monthly token budget, input and output size caps.
-- [ ] No prompts, answers or chunk text in logs.
-- [ ] No tools and no side effects for the model.
-- [ ] Prompt injection test set: documents containing instructions, attempts to reveal the system prompt, attempts to cite foreign chunks, attempts to read other users' files.
+- [ ] Conversations and messages tables: deferred on purpose, answers keep no history in v1 (ADR 0016). Needed only if multi-turn chat is wanted.
+- [x] Prompt module holding the system rules; retrieved chunks placed in a clearly delimited block labelled as untrusted document content (`app/modules/rag/prompts.py`).
+- [x] Retrieval reuses the permission-filtered search, with a similarity threshold and a token budget for context.
+- [x] No relevant context means a fixed honest answer, never a guess (and no model call).
+- [x] Citations verified: only chunks actually retrieved may be cited, anything else dropped.
+- [x] Streaming endpoint with cancellation support (`POST /api/v1/answers`, server-sent events).
+- [~] Per-user rate limit, input and output size caps done; the monthly token budget is not built.
+- [x] No prompts, answers or chunk text in logs (tested).
+- [x] No tools and no side effects for the model.
+- [ ] Prompt injection test set: documents containing instructions, attempts to reveal the system prompt, attempts to cite foreign chunks, attempts to read other users' files. Covered so far: a chunk that closes its own fence, gives orders and cites an invented label, other users' files never reach the prompt. Still to add: system-prompt extraction attempts and a real-model run of the hostile cases.
 - [ ] Tests with the fake gateway: citation filtering, no-context answer, budget exhausted, rate limit, stranger cannot read a conversation, cancellation.
 
 ### 10.2 Branch: feat/summaries-categories (OK-NOW against fake)
@@ -421,6 +421,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
 - [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
+- [ ] Monthly per-user token budget for answers (the chat client logs counts per request; nothing stores them per user yet).
 - [ ] When error tracking is chosen: scrub local variables as well as bodies, headers and query strings (a failing chat stream holds answer text in its frames; ADR 0015).
 - [ ] Performance: Lighthouse on the production build (an earlier 55 was the dev server, so it is not a baseline); record per-page scores, then gate CI at 98 or more per page.
 - [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
