@@ -310,7 +310,7 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - [ ] Decide similarity threshold defaults and top-k defaults.
 
 ### 9.2 Branch: feat/ai-gateway (OK-NOW against a fake; the first real implementation is local Ollama chat, Azure APIM later)
-- [ ] Ollama chat client (`qwen3:4b-instruct`, `num_ctx` 8192) behind one chat interface, with a fake for tests and a prompt-size check that refuses a prompt that would not fit the context. Direction step 2.
+- [x] (PR for feat/ollama-chat-client, ADR 0015) Ollama chat client (`qwen3:4b-instruct`, `num_ctx` 8192) behind one chat interface, with a fake for tests and a prompt-size check that refuses a prompt that would not fit the context. Direction step 2.
 - [ ] One gateway module that is the only caller of the AI service. Settings supply base address, paths, deployment names and key. Nothing hard-coded.
 - [ ] Shared pooled HTTP client with connect and read timeouts.
 - [ ] Retry only on rate-limit, server error and timeout with bounded exponential backoff that honours the Retry-After header.

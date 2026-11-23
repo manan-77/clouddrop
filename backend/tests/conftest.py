@@ -15,7 +15,9 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from alembic import command
+from app.ai import chat as chat_module
 from app.ai import embeddings as embeddings_module
+from app.ai.chat import ChatMessage, ChatUsage
 from app.ai.embeddings import EMBEDDING_DIM, EMBEDDING_MODEL
 from app.core import security
 from app.core.config import get_settings
@@ -158,6 +160,50 @@ def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> FakeEmbedder:
     embedder = FakeEmbedder()
     monkeypatch.setattr(embeddings_module, "get_embedder", lambda: embedder)
     return embedder
+
+
+class FakeChatStream:
+    def __init__(self, pieces: list[str], error: Exception | None) -> None:
+        self.usage = ChatUsage()
+        self.closed = False
+        self._pieces = pieces
+        self._error = error
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._pieces
+        if self._error:
+            raise self._error
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeChat:
+    "Stands in for Ollama: tests set `reply` or `error` and read the messages that were sent."
+
+    def __init__(self) -> None:
+        self.reply = "ok"
+        self.error: Exception | None = None  # raised when the stream is opened
+        self.error_while_streaming: Exception | None = None
+        self.calls: list[list[ChatMessage]] = []
+        self.streams: list[FakeChatStream] = []
+
+    def stream(self, messages: Sequence[ChatMessage]) -> FakeChatStream:
+        self.calls.append(list(messages))
+        if self.error:
+            raise self.error
+        words = self.reply.split(" ")
+        pieces = [word if index == 0 else " " + word for index, word in enumerate(words)]
+        stream = FakeChatStream(pieces, self.error_while_streaming)
+        self.streams.append(stream)
+        return stream
+
+
+@pytest.fixture(autouse=True)
+def fake_chat(monkeypatch: pytest.MonkeyPatch) -> FakeChat:
+    chat = FakeChat()
+    monkeypatch.setattr(chat_module, "get_chat_client", lambda: chat)
+    return chat
 
 
 @pytest.fixture

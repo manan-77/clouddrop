@@ -67,6 +67,19 @@ class Settings(BaseSettings):
     # survives restarts.
     embedding_cache_dir: str | None = None
     embedding_batch_size: int = Field(default=32, ge=1, le=256)
+    # Local chat model served by Ollama (docs/adr/0015). num_ctx is the whole window: the prompt
+    # plus the answer must fit, so the prompt budget is num_ctx minus chat_max_output_tokens.
+    ollama_base_url: str = "http://localhost:11434"
+    chat_model: str = "qwen3:4b-instruct"
+    chat_num_ctx: int = Field(default=8192, ge=2048, le=131072)
+    chat_max_output_tokens: int = Field(default=1024, ge=16)
+    chat_temperature: float = Field(default=0.2, ge=0, le=2)
+    chat_connect_timeout_seconds: float = Field(default=5, gt=0)
+    # Generous: the first request after a quiet period waits while the model loads into memory.
+    chat_read_timeout_seconds: float = Field(default=120, gt=0)
+    chat_max_attempts: int = Field(default=3, ge=1, le=5)
+    chat_retry_backoff_seconds: float = Field(default=0.5, ge=0)
+    chat_max_connections: int = Field(default=10, ge=1)
     chunk_size_chars: int = 1000
     chunk_overlap_chars: int = 150
     sweeper_stuck_after_seconds: int = 600
@@ -148,6 +161,14 @@ class Settings(BaseSettings):
     def _chunk_overlap_is_smaller_than_the_chunk(self) -> Self:
         if not 0 <= self.chunk_overlap_chars < self.chunk_size_chars // 2:
             raise ValueError("CHUNK_OVERLAP_CHARS must be below half of CHUNK_SIZE_CHARS")
+        return self
+
+    @model_validator(mode="after")
+    def _chat_prompt_has_room(self) -> Self:
+        if self.chat_num_ctx - self.chat_max_output_tokens < 2048:
+            raise ValueError(
+                "CHAT_NUM_CTX must leave at least 2048 tokens above CHAT_MAX_OUTPUT_TOKENS"
+            )
         return self
 
     @model_validator(mode="after")
