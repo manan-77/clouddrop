@@ -310,7 +310,7 @@ Goal: documents are searchable by meaning, and only by people allowed to see the
 - [ ] Decide similarity threshold defaults and top-k defaults.
 
 ### 9.2 Branch: feat/ai-gateway (OK-NOW against a fake; the first real implementation is local Ollama chat, Azure APIM later)
-- [ ] Ollama chat client (`qwen3:4b-instruct`, `num_ctx` 8192) behind one chat interface, with a fake for tests and a prompt-size check that refuses a prompt that would not fit the context. Direction step 2.
+- [x] (PR for feat/ollama-chat-client, ADR 0015) Ollama chat client (`qwen3:4b-instruct`, `num_ctx` 8192) behind one chat interface, with a fake for tests and a prompt-size check that refuses a prompt that would not fit the context. Direction step 2.
 - [ ] One gateway module that is the only caller of the AI service. Settings supply base address, paths, deployment names and key. Nothing hard-coded.
 - [ ] Shared pooled HTTP client with connect and read timeouts.
 - [ ] Retry only on rate-limit, server error and timeout with bounded exponential backoff that honours the Retry-After header.
@@ -421,6 +421,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 ### 11.5 Branch: chore/security-and-load (OK-NOW)
 - [x] Dependency audit and updates, including resolving the test-client deprecation warning (httpx replaced by httpx2 in the dev group).
 - [ ] Load test of list, upload initiation, search and chat endpoints with recorded results.
+- [ ] When error tracking is chosen: scrub local variables as well as bodies, headers and query strings (a failing chat stream holds answer text in its frames; ADR 0015).
 - [ ] Performance: Lighthouse on the production build (an earlier 55 was the dev server, so it is not a baseline); record per-page scores, then gate CI at 98 or more per page.
 - [~] Backup and restore procedure written (docs/backup-restore.md); dump verified, restore NEEDS-YOU (the app role cannot create a database).
 - [x] Threat-model checklist walk-through against the CLAUDE.md security rules (docs/security-review.md).
