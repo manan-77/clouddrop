@@ -27,14 +27,19 @@ class SearchService:
         that could ever match: a search shows the best results, not an exhaustive list.
         """
         try:
-            vector = embeddings_module.get_embedder().embed_query(query)
+            embedder = embeddings_module.get_embedder()
+            vector = embedder.embed_query(query)
         except Exception as exc:  # the model could not load or run; never log the query text
             logger.warning("Search embedding failed: %s", type(exc).__name__)
             raise ServiceUnavailableError(
                 "Search is unavailable right now", code="search_unavailable"
             ) from exc
         matches = self.repo.closest_chunks(
-            user_id, vector, self.settings.search_min_score, self.settings.search_pool_size
+            user_id,
+            embedder.model,
+            vector,
+            self.settings.search_min_score,
+            self.settings.search_pool_size,
         )
         best_per_file: dict[uuid.UUID, ChunkMatch] = {}
         for match in matches:  # already best first, so the first chunk seen per file is its best

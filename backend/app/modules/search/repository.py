@@ -7,6 +7,7 @@ folder above it, and never below a deleted folder. Only `ready` files that are n
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import Select, func, literal, or_, select, text
 from sqlalchemy.exc import DBAPIError
@@ -32,16 +33,52 @@ class ChunkMatch:
     score: float
 
 
+def _ancestor_chain(seed, name: str):  # type: ignore[no-untyped-def]  # a recursive CTE
+    """Walks up from each seed row. A seed selects (root_id, folder_id, parent_id, deleted)."""
+    chain = seed.add_columns(literal(1).label("depth")).cte(name, recursive=True)
+    parent = aliased(Folder)
+    return chain.union_all(
+        select(
+            chain.c.root_id,
+            parent.id,
+            parent.parent_id,
+            parent.deleted_at.is_not(None),
+            chain.c.depth + 1,
+        )
+        .join(parent, parent.id == chain.c.parent_id)
+        .where(chain.c.depth < MAX_FOLDER_DEPTH)
+    )
+
+
+def _folders_with_a_deleted_ancestor(folder_ids: Select[Any]) -> Select[Any]:
+    """Folders (among `folder_ids`) that are deleted or sit below a deleted folder."""
+    seed = select(
+        Folder.id.label("root_id"),
+        Folder.id.label("folder_id"),
+        Folder.parent_id.label("parent_id"),
+        Folder.deleted_at.is_not(None).label("deleted"),
+    ).where(Folder.id.in_(folder_ids))
+    chain = _ancestor_chain(seed, "folder_ancestors")
+    return select(chain.c.root_id).where(chain.c.deleted)
+
+
 def _folders_granted_to(user_id: uuid.UUID):  # type: ignore[no-untyped-def]  # a recursive CTE
     """Every live folder the user was granted, and every live folder below one of them.
 
-    Walking down (not up per file) keeps this one small set; a deleted folder stops the walk, so
-    nothing below it is reachable.
+    Walking down (not up per file) keeps this one small set. A granted folder only counts when no
+    folder above it is deleted (the same rule as AccessService), and a deleted folder stops the
+    walk, so nothing below it is reachable.
     """
+    direct = select(Permission.folder_id).where(
+        Permission.grantee_id == user_id, Permission.folder_id.is_not(None)
+    )
     granted = (
         select(Folder.id.label("id"), literal(1).label("depth"))
-        .join(Permission, Permission.folder_id == Folder.id)
-        .where(Permission.grantee_id == user_id, Folder.deleted_at.is_(None))
+        .where(
+            Folder.id.in_(direct),
+            Folder.deleted_at.is_(None),
+            Folder.id.not_in(_folders_with_a_deleted_ancestor(direct)),
+        )
         .cte("visible_folders", recursive=True)
     )
     child = aliased(Folder)
@@ -57,31 +94,18 @@ def _files_blocked_by_a_deleted_folder(user_id: uuid.UUID):  # type: ignore[no-u
     direct = select(Permission.file_id).where(
         Permission.grantee_id == user_id, Permission.file_id.is_not(None)
     )
-    chain = (
+    seed = (
         select(
-            File.id.label("file_id"),
+            File.id.label("root_id"),
             Folder.id.label("folder_id"),
             Folder.parent_id.label("parent_id"),
             Folder.deleted_at.is_not(None).label("deleted"),
-            literal(1).label("depth"),
         )
         .join(Folder, Folder.id == File.folder_id)
         .where(File.id.in_(direct))
-        .cte("file_ancestors", recursive=True)
     )
-    parent = aliased(Folder)
-    chain = chain.union_all(
-        select(
-            chain.c.file_id,
-            parent.id,
-            parent.parent_id,
-            parent.deleted_at.is_not(None),
-            chain.c.depth + 1,
-        )
-        .join(parent, parent.id == chain.c.parent_id)
-        .where(chain.c.depth < MAX_FOLDER_DEPTH)
-    )
-    return select(chain.c.file_id).where(chain.c.deleted)
+    chain = _ancestor_chain(seed, "file_ancestors")
+    return select(chain.c.root_id).where(chain.c.deleted)
 
 
 class SearchRepository:
@@ -113,7 +137,12 @@ class SearchRepository:
             self.session.execute(text("SET LOCAL hnsw.ef_search = 1000"))
 
     def closest_chunks(
-        self, user_id: uuid.UUID, query_vector: list[float], min_score: float, limit: int
+        self,
+        user_id: uuid.UUID,
+        model: str,
+        query_vector: list[float],
+        min_score: float,
+        limit: int,
     ) -> list[ChunkMatch]:
         self._prepare_index_scan()
         distance = ChunkEmbedding.embedding.cosine_distance(query_vector)
@@ -138,6 +167,9 @@ class SearchRepository:
                 File.deleted_at.is_(None),
                 File.status == FileStatus.READY.value,
                 FileVersion.version == latest_version,
+                # Vectors from another model are not comparable with this query's vector.
+                ChunkEmbedding.model == model,
+                ChunkEmbedding.dim == len(query_vector),
                 distance <= 1 - min_score,
                 self._can_read(user_id),
             )

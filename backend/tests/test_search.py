@@ -212,6 +212,35 @@ class TestAccess:
         assert _names(_search(client, viewer, "invoice due")[1]) == ["a.txt"]
         assert len(_search(client, owner, "invoice due")[1]["items"]) == 3  # type: ignore[arg-type]
 
+    def test_aGrantedFolderBelowADeletedParentIsNoLongerReachable(
+        self, client, people, s3_client: "S3Client", session: Session, fake_embedder: FakeEmbedder
+    ) -> None:
+        owner, viewer = people["owner"], people["viewer"]
+        top = _folder(client, owner, "Top")
+        shared = _folder(client, owner, "Shared", top)
+        file_id = _file(client, owner, s3_client, session, shared, "inside.txt")
+        _index(session, fake_embedder, file_id, INVOICE)
+        assert _grant(client, owner, "folders", shared, viewer, "viewer").status_code == 201
+        assert _names(_search(client, viewer, "invoice due")[1]) == ["inside.txt"]
+        # Deleting only the parent leaves the granted folder itself live, but the access check
+        # (AccessService) denies everything below a deleted ancestor, so search must too.
+        session.execute(
+            update(Folder).where(Folder.id == uuid.UUID(top)).values(deleted_at=text("now()"))
+        )
+        session.commit()
+        assert client.get(f"/api/v1/folders/{shared}", headers=viewer.headers).status_code == 404
+        assert _names(_search(client, viewer, "invoice due")[1]) == []
+
+    def test_vectorsFromAnotherModelAreNeverComparedWithTheQuery(
+        self, client, people, s3_client: "S3Client", session: Session, fake_embedder: FakeEmbedder
+    ) -> None:
+        owner = people["owner"]
+        file_id = _file(client, owner, s3_client, session, None, "old.txt")
+        _index(session, fake_embedder, file_id, INVOICE)
+        session.execute(update(ChunkEmbedding).values(model="some-older-model"))
+        session.commit()
+        assert _names(_search(client, owner, "invoice due")[1]) == []
+
     def test_aUserWhoCanSeeOneFileStillFindsItAmongManyCloserOnesTheyCannotSee(
         self, client, people, s3_client: "S3Client", session: Session, fake_embedder: FakeEmbedder
     ) -> None:
