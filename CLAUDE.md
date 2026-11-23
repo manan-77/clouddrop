@@ -49,6 +49,7 @@ A PR is reviewed as part of the whole repo, not only as a diff. Before adding a 
 
 - **One owner per value.** A number, string or rule that appears twice (page size, limits, TTLs, status lists, error codes, labels) lives in one named constant, and every use imports it. A deliberate exception gets a one-line comment saying why.
 - **Same problem, same shape.** Lists, loading/empty/error states, dialogs, status announcements, role checks and spec setup are solved once and reused. A second hand-rolled version needs a stated reason.
+- **A second copy of a rule needs a comparison test.** When a rule has to be written twice (for example the access rule as SQL inside search or RAG, because it must filter in the same query as the ranking), add a test that builds many random cases and compares the copy with the original for every user and item, and prove it fails on a deliberately broken copy. Hand-picked cases miss the shape nobody thought of.
 - **Prefer a mechanical guard** (lint rule, structural test, drift test) over a note when a rule can be checked by a tool. Add it in the PR that finds the drift and prove it fires on a deliberately bad file.
 - **Reviews include a repo-wide consistency pass**: the reviewer greps for the same constant, pattern or call elsewhere and reports every divergence, not only the ones in the diff.
 
