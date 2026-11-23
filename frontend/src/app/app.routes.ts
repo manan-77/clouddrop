@@ -8,6 +8,11 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', canActivate: [authGuard], loadComponent: explorer },
   { path: 'folders/:folderId', canActivate: [authGuard], loadComponent: explorer },
   {
+    path: 'search',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/search/search.page').then((m) => m.SearchPage),
+  },
+  {
     path: 'shared',
     canActivate: [authGuard],
     loadComponent: () =>

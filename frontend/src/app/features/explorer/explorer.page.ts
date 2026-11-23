@@ -11,7 +11,7 @@ import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize, map, type Observable } from 'rxjs';
 
-import { type FileRead } from '@core/api/models';
+import { fileDownloads } from '@core/download/file-downloads';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { UploadQueue } from '@core/uploads/upload-queue.service';
 import { ButtonComponent } from '@shared/ui/button/button.component';
@@ -61,8 +61,7 @@ export class ExplorerPage {
   protected readonly dialog = signal<Dialog | null>(null);
   protected readonly busy = signal(false);
   protected readonly dialogError = signal<string | null>(null);
-  protected readonly notice = signal<string | null>(null);
-  protected readonly downloading = signal<readonly string[]>([]);
+  protected readonly downloads = fileDownloads();
 
   private readonly resolver = inject(ErrorResolver);
   private readonly destroyRef = inject(DestroyRef);
@@ -138,7 +137,7 @@ export class ExplorerPage {
       // A dialog or message belongs to the folder it was opened in.
       this.dialog.set(null);
       this.dialogError.set(null);
-      this.notice.set(null);
+      this.downloads.clearError();
     });
   }
 
@@ -194,23 +193,6 @@ export class ExplorerPage {
     } else if (dialog?.kind === 'delete-file') {
       this.run(this.store.deleteFile(dialog.file.id));
     }
-  }
-
-  protected download(file: FileRead): void {
-    if (this.downloading().includes(file.id)) {
-      return;
-    }
-    this.notice.set(null);
-    this.downloading.update((ids) => [...ids, file.id]);
-    this.store
-      .downloadFile(file.id)
-      .pipe(
-        finalize(() => this.downloading.update((ids) => ids.filter((id) => id !== file.id))),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        error: (error: unknown) => this.notice.set(this.resolver.resolve(error).message),
-      });
   }
 
   private run(operation: Observable<unknown>): void {

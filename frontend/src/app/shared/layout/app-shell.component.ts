@@ -43,6 +43,7 @@ import { ButtonComponent } from '@shared/ui/button/button.component';
         >
           Files
         </a>
+        <a routerLink="/search" routerLinkActive="active" ariaCurrentWhenActive="page">Search</a>
         <a routerLink="/shared" routerLinkActive="active" ariaCurrentWhenActive="page">
           Shared with me
         </a>
