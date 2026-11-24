@@ -75,6 +75,21 @@ export interface SearchHit {
   score: number;
 }
 
+/** A source the server verified was really offered to the model for this answer. */
+export interface Citation {
+  label: string;
+  file_id: string;
+  file_name: string;
+  chunk_id: string;
+  page: number | null;
+}
+
+/** One event of an answer stream (docs/api.md, Answers). */
+export type AnswerEvent =
+  | { type: 'token'; text: string }
+  | { type: 'done'; citations: Citation[]; cut_off: boolean }
+  | { type: 'error'; code: string };
+
 export interface DownloadResponse {
   url: string;
   expires_in: number;

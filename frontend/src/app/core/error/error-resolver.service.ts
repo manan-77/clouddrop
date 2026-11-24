@@ -75,6 +75,11 @@ export class ErrorResolver {
     return this.build(lookup(STATUS_MESSAGES, error.status) ?? this.fallbackFor(error.status));
   }
 
+  /** The text for an error code that arrives as data (an event in a stream), not as a failed request. */
+  describe(code: string): string {
+    return lookup(ERROR_MESSAGES, code) ?? GENERIC_MESSAGE;
+  }
+
   private fallbackFor(status: number): string {
     return status >= 500
       ? 'The service is having trouble. Please try again in a moment.'

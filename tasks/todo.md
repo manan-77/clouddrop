@@ -376,12 +376,13 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Tests: both documents access-checked, one inaccessible returns 404, caps enforced.
 
 ### 10.4 Branch: feat/frontend-ai (OK-NOW)
-- [ ] Chat page with streamed answer rendering as plain text, stop button, retry, conversation list.
-- [ ] Citation chips that open the cited file by id.
+- [x] Answer page (`/ask`) with the answer streamed as plain text, a Stop button and a message on failure (PR for feat/answer-screen, ADR 0017). Not built: a conversation list (answers keep no history, ADR 0016), asking about one file from the explorer or search (the API supports `file_id`, the screen does not send it yet), a "Retry" button (the question stays in the box; ask again).
+- [x] Sources listed from the server's verified citations, each with a Download action (they do not open the file in place).
 - [ ] Summary and category panel on a file.
 - [ ] Compare view.
 - [ ] Safe markdown rendering only through one shared sanitising component recorded by ADR, otherwise plain text.
-- [ ] Tests: streaming states, cancel, citation links built only from server ids.
+- [x] Tests: streaming states, cancel (Stop and leaving the page), failures before and during an answer, sources only from the server list, text never as HTML.
+- [ ] Not checked in a real browser yet (the live stream through the dev proxy, light and dark, keyboard walk-through): do it in the real-upload run.
 
 ### 10.5 Phase 7 exit criteria
 - [ ] Asking about a file returns a cited answer in a real run (local Ollama). All injection tests pass. Budgets and limits enforced.
