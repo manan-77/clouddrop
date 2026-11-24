@@ -14,7 +14,7 @@ on:
       - "frontend/package*.json"
       - ".github/workflows/containers.yml"
   push:
-    branches: [develop, main]
+    branches: [main]
     paths:
       - "backend/**"
       - "frontend/**"

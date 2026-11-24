@@ -52,14 +52,14 @@ PR; a finding in review means a rule here was skipped or is missing.
     Redis DB, never a shared store or a destructive command. [57, 78, 89]
 
 ## Process
-20. **Run the exact CI commands locally** (`scripts/verify.sh`; CI does not run on PRs into `develop`, so this is the only gate before merge), build after any bulk edit, tick a
+20. **Gates run only for the release into `main`** (owner decision 2026-11-24): `scripts/verify.sh` locally before that merge and CI on the PR into `main`. For work going into `develop`, run just the test file being changed, never claim a gate that was not run, build after any bulk edit, tick a
     todo only when a test covers it, and say plainly what was not run. [26, 37, 47, 103]
 21. **Pin third-party actions to a commit SHA and audit tools to a version; keep advisory checks
     out of the required set.** [107, 108]
 22. **A rule copied into SQL (access in search/RAG) gets a differential test against the original on random cases** (`tests/test_search_matches_access.py`), proven by breaking the copy once; hand-picked cases missed a deleted ancestor above a grant.
 23. **Grep for an existing constant, helper or pattern before adding one; a value used twice has one owner** (page size drifted to 20/50/100 across screens), and prefer a lint rule over a note. See root `CLAUDE.md` > Consistency.
 24. **Measure a number you would otherwise guess before building on it** (tokens per character was 5 for English and 1.0 for ids and Hindi, so a fixed ratio would have overflowed); prefer a bound that cannot be wrong over an estimate.
-25. **A package the app imports belongs in `dependencies`, not the dev group.** Tests and type checks install both, so a missing runtime package only fails in the production image (httpx2 did, after the chat client was wired in). `scripts/verify.sh backend` now imports the app with runtime dependencies only; run it before every merge, because CI does not run on PRs into develop.
+25. **A package the app imports belongs in `dependencies`, not the dev group.** Tests and type checks install both, so a missing runtime package only fails in the production image (httpx2 did, after the chat client was wired in). `scripts/verify.sh backend` imports the app with runtime dependencies only; it runs with the release gates, so a missing runtime package is found at the release, not at the merge.
 26. **Standards conflicts are an ADR plus a note for the owner, never a quiet deviation.** [34, 38]
 
 ## Review stop rule
