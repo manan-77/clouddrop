@@ -22,4 +22,5 @@ A file should come with a short summary, a category and a few tags. The model is
 - A very long document is summarised from its first parts only (`partial`).
 - The categories are a product decision in code (`constants.py`); adding one means a release.
 - A summary can be wrong or miss the point; it is a convenience, not a record. It is shown as text and never as HTML.
+- Summary tasks share the default queue with the pipeline, and one can run for minutes; a long run can delay a file that is waiting to be processed. A separate queue and worker for summaries is the next step if that is noticed.
 - If the model or the prompt changes, old summaries stay as they were until someone asks again; `prompt_version` says which they are.

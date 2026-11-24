@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, aliased
 from app.db.soft_delete import only_active
 from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion
+from app.modules.storage.repository import FileVersionRepository
 from app.modules.summaries.constants import SummaryStatus
 from app.modules.summaries.draft import SummaryDraft
 from app.modules.summaries.models import FileSummary
@@ -18,12 +19,8 @@ class SummaryRepository:
         self.session = session
 
     def latest_version_id(self, file_id: uuid.UUID) -> uuid.UUID | None:
-        return self.session.scalar(
-            select(FileVersion.id)
-            .where(FileVersion.file_id == file_id)
-            .order_by(FileVersion.version.desc())
-            .limit(1)
-        )
+        current = FileVersionRepository(self.session).get_current(file_id)
+        return current.id if current else None
 
     def get(self, version_id: uuid.UUID) -> FileSummary | None:
         return self.session.scalar(
@@ -87,7 +84,11 @@ class SummaryRepository:
     ) -> None:
         self.session.execute(
             update(FileSummary)
-            .where(FileSummary.file_version_id == version_id)
+            .where(
+                FileSummary.file_version_id == version_id,
+                # A late duplicate must not undo what another run already finished.
+                FileSummary.status == SummaryStatus.PENDING.value,
+            )
             .values(
                 status=SummaryStatus.READY.value,
                 summary=draft.summary,
@@ -104,7 +105,10 @@ class SummaryRepository:
     def fail(self, version_id: uuid.UUID, code: str) -> None:
         self.session.execute(
             update(FileSummary)
-            .where(FileSummary.file_version_id == version_id)
+            .where(
+                FileSummary.file_version_id == version_id,
+                FileSummary.status == SummaryStatus.PENDING.value,
+            )
             .values(status=SummaryStatus.FAILED.value, error_code=code)
         )
 

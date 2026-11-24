@@ -1,13 +1,15 @@
 import uuid
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app.ai.chat import ChatUnavailableError, PromptTooLargeError
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.errors import ConflictError, NotFoundError
 from app.modules.processing.models import DocumentChunk
 from app.modules.storage.models import File, FileVersion
@@ -595,3 +597,72 @@ class TestSalvage:
 
     def test_theFormatExampleIsInTheSystemPrompt_andThePromptVersionMovedOn(self) -> None:
         assert '"tags": ["lease", "office", "rent"]' in SYSTEM_PROMPT and PROMPT_VERSION == "2"
+
+
+class TestUnstorableText:
+    def test_aNulOrALoneSurrogateInTheReplyNeverReachesTheDatabase(self) -> None:
+        draft = parse_draft(
+            '{"summary": "a\\u0000b \\ud800 c\\u0007d", "tags": ["x\\u0000y", "ok"]}'
+        )
+        assert draft is not None
+        assert draft.summary == "ab cd" and draft.tags == ["xy", "ok"]
+        assert "\x00" not in draft.summary and not any("\x00" in tag for tag in draft.tags)
+
+    def test_aSalvagedSummaryIsCleanedToo(self) -> None:
+        draft = parse_draft('{"summary": "fine\\u0000 text", "tags": [broken')
+        assert draft is not None and draft.summary == "fine text"
+
+    def test_theCleanedSummaryCanBeSaved(
+        self, client, people, s3_client, session: Session, fake_chat: FakeChat
+    ) -> None:
+        _, version = _ready_file(client, people["owner"], s3_client, session)
+        service = _service(session)
+        service.request_if_missing(version)
+        fake_chat.reply = '{"summary": "bad\\u0000 text \\ud800", "category": "Report", "tags": []}'
+        service.generate(version, fake_chat)
+        assert _row(session, version).summary == "bad text"
+
+
+class TestLateDuplicates:
+    def test_aLateFailureDoesNotUndoAFinishedSummary(
+        self, client, people, s3_client, session: Session, fake_chat: FakeChat
+    ) -> None:
+        _, version = _ready_file(client, people["owner"], s3_client, session)
+        service = _service(session)
+        service.request_if_missing(version)
+        fake_chat.reply = GOOD
+        service.generate(version, fake_chat)
+        service.repo.fail(version, "bad_output")  # a second run that started earlier ends badly
+        session.commit()
+        row = _row(session, version)
+        assert (row.status, row.error_code, row.category) == ("ready", None, "Contract")
+
+    def test_aLateSuccessDoesNotRewriteAFailedOne(
+        self, client, people, s3_client, session: Session, fake_chat: FakeChat
+    ) -> None:
+        _, version = _ready_file(client, people["owner"], s3_client, session)
+        service = _service(session)
+        service.request_if_missing(version)
+        service.repo.fail(version, "no_text")
+        session.commit()
+        draft = parse_draft(GOOD)
+        assert draft is not None
+        service.repo.finish(
+            version, draft, partial=False, model="m", prompt_version="1", now=datetime.now(UTC)
+        )
+        session.commit()
+        assert _row(session, version).status == "failed"
+
+
+class TestTimeBudgetSetting:
+    def test_aBudgetWithNoMarginBelowTheTaskLimitIsRefusedAtStartup(self) -> None:
+        with pytest.raises(ValidationError):
+            Settings(  # type: ignore[call-arg]
+                summary_time_budget_seconds=290, celery_task_soft_time_limit_seconds=300
+            )
+
+    def test_theDefaultsFit(self) -> None:
+        assert (
+            get_settings().summary_time_budget_seconds
+            <= get_settings().celery_task_soft_time_limit_seconds - 60
+        )

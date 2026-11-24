@@ -12,6 +12,9 @@ MAX_TAG_CHARS = 30
 
 _FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
 _SPACES = re.compile(r"\s+")
+# Characters Postgres cannot store (NUL, lone surrogates) and control characters: a model can be
+# made to write them by the text it reads, and one in the reply would fail the whole save.
+_UNSTORABLE = re.compile("[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
 # A tag is a plain word or two: no markup, quotes or symbols from file text reach the stored data.
 _TAG = re.compile(r"[\w][\w .+'-]*")
 
@@ -25,7 +28,7 @@ class SummaryDraft:
 
 def shorten(text: str, limit: int) -> str:
     "At most `limit` characters, cut at a word and marked."
-    text = _SPACES.sub(" ", text).strip()
+    text = _SPACES.sub(" ", _UNSTORABLE.sub("", text)).strip()
     if len(text) <= limit:
         return text
     cut = text[: limit - 1]
@@ -52,7 +55,7 @@ def _tags(value: object) -> list[str]:
     for item in items:
         if not isinstance(item, str):
             continue
-        tag = _SPACES.sub(" ", item).strip().strip("#").casefold()
+        tag = _SPACES.sub(" ", _UNSTORABLE.sub("", item)).strip().strip("#").casefold()
         if tag and len(tag) <= MAX_TAG_CHARS and _TAG.fullmatch(tag) and tag not in tags:
             tags.append(tag)
     return tags[:MAX_TAGS]

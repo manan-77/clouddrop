@@ -203,6 +203,17 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _summary_fits_the_task_time_limit(self) -> Self:
+        # The time budget only stops starting new parts; one more call may still be running, so it
+        # needs a margin below the soft limit or a long document would be killed half way.
+        if self.summary_time_budget_seconds > self.celery_task_soft_time_limit_seconds - 60:
+            raise ValueError(
+                "SUMMARY_TIME_BUDGET_SECONDS must be at least 60 below "
+                "CELERY_TASK_SOFT_TIME_LIMIT_SECONDS"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _scanning_stays_on_outside_local(self) -> Self:
         if self.scanner_mode == "off" and not self.is_local:
             raise ValueError("SCANNER_MODE=off is only allowed in development and test")
