@@ -102,10 +102,12 @@ class Settings(BaseSettings):
     rate_limit_download_window_seconds: int = 3600
     rate_limit_search_per_user: int = 120
     rate_limit_search_window_seconds: int = 300
-    # Cosine similarity needed to count as a match. Measured with the real model on short
-    # documents: related questions scored 0.73 to 0.82, unrelated ones 0.44 to 0.51. Longer or
-    # messier real documents may score lower, so re-measure before raising it.
-    search_min_score: float = Field(default=0.6, ge=0, le=1)
+    # Cosine similarity needed to count as a match. Measured with the real model: on three short
+    # documents related questions scored 0.73 to 0.82 and unrelated ones 0.44 to 0.51; on a real
+    # 1.5 KB agreement (two chunks) related questions scored 0.60 to 0.73 and unrelated 0.37 to
+    # 0.44. 0.55 sits between the highest unrelated score (0.51) and the lowest related one (0.60);
+    # 0.6 dropped a real match. Re-measure on more documents before moving it.
+    search_min_score: float = Field(default=0.55, ge=0, le=1)
     # How many best chunks are considered per search; results are grouped by file and paged here.
     search_pool_size: int = Field(default=100, ge=1, le=500)
     search_snippet_chars: int = Field(default=300, ge=50, le=1000)

@@ -105,8 +105,12 @@ type Step =
       overflow-wrap: anywhere;
     }
     .meta {
+      margin-inline-start: var(--cd-space-2);
       color: var(--cd-text-muted);
       font-size: var(--cd-font-size-sm);
+    }
+    .title {
+      margin: var(--cd-space-5) 0 var(--cd-space-2);
     }
   `,
   template: `
@@ -167,7 +171,7 @@ type Step =
         }
       </section>
       @if (answer().citations.length > 0) {
-        <h2>Sources</h2>
+        <h2 class="title">Sources</h2>
         <ul class="sources" aria-label="Sources">
           @for (source of answer().citations; track source.chunk_id) {
             <li class="source">

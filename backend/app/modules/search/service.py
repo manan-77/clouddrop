@@ -13,6 +13,20 @@ from app.modules.search.schemas import SearchHit
 logger = logging.getLogger(__name__)
 
 
+def _snippet(text: str, limit: int) -> str:
+    """The start of a chunk as a readable line: not from the middle of a sentence, not cut inside a
+    word. Chunks are fixed-size windows, so they can begin after a sentence ended ("`. Prices are`")
+    and the limit can fall inside a word."""
+    text = text.lstrip(" \t\r\n.,;:)-")
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    space = cut.rfind(" ")
+    if space > limit // 2:
+        cut = cut[:space]
+    return cut.rstrip(" .,;:-") + "\u2026"
+
+
 class SearchService:
     def __init__(self, session: Session, settings: Settings) -> None:
         self.repo = SearchRepository(session)
@@ -64,6 +78,6 @@ class SearchService:
             file_name=match.file_name,
             chunk_id=match.chunk_id,
             page=match.page,
-            snippet=match.content[: self.settings.search_snippet_chars],
+            snippet=_snippet(match.content, self.settings.search_snippet_chars),
             score=round(match.score, 4),
         )
