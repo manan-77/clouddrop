@@ -29,6 +29,7 @@ from app.modules.processing.dispatcher import get_dispatcher
 from app.modules.processing.scanner import ScanResult
 from app.modules.storage.deps import get_storage
 from app.modules.storage.s3 import S3Storage
+from app.modules.summaries.dispatcher import get_summary_dispatcher
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
@@ -162,6 +163,21 @@ def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> FakeEmbedder:
     return embedder
 
 
+class FakeSummaryDispatcher:
+    "Records which versions would be sent to the worker for a summary."
+
+    def __init__(self) -> None:
+        self.calls: list[uuid.UUID] = []
+
+    def enqueue(self, file_version_id: uuid.UUID) -> None:
+        self.calls.append(file_version_id)
+
+
+@pytest.fixture
+def summary_dispatcher() -> FakeSummaryDispatcher:
+    return FakeSummaryDispatcher()
+
+
 class FakeChatStream:
     def __init__(self, pieces: list[str], error: Exception | None) -> None:
         self.usage = ChatUsage()
@@ -183,6 +199,10 @@ class FakeChat:
 
     def __init__(self) -> None:
         self.reply = "ok"
+        # Replies handed out one per call before `reply` is used (for a scripted conversation).
+        self.replies: list[str] = []
+        self.json_outputs: list[bool] = []
+        self.output_caps: list[int | None] = []
         self.error: Exception | None = None  # raised when the stream is opened
         self.error_while_streaming: Exception | None = None
         self.calls: list[list[ChatMessage]] = []
@@ -190,13 +210,21 @@ class FakeChat:
         # Runs when a stream is opened, so a test can look at the world at that moment.
         self.on_stream: Callable[[], None] | None = None
 
-    def stream(self, messages: Sequence[ChatMessage]) -> FakeChatStream:
+    def stream(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        json_output: bool = False,
+        max_output_tokens: int | None = None,
+    ) -> FakeChatStream:
         self.calls.append(list(messages))
+        self.json_outputs.append(json_output)
+        self.output_caps.append(max_output_tokens)
         if self.on_stream:
             self.on_stream()
         if self.error:
             raise self.error
-        words = self.reply.split(" ")
+        words = (self.replies.pop(0) if self.replies else self.reply).split(" ")
         pieces = [word if index == 0 else " " + word for index, word in enumerate(words)]
         stream = FakeChatStream(pieces, self.error_while_streaming)
         self.streams.append(stream)
@@ -243,7 +271,11 @@ def rate_limiter() -> FakeRateLimiter:
 
 @pytest.fixture
 def client(
-    session: Session, storage: S3Storage, dispatcher: FakeDispatcher, rate_limiter: FakeRateLimiter
+    session: Session,
+    storage: S3Storage,
+    dispatcher: FakeDispatcher,
+    rate_limiter: FakeRateLimiter,
+    summary_dispatcher: FakeSummaryDispatcher,
 ) -> Iterator[TestClient]:
     app = create_app()
 
@@ -258,6 +290,7 @@ def client(
     app.dependency_overrides[get_storage] = lambda: storage
     app.dependency_overrides[get_dispatcher] = lambda: dispatcher
     app.dependency_overrides[get_rate_limiter] = lambda: rate_limiter
+    app.dependency_overrides[get_summary_dispatcher] = lambda: summary_dispatcher
     with TestClient(app, headers={"X-Requested-With": "XMLHttpRequest"}) as test_client:
         yield test_client
 

@@ -342,8 +342,10 @@ class FileService:
         folder = self.folders.get_any(file.folder_id)
         return folder is not None and self.access.folder_role(user_id, folder) is not None
 
-    def get_file(self, user_id: uuid.UUID, file_id: uuid.UUID) -> File:
-        return self._file(user_id, file_id, Action.READ)
+    def get_file(
+        self, user_id: uuid.UUID, file_id: uuid.UUID, action: Action = Action.READ
+    ) -> File:
+        return self._file(user_id, file_id, action)
 
     def update_file(
         self,

@@ -43,6 +43,11 @@ def create_celery_app(settings: Settings | None = None) -> Celery:
                 # worker does not come back to a pile of identical sweeps.
                 "options": {"expires": settings.sweeper_interval_seconds},
             },
+            "sweep-summaries": {
+                "task": "summaries.sweep",
+                "schedule": settings.summary_sweep_interval_seconds,
+                "options": {"expires": settings.summary_sweep_interval_seconds},
+            },
             "purge-expired-data": {
                 "task": "storage.purge_expired",
                 "schedule": settings.purge_interval_seconds,

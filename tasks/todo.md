@@ -380,11 +380,13 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [ ] Prompt injection test set: documents containing instructions, attempts to reveal the system prompt, attempts to cite foreign chunks, attempts to read other users' files. Covered so far: a chunk that closes its own fence, gives orders and cites an invented label, other users' files never reach the prompt. Still to add: system-prompt extraction attempts and a real-model run of the hostile cases.
 - [ ] Tests with the fake gateway: citation filtering, no-context answer, budget exhausted, rate limit, stranger cannot read a conversation, cancellation.
 
-### 10.2 Branch: feat/summaries-categories (OK-NOW against fake)
-- [ ] Task generating a summary and a category with tags per file, stored with model and prompt version.
-- [ ] Regenerate only when content changes. Cap the input size and handle very long documents by staged summarising.
-- [ ] Endpoints to read them and to request a regeneration (rate-limited).
-- [ ] Tests: idempotency, regeneration trigger, long document path, failure leaves the file usable.
+### 10.2 Branch: feat/summaries-backend, then feat/summaries-screen (ADR 0019)
+- [x] Task generating a summary and a category with tags per file, stored with model and prompt version (backend PR). A file becomes ready without waiting for it.
+- [x] Regenerate only when content changes (one row per file version; reprocessing the same version does nothing). Input is capped and long documents are read in parts, with a time budget and a `partial` flag.
+- [x] Endpoints to read them (`GET`) and to request a regeneration (`POST`, rate-limited, write access).
+- [x] Tests: idempotency, regeneration trigger, long document path, failure leaves the file usable, access matrix, sweeper, the hook after a file is ready, output validation and salvage. Real run: three real files summarised in 31 seconds.
+- [ ] The summary and category panel on a file (frontend, next PR): a button on a file row, a dialog with the summary, category and tags, a Generate again button, and the pending state.
+- [ ] Not built: searching or filtering by category and tags, a category list that can be changed without a release, summaries of folders.
 
 ### 10.3 Branch: feat/compare-docs (OK-NOW against fake)
 - [ ] Endpoint that compares two documents the caller can access, with size caps and a structured result (similarities, differences) with citations.
