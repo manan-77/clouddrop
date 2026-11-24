@@ -31,9 +31,9 @@ const labels = (root: HTMLElement) =>
 
 describe('role-driven controls', () => {
   it.each([
-    ['owner', ['Download', 'Rename', 'Move', 'Share', 'Activity', 'Delete']],
-    ['editor', ['Download', 'Rename']],
-    ['viewer', ['Download']],
+    ['owner', ['Download', 'Summary', 'Rename', 'Move', 'Share', 'Activity', 'Delete']],
+    ['editor', ['Download', 'Summary', 'Rename']],
+    ['viewer', ['Download', 'Summary']],
   ] as const)('fileTable_%s_offersOnly_%j', (role, expected) => {
     const fixture = TestBed.createComponent(FileTableComponent);
     fixture.componentRef.setInput('files', [file(role)]);
@@ -61,6 +61,30 @@ describe('role-driven controls', () => {
       '[aria-label="Share a.pdf"]',
     ) as HTMLButtonElement;
     expect(share.disabled).toBe(true);
+  });
+
+  it('fileTable_aFileThatIsNotReadyHasNoSummaryToShow', () => {
+    const fixture = TestBed.createComponent(FileTableComponent);
+    fixture.componentRef.setInput('files', [file('viewer', 'processing')]);
+    fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector(
+      '[aria-label="Summary of a.pdf"]',
+    ) as HTMLButtonElement;
+    expect(summary.disabled).toBe(true);
+  });
+
+  it('fileTable_theSummaryButtonEmitsTheFile_forEveryRole', () => {
+    for (const role of ['owner', 'editor', 'viewer'] as const) {
+      const fixture = TestBed.createComponent(FileTableComponent);
+      fixture.componentRef.setInput('files', [file(role)]);
+      fixture.detectChanges();
+      const shown: FileRead[] = [];
+      fixture.componentInstance.summary.subscribe((f) => shown.push(f));
+      (
+        fixture.nativeElement.querySelector('[aria-label="Summary of a.pdf"]') as HTMLButtonElement
+      ).click();
+      expect(shown).toHaveLength(1);
+    }
   });
 
   it('fileTable_ownerButtonsEmitTheFile', () => {

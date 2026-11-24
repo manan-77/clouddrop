@@ -29,6 +29,7 @@ import { FolderTableComponent } from './folder-table.component';
 import { MoveDialogComponent } from './move-dialog.component';
 import { NameDialogComponent } from './name-dialog.component';
 import { SharingDialogsComponent } from './sharing-dialogs.component';
+import { SummaryDialogComponent } from './summary-dialog.component';
 import { UploadButtonComponent } from './upload-button.component';
 import { UploadPanelComponent } from './upload-panel.component';
 
@@ -47,6 +48,7 @@ import { UploadPanelComponent } from './upload-panel.component';
     NameDialogComponent,
     PagerComponent,
     SharingDialogsComponent,
+    SummaryDialogComponent,
     SkeletonComponent,
     UploadButtonComponent,
     UploadPanelComponent,

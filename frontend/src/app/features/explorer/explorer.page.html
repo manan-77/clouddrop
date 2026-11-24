@@ -96,6 +96,7 @@
               (remove)="show({ kind: 'delete-file', file: $event })"
               (share)="show({ kind: 'share-file', file: $event })"
               (activity)="show({ kind: 'activity-file', file: $event })"
+              (summary)="show({ kind: 'summary-file', file: $event })"
             />
             <cd-pager
               label="Files pagination"
@@ -147,6 +148,8 @@
     (edited)="dialogError.set(null)"
     (dismissed)="closeDialog()"
   />
+} @else if (open && open.kind === 'summary-file') {
+  <cd-summary-dialog [file]="open.file" (dismissed)="closeDialog()" />
 } @else if (open && open.kind === 'move-file') {
   <cd-move-dialog
     [file]="open.file"

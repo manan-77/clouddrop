@@ -90,6 +90,21 @@ export type AnswerEvent =
   | { type: 'done'; citations: Citation[]; cut_off: boolean }
   | { type: 'error'; code: string };
 
+/** What a model made of a file: a summary, a category and a few tags (docs/api.md, Summaries). */
+export interface FileSummary {
+  status: 'pending' | 'ready' | 'failed';
+  summary: string | null;
+  category: string | null;
+  tags: string[];
+  /** Only the start of a very long document was read. */
+  partial: boolean;
+  model: string | null;
+  prompt_version: string | null;
+  /** A short code such as `bad_output` when the status is failed. */
+  error_code: string | null;
+  generated_at: string | null;
+}
+
 export interface DownloadResponse {
   url: string;
   expires_in: number;

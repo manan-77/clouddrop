@@ -4,7 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { type FileRead, type FileStatus, type Page } from '@core/api/models';
 import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 import { ENVELOPE, provideAuthTesting } from '@core/auth/auth-testing';
-import { ExplorerStore, MAX_POLLS, POLL_DELAYS_MS } from './explorer.store';
+import { MAX_POLLS, POLL_DELAYS_MS } from '@core/api/polling';
+import { ExplorerStore } from './explorer.store';
 
 const STAMP = '2026-01-02T10:00:00Z';
 const FOLDERS = (r: { url: string }) => r.url === '/api/v1/folders';

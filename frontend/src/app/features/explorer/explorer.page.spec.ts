@@ -90,6 +90,28 @@ describe('ExplorerPage', () => {
     backend.match(() => true).forEach((r) => r.flush(page([])));
   });
 
+  it('summary_opensTheDialogForThatFile_andAsksForItsSummary', async () => {
+    const { root, backend, settle } = await setup();
+    loadRoot(backend, page([]), page([file('a', 'report.pdf')]));
+    await settle();
+    click(root, '[aria-label="Summary of report.pdf"]');
+    await settle();
+    expect(text(root, 'cd-summary-dialog')).toContain('Summary of report.pdf');
+    backend.expectOne('/api/v1/files/a/summary').flush({
+      status: 'ready',
+      summary: 'A short report.',
+      category: 'Report',
+      tags: ['report'],
+      partial: false,
+      model: 'm',
+      prompt_version: '2',
+      error_code: null,
+      generated_at: '2026-01-02T10:00:00Z',
+    });
+    await settle();
+    expect(text(root, 'cd-summary-dialog .text')).toBe('A short report.');
+  });
+
   it('load_root_requestsFirstPagesWithoutAParentAndRendersRows', async () => {
     const { root, backend, settle } = await setup();
     const requests = loadRoot(

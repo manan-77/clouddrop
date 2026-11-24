@@ -56,6 +56,16 @@ import { StatusBadgeComponent } from '@shared/ui/status-badge/status-badge.compo
                 >
                   Download
                 </button>
+                <button
+                  cd-button
+                  variant="secondary"
+                  type="button"
+                  [disabled]="file.status !== 'ready'"
+                  [attr.aria-label]="'Summary of ' + file.name"
+                  (click)="summary.emit(file)"
+                >
+                  Summary
+                </button>
                 @if (file.role | canWrite) {
                   <button
                     cd-button
@@ -123,4 +133,5 @@ export class FileTableComponent {
   readonly remove = output<FileRead>();
   readonly share = output<FileRead>();
   readonly activity = output<FileRead>();
+  readonly summary = output<FileRead>();
 }

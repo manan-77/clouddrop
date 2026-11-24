@@ -113,7 +113,8 @@ describe('ExplorerPage sharing controls', () => {
     const labels = [...root.querySelectorAll('tbody button')].map((b) =>
       b.getAttribute('aria-label'),
     );
-    expect(labels).toEqual(['Download a.pdf']);
+    // Reading is allowed, so the summary is too; nothing that changes or shares the file.
+    expect(labels).toEqual(['Download a.pdf', 'Summary of a.pdf']);
   });
 
   it('whileAFolderIsStillLoading_noWriteControlsAreOffered', async () => {

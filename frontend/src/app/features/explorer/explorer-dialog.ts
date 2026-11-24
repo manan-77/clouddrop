@@ -11,4 +11,5 @@ export type Dialog =
   | { kind: 'share-folder'; folder: FolderRead }
   | { kind: 'share-file'; file: FileRead }
   | { kind: 'activity-folder'; folder: FolderRead }
-  | { kind: 'activity-file'; file: FileRead };
+  | { kind: 'activity-file'; file: FileRead }
+  | { kind: 'summary-file'; file: FileRead };
