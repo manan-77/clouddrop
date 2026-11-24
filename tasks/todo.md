@@ -76,7 +76,9 @@ Still never exercised for real: S3 from a browser, ClamAV, a real browser sessio
 - [x] Snippets started mid-sentence and were cut mid-word: now trimmed to readable text (PR #45). Ask screen spacing fixed (PR #45).
 - [x] After an upload the list kept saying "Uploaded" until a manual reload: the list now refreshes quietly while a file is still being processed, with growing pauses, a cap of about ten minutes, no loading screen and no error for a failed refresh (this branch).
 - [ ] Still open from the run: chunks are fixed-size windows, so they start mid-sentence and mix topics (the best chunk for "when do I pay the bill" was the second one). Paragraph and sentence-aware chunking would sharpen search and answers; it needs re-embedding of existing files. Not built.
-- [ ] Not tested for real: a PDF or Word file, several users sharing, ClamAV scanning, the multipart upload of a large file, keyboard-only walk through every screen, a screen reader.
+- [x] Real PDFs (two files, two pages each): both reached Ready; search returned the right file on the right page ("handbook.pdf, Page 2"), and an answer cited "handbook.pdf [s1], page 1". The status refresh was watched in the browser: with the worker paused the row stayed "Uploaded", and when the worker resumed it changed to "Ready" by itself with no page reload.
+- [x] Real scores across three documents (txt and two PDFs): best match of a related question 0.62 to 0.90, best match of an unrelated question 0.43 to 0.50, so 0.55 separates them. A weak second-place file can still appear above the cutoff (0.59 for "can I work from home" on the expenses PDF); a cutoff relative to the best match would hide it. Not built.
+- [ ] Not tested for real: a Word or Excel file, several users sharing, ClamAV scanning, the multipart upload of a large file, a keyboard-only walk through every screen, a screen reader.
 - [ ] A status change (for example to Ready) is not announced to screen readers by the refresh.
 
 ### 2.2 Direction (in order)
