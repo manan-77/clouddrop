@@ -80,8 +80,11 @@ class Settings(BaseSettings):
     chat_max_attempts: int = Field(default=3, ge=1, le=5)
     chat_retry_backoff_seconds: float = Field(default=0.5, ge=0)
     chat_max_connections: int = Field(default=10, ge=1)
-    chunk_size_chars: int = 1000
-    chunk_overlap_chars: int = 150
+    # Measured with the real embedding model (docs/adr/0018): about 400 characters keeps a section
+    # in one chunk and ranks the right chunk first more often than 1000; the overlap is whole
+    # sentences up to this many characters.
+    chunk_size_chars: int = 400
+    chunk_overlap_chars: int = 80
     sweeper_stuck_after_seconds: int = 600
     sweeper_batch_size: int = 100
     rate_limit_login_per_ip: int = 20

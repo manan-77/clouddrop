@@ -16,9 +16,10 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session, aliased
 
 from app.db.soft_delete import only_active
-from app.modules.processing.constants import JobStatus
+from app.modules.processing.constants import JobStage, JobStatus
 from app.modules.processing.extraction.chunking import Chunk
 from app.modules.processing.models import ChunkEmbedding, DocumentChunk, ProcessingJob
+from app.modules.storage.constants import FileStatus
 from app.modules.storage.models import File, FileVersion
 
 
@@ -156,4 +157,40 @@ class PipelineRepository:
                 {"chunk_id": chunk_id, "model": model, "dim": len(vector), "embedding": vector}
                 for chunk_id, vector in vectors
             ],
+        )
+
+    def ready_version_ids(self, after: uuid.UUID | None, limit: int) -> list[uuid.UUID]:
+        """The newest version of each ready, undeleted file, in id order, `limit` at a time."""
+        newer = aliased(FileVersion)  # an alias, or the subquery correlates away its own table
+        newest = select(func.max(newer.version)).where(newer.file_id == File.id).scalar_subquery()
+        query = (
+            select(FileVersion.id)
+            .join(File, File.id == FileVersion.file_id)
+            .where(only_active(File), File.status == FileStatus.READY.value)
+            .where(FileVersion.version == newest)
+            .order_by(FileVersion.id)
+            .limit(limit)
+        )
+        if after is not None:
+            query = query.where(FileVersion.id > after)
+        return list(self.session.scalars(query))
+
+    def reset_text_stages(self, version_id: uuid.UUID) -> None:
+        """Forget that this version was chunked and embedded, and make its file runnable again.
+
+        The earlier stages (verify, scan, detect type) keep their result: the object is the same.
+        """
+        self.session.execute(
+            delete(ProcessingJob).where(
+                ProcessingJob.file_version_id == version_id,
+                ProcessingJob.stage.in_([JobStage.EXTRACT.value, JobStage.EMBED.value]),
+            )
+        )
+        self.session.execute(
+            update(File)
+            .where(
+                File.id
+                == select(FileVersion.file_id).where(FileVersion.id == version_id).scalar_subquery()
+            )
+            .values(status=FileStatus.PROCESSING.value)
         )
