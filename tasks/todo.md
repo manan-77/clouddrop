@@ -66,16 +66,18 @@ Still never exercised for real: S3 from a browser, ClamAV, a real browser sessio
 - Decision: review process is local diff first, further PR rounds only while the last found a blocker or major; minors go to this file.
 - Environment: AWS values are in the local `.env` (bucket in ap-southeast-2). S3 CORS and lifecycle rules were applied 2026-11-22 at the owner's request; verify with a real browser upload. ClamAV is installed but not configured, so `SCANNER_MODE=off` locally. Azure APIM keys are still empty and no longer block anything.
 
-### 2.3 Real run (the current step, 2026-11-24)
-Goal: see the whole chain work once with real services, then fix what it shows.
-- [ ] Start the API, the worker and the frontend (Postgres and Redis are already running; ClamAV is off locally).
-- [ ] Upload a document to the real S3 bucket from the browser (also proves the bucket CORS rule).
-- [ ] Watch it go through the real pipeline to Ready (real embedding model).
-- [ ] Search for it by meaning in the browser.
-- [ ] Ask a question about it in the browser (real Ollama), see the streamed answer and its sources.
-- [ ] Record the real similarity scores on a real document and tune `SEARCH_MIN_SCORE` if needed.
-- [ ] Check light and dark themes and the keyboard flow on the search and ask screens.
-- [ ] Fix whatever the run shows; list anything left here.
+### 2.3 Real run (2026-11-24, real S3, worker, embedding model, Ollama and browser)
+- [x] Started the API, worker, beat and the frontend (Postgres and Redis already running; ClamAV off locally).
+- [x] Uploaded a document to the real S3 bucket from the browser (proves the bucket CORS rule).
+- [x] Went through the real pipeline to Ready (all five stages; 2 chunks; 2 real 384-dimension vectors). **This found a bug:** the worker crashed with `NoReferencedTableError` because it never imported the `Workspace` model. Fixed with one model registry (`app/db/models.py`) and a test that starts the worker alone (PR #43).
+- [x] Searched for it by meaning in the browser: found, one request per typing pause, words not in the URL. Dark and light themes checked; focus ring visible.
+- [x] Asked a question in the browser (real Ollama): a correct, complete, streamed answer with its source. The console shows only the expected 401 from the first sign-in check.
+- [x] Real similarity scores recorded: related 0.60 to 0.73, unrelated 0.37 to 0.44 on a real document (earlier short documents: unrelated up to 0.51). Default moved from 0.6 to 0.55 (0.6 dropped a real match) (PR #45).
+- [x] Snippets started mid-sentence and were cut mid-word: now trimmed to readable text (PR #45). Ask screen spacing fixed (PR #45).
+- [x] After an upload the list kept saying "Uploaded" until a manual reload: the list now refreshes quietly while a file is still being processed, with growing pauses, a cap of about ten minutes, no loading screen and no error for a failed refresh (this branch).
+- [ ] Still open from the run: chunks are fixed-size windows, so they start mid-sentence and mix topics (the best chunk for "when do I pay the bill" was the second one). Paragraph and sentence-aware chunking would sharpen search and answers; it needs re-embedding of existing files. Not built.
+- [ ] Not tested for real: a PDF or Word file, several users sharing, ClamAV scanning, the multipart upload of a large file, keyboard-only walk through every screen, a screen reader.
+- [ ] A status change (for example to Ready) is not announced to screen readers by the refresh.
 
 ### 2.2 Direction (in order)
 1. Semantic search backend (9.4): embed the query, permission filter in the same SQL query, cosine order, threshold, pagination, rate-limit hook, over-fetch for the approximate index.
