@@ -19,6 +19,7 @@ import { FoldersApi } from '@core/api/folders-api.service';
 import { type FileRead, type FileStatus, type FolderRead, type Page } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
+import { pollDelayMs } from '@core/api/polling';
 
 export interface ExplorerView {
   status: 'loading' | 'ready' | 'error';
@@ -52,10 +53,6 @@ const IN_PROGRESS: ReadonlySet<FileStatus> = new Set([
   'scanning',
   'processing',
 ]);
-/** Waits before each refresh: quick at first, then longer, so a long job costs few requests. */
-export const POLL_DELAYS_MS: readonly number[] = [2000, 3000, 5000, 8000, 10000];
-/** About ten minutes of refreshing; after that a stuck file waits for the next real reload. */
-export const MAX_POLLS = 60;
 
 const lastPage = (page: Page<unknown>): number =>
   Math.max(1, Math.ceil(page.total / page.page_size));
@@ -151,10 +148,8 @@ export class ExplorerStore {
   private nextPoll(view: ExplorerView): Observable<unknown> {
     const changing =
       view.status === 'ready' && !!view.files?.items.some((file) => IN_PROGRESS.has(file.status));
-    if (!changing || this.polls >= MAX_POLLS) {
-      return EMPTY;
-    }
-    return timer(POLL_DELAYS_MS[Math.min(this.polls, POLL_DELAYS_MS.length - 1)]);
+    const delay = pollDelayMs(this.polls);
+    return changing && delay !== null ? timer(delay) : EMPTY;
   }
 
   private refreshQuietly(): void {

@@ -385,7 +385,8 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - [x] Regenerate only when content changes (one row per file version; reprocessing the same version does nothing). Input is capped and long documents are read in parts, with a time budget and a `partial` flag.
 - [x] Endpoints to read them (`GET`) and to request a regeneration (`POST`, rate-limited, write access).
 - [x] Tests: idempotency, regeneration trigger, long document path, failure leaves the file usable, access matrix, sweeper, the hook after a file is ready, output validation and salvage. Real run: three real files summarised in 31 seconds.
-- [ ] The summary and category panel on a file (frontend, next PR): a button on a file row, a dialog with the summary, category and tags, a Generate again button, and the pending state.
+- [x] The summary and category panel on a file (frontend, feat/summaries-screen): a Summary button on each file row, a dialog with the summary, category chip and tags, Write again / Write summary for people who can write, and the pending state that refreshes by itself. Checked in the real browser (real summary; Write again went pending, kept the old text, and showed the new summary 27 s later).
+- [ ] Seen in the real browser, not fixed: the 4B model writes longer summaries than the two to four sentences asked for (it stays inside the 1200 character cap), and the file row's seven buttons wrap onto two lines at a 1200 px wide window.
 - [ ] Not built: searching or filtering by category and tags, a category list that can be changed without a release, summaries of folders.
 
 ### 10.3 Branch: feat/compare-docs (OK-NOW against fake)
