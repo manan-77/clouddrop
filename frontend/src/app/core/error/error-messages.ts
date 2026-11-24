@@ -35,6 +35,8 @@ export const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   storage_not_configured: 'File storage is not set up yet.',
   storage_unavailable: 'File storage is temporarily unavailable. Please try again.',
   db_unavailable: 'The service is temporarily unavailable. Please try again.',
+  chat_unavailable: 'The assistant is unavailable right now. Please try again in a moment.',
+  question_too_long: 'That question is too long to answer. Please ask a shorter one.',
   search_unavailable: 'Search is unavailable right now. Please try again in a moment.',
   service_unavailable: 'The service is temporarily unavailable. Please try again.',
   internal_error: 'Something went wrong on our side. Please try again.',

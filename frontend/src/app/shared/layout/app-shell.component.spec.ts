@@ -48,6 +48,7 @@ describe('AppShellComponent', () => {
     expect([...root.querySelectorAll('nav a')].map((a) => a.textContent?.trim())).toEqual([
       'Files',
       'Search',
+      'Ask',
       'Shared with me',
     ]);
 

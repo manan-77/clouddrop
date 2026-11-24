@@ -11,6 +11,14 @@ const envelope = (code: string, details: { field: string; message: string }[] = 
 describe('ErrorResolver', () => {
   const resolver = () => TestBed.inject(ErrorResolver);
 
+  it('describe_aKnownCode_givesItsMessage_andAnythingElseTheGenericOne', () => {
+    expect(resolver().describe('chat_unavailable')).toContain('The assistant is unavailable');
+    expect(resolver().describe('brand_new_code')).toBe(GENERIC_MESSAGE);
+    // Own properties only: a code that names something on every object must not match.
+    expect(resolver().describe('constructor')).toBe(GENERIC_MESSAGE);
+    expect(resolver().describe('__proto__')).toBe(GENERIC_MESSAGE);
+  });
+
   it('resolve_knownCode_returnsMappedMessageAndRequestId', () => {
     const result = resolver().resolve(
       new HttpErrorResponse({ status: 409, error: envelope('folder_name_taken') }),
