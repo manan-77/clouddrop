@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths: ["frontend/**", ".github/workflows/frontend.yml"]
   push:
-    branches: [develop, main]
+    branches: [main]
     paths: ["frontend/**", ".github/workflows/frontend.yml"]
 
 permissions:

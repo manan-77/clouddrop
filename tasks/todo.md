@@ -20,12 +20,12 @@ It contains tasks only. No code lives here.
 1. Sync develop. Create a branch named feat/..., fix/..., docs/..., chore/... or refactor/... from develop.
 2. Add or update the tasks for this branch in this file BEFORE writing code.
 3. Build in small Conventional Commits. No Claude trailer. Commit identity is manan-77 (repo-local config).
-4. Run every gate for the tier(s) touched and keep the real output:
-   - Backend: ruff check, ruff format check, mypy strict, pytest.
+4. **No tests, lint, format or build gates for work going into develop** (owner decision 2026-11-24, for speed). While writing code, run only the test file being changed. State plainly in the PR that the gates were not run. Every gate (CI and `scripts/verify.sh`) runs when develop is merged into main, and a real-browser pass belongs to that release too:
+   - Backend: ruff check, ruff format check, mypy strict, pytest, and the runtime-only import check.
    - Frontend: build, test, lint, format.
 5. Push and open a PR into develop as the manan-77 account. Confirm the active GitHub account first, every time.
 6. Review the local diff before opening the PR, then the PR review against our CLAUDE.md files (see 1.3 and the pre-PR checklist in tasks/lessons.md).
-7. Fix every blocker and major finding, re-run the gates, push.
+7. Fix every blocker and major finding, push.
 8. Squash merge, delete the remote branch and the local branch, switch to develop and pull.
 9. Tick the boxes in this file as part of the same PR, not after the merge.
 
@@ -65,6 +65,17 @@ Still never exercised for real: S3 from a browser, ClamAV, a real browser sessio
 - Decision: AI runs locally for now. Embeddings through fastembed; chat through Ollama with `qwen3:4b-instruct`, `num_ctx` 8192 and a prompt-size check (`think: false` did not work on plain `qwen3:4b`; the instruct variant answers fast and cites). The provider stays behind one interface so Azure APIM can replace it by settings later. The chat decision needs its own ADR with the chat PR (not written yet).
 - Decision: review process is local diff first, further PR rounds only while the last found a blocker or major; minors go to this file.
 - Environment: AWS values are in the local `.env` (bucket in ap-southeast-2). S3 CORS and lifecycle rules were applied 2026-11-22 at the owner's request; verify with a real browser upload. ClamAV is installed but not configured, so `SCANNER_MODE=off` locally. Azure APIM keys are still empty and no longer block anything.
+
+### 2.3 Real run (the current step, 2026-11-24)
+Goal: see the whole chain work once with real services, then fix what it shows.
+- [ ] Start the API, the worker and the frontend (Postgres and Redis are already running; ClamAV is off locally).
+- [ ] Upload a document to the real S3 bucket from the browser (also proves the bucket CORS rule).
+- [ ] Watch it go through the real pipeline to Ready (real embedding model).
+- [ ] Search for it by meaning in the browser.
+- [ ] Ask a question about it in the browser (real Ollama), see the streamed answer and its sources.
+- [ ] Record the real similarity scores on a real document and tune `SEARCH_MIN_SCORE` if needed.
+- [ ] Check light and dark themes and the keyboard flow on the search and ask screens.
+- [ ] Fix whatever the run shows; list anything left here.
 
 ### 2.2 Direction (in order)
 1. Semantic search backend (9.4): embed the query, permission filter in the same SQL query, cosine order, threshold, pagination, rate-limit hook, over-fetch for the approximate index.
@@ -497,6 +508,7 @@ Goal: ask questions about files, get cited answers, summaries, categories and co
 - Commands that need approval stall unattended runs. Consider an allowlist of safe commands in settings.
 
 ## OWNER-DECISION log (wording conflicts to confirm; the standards files were not edited)
+- (2026-11-24) Root CLAUDE.md says to run the gates before calling work done and to review against the PR gate. The owner decided that tests, lint, format and build run only for the release (develop into main), not for feature work going into develop. The standards file was not edited; the working agreement (1.1) and the lessons say what is done instead. Risk accepted by the owner: a break (for example a missing runtime dependency, which already happened once with httpx2) is found at the release.
 - frontend/CLAUDE.md "Uploads" says multipart needs the part ETag and S3 CORS `ExposeHeaders: ETag`; the implementation has the server list the parts itself, so no ETag is read in the browser (CORS must still allow PUT).
 - backend/CLAUDE.md names `httpx` as the shared AI client; the backend dev group now uses `httpx2` (what Starlette's test client requires). Use `httpx2` for the AI client too so there is one HTTP library, or confirm otherwise.
 - frontend/CLAUDE.md "never auto-retry a write" versus part retry (allowed by its own Uploads section): parts are retried because a part PUT is idempotent.
