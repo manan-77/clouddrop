@@ -303,3 +303,110 @@ describe('SummaryDialogComponent', () => {
     backend.expectNone(URL);
   });
 });
+
+describe('SummaryDialogComponent (focus, giving up and odd refreshes)', () => {
+  let fixture: ComponentFixture<SummaryDialogComponent>;
+  let backend: HttpTestingController;
+  const root = () => fixture.nativeElement as HTMLElement;
+  const text = (selector: string) => root().querySelector(selector)?.textContent?.trim() ?? '';
+  const button = (label: string) =>
+    [...root().querySelectorAll('button')].find((b) => b.textContent?.trim() === label) as
+      HTMLButtonElement | undefined;
+  const settle = async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  };
+  const wait = async (ms: number) => {
+    await vi.advanceTimersByTimeAsync(ms);
+    await settle();
+  };
+  const open = async () => {
+    TestBed.configureTestingModule({ providers: provideAuthTesting() });
+    backend = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(SummaryDialogComponent);
+    fixture.componentRef.setInput('file', FILE('owner'));
+    // Focus only exists for elements that are in the document.
+    document.body.appendChild(root());
+    await settle();
+  };
+  const answer = async (body: FileSummary) => {
+    backend.expectOne(URL).flush(body);
+    await settle();
+  };
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    root().remove();
+    backend.verify();
+  });
+
+  it('afterTryAgain_focusIsOnClose_notLostWithTheButtonThatWentAway', async () => {
+    await open();
+    backend.expectOne(URL).flush(ENVELOPE('internal_error'), { status: 500, statusText: 'x' });
+    await settle();
+    button('Try again')!.focus();
+    button('Try again')!.click();
+    await settle();
+    expect(document.activeElement).toBe(button('Close'));
+    await answer(summary());
+  });
+
+  it('afterWriteAgain_focusIsOnClose_whileTheButtonIsOff', async () => {
+    await open();
+    await answer(summary());
+    button('Write again')!.focus();
+    button('Write again')!.click();
+    await settle();
+    expect(document.activeElement).toBe(button('Close'));
+    backend.expectOne(URL).flush(summary({ status: 'pending' }), { status: 202, statusText: 'x' });
+    await settle();
+  });
+
+  it('whenRefreshingGivesUp_itSaysSo_insteadOfWaitingForEver', async () => {
+    await open();
+    await answer(summary({ status: 'pending' }));
+    for (let polls = 0; polls < MAX_POLLS; polls += 1) {
+      await wait(POLL_DELAYS_MS.at(-1)!);
+      await answer(summary({ status: 'pending' }));
+    }
+    await wait(1);
+    expect(text('cd-dialog')).toContain('taking longer than usual');
+    expect(root().querySelector('cd-skeleton')).toBeNull();
+  });
+
+  it('itDoesNotSayThatWhileItIsStillRefreshing', async () => {
+    await open();
+    await answer(summary({ status: 'pending' }));
+    expect(text('cd-dialog')).not.toContain('taking longer than usual');
+  });
+
+  it('aRefreshThatFindsItFailed_showsWhyAndStopsRefreshing', async () => {
+    await open();
+    await answer(summary({ status: 'pending' }));
+    await wait(POLL_DELAYS_MS[0]);
+    await answer(
+      summary({
+        status: 'failed',
+        summary: null,
+        category: null,
+        tags: [],
+        error_code: 'bad_output',
+      }),
+    );
+    expect(text('[role="alert"]')).toContain('could not be written this time');
+    await wait(120_000);
+    backend.expectNone(URL);
+  });
+
+  it('aRefreshThatFindsTheFileGone_keepsWhatIsShown', async () => {
+    await open();
+    await answer(summary({ status: 'pending' }));
+    await wait(POLL_DELAYS_MS[0]);
+    backend.expectOne(URL).flush(ENVELOPE('file_not_found'), { status: 404, statusText: 'x' });
+    await settle();
+    expect(text('.text')).toContain('supply agreement');
+    expect(root().querySelector('[role="alert"]')).toBeNull();
+  });
+});

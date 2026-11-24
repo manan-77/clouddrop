@@ -3,10 +3,12 @@ import {
   Component,
   computed,
   DestroyRef,
+  ElementRef,
   inject,
   input,
   output,
   signal,
+  viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -51,6 +53,7 @@ type View =
   | { readonly status: 'loaded'; readonly summary: FileSummary };
 
 const LOADING: View = { status: 'loading' };
+const STALLED = 'stalled';
 
 /** What a model made of one file: a summary, a category and tags. It is written in the background,
  * so this refreshes quietly while it is still being written. Everything is shown as text. */
@@ -114,7 +117,13 @@ const LOADING: View = { status: 'loading' };
               current.summary ? 'A new summary is being written.' : 'The summary is being written.'
             }}
           </p>
-          <cd-skeleton [lines]="2" />
+          @if (stalled()) {
+            <p class="cd-hint">
+              This is taking longer than usual. Close this and look again later.
+            </p>
+          } @else {
+            <cd-skeleton [lines]="2" />
+          }
         } @else if (current.status === 'failed') {
           <p class="cd-form-error" role="alert">{{ failure() }}</p>
         }
@@ -134,7 +143,7 @@ const LOADING: View = { status: 'loading' };
             {{ hasSummary() ? 'Write again' : 'Write summary' }}
           </button>
         }
-        <button cd-button variant="secondary" type="button" (click)="dismissed.emit()">
+        <button #closeButton cd-button variant="secondary" type="button" (click)="dismissed.emit()">
           Close
         </button>
       </div>
@@ -149,6 +158,8 @@ export class SummaryDialogComponent {
   readonly dismissed = output<void>();
 
   protected readonly asking = signal(false);
+  /** It was still not there when the refreshing gave up: say so instead of waiting for ever. */
+  protected readonly stalled = signal(false);
   protected readonly askError = signal<string | null>(null);
 
   private readonly api = inject(SummaryApi);
@@ -161,6 +172,10 @@ export class SummaryDialogComponent {
   });
   private polls = 0;
   private latest: View = LOADING;
+  // Read with `viewChild` on the plain element, so it is the button and not a component.
+  private readonly closeButton = viewChild.required('closeButton', {
+    read: ElementRef<HTMLButtonElement>,
+  });
 
   protected readonly view = toSignal(
     toObservable(this.trigger).pipe(
@@ -202,11 +217,13 @@ export class SummaryDialogComponent {
         switchMap((view) => this.nextPoll(view)),
         takeUntilDestroyed(),
       )
-      .subscribe(() => this.refresh());
+      .subscribe((next) => (next === STALLED ? this.stalled.set(true) : this.refresh()));
   }
 
   protected reload(): void {
+    this.stalled.set(false);
     this.trigger.set({ quiet: false });
+    this.keepFocus();
   }
 
   protected ask(): void {
@@ -215,6 +232,7 @@ export class SummaryDialogComponent {
     }
     this.asking.set(true);
     this.askError.set(null);
+    this.keepFocus(); // this button turns off while it is working
     this.api
       .request(this.file().id)
       .pipe(
@@ -226,10 +244,16 @@ export class SummaryDialogComponent {
         // the refresh takes over from there.
         next: (pending) => {
           this.polls = 0;
+          this.stalled.set(false);
           this.trigger.set({ quiet: true, seed: pending });
         },
         error: (error: unknown) => this.askError.set(this.resolver.resolve(error).message),
       });
+  }
+
+  /** The button that was pressed disappears or turns off: focus must not fall out of the dialog. */
+  private keepFocus(): void {
+    this.closeButton().nativeElement.focus();
   }
 
   private refresh(): void {
@@ -240,8 +264,12 @@ export class SummaryDialogComponent {
   private nextPoll(view: View): Observable<unknown> {
     const waiting =
       view.status === 'none' || (view.status === 'loaded' && view.summary.status === 'pending');
+    if (!waiting) {
+      return EMPTY;
+    }
     const delay = pollDelayMs(this.polls);
-    return waiting && delay !== null ? timer(delay) : EMPTY;
+    // Asynchronous even when giving up: a signal must not be written while the view is changing.
+    return delay === null ? timer(0).pipe(map(() => STALLED)) : timer(delay);
   }
 
   private fetch(quiet: boolean, seed?: FileSummary): Observable<View> {
