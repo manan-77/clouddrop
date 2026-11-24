@@ -7,6 +7,7 @@ from celery import Task
 from sqlalchemy.orm import Session
 
 from app.core.config import CELERY_RETRY_BACKOFF_MAX_SECONDS, get_settings
+from app.db import models as all_models  # noqa: F401  (a worker must know every table)
 from app.db.session import get_sessionmaker
 from app.modules.processing.dispatcher import ProcessingDispatcher
 from app.modules.processing.pipeline import run_pipeline

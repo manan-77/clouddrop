@@ -11,6 +11,11 @@ if [[ "$what" == all || "$what" == backend ]]; then
   (cd backend && DATABASE_URL=postgresql+psycopg://u:p@localhost/db \
     JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-secret \
     uv run --isolated --no-dev python -c "import app.main, app.worker.celery_app")
+  # The worker is its own process: it must find every table by itself (a foreign key to a table that
+  # was never imported fails only when the first task touches it).
+  (cd backend && DATABASE_URL=postgresql+psycopg://u:p@localhost/db \
+    JWT_SECRET=ci-only-secret-ci-only-secret-ci-only-secret \
+    uv run --isolated --no-dev python -c "import app.worker.tasks; from sqlalchemy.orm import configure_mappers; configure_mappers()")
 fi
 if [[ "$what" == all || "$what" == frontend ]]; then
   (cd frontend && npm run format:check && npm run lint && npm test && npm run build)
