@@ -21,3 +21,4 @@ One file per decision: context, decision, consequences. Add a new file for every
 | [0015](0015-local-chat-through-ollama.md) | Chat answers come from a local Ollama model behind one interface | Accepted |
 | [0016](0016-answers-are-grounded-streamed-and-verified.md) | Answers are grounded, streamed and verified | Accepted |
 | [0017](0017-read-the-answer-stream-with-the-http-client.md) | The answer stream is read through the HTTP client, not fetch | Accepted |
+| [0018](0018-chunks-follow-paragraphs-and-sentences.md) | Chunks follow paragraphs and sentences | Accepted |

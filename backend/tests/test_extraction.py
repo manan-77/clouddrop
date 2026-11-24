@@ -310,3 +310,95 @@ def test_engine_hidesBoundParametersFromErrors() -> None:
     from app.db.session import get_engine
 
     assert get_engine().hide_parameters is True
+
+
+AGREEMENT = (
+    "SUPPLY AGREEMENT between Northwind Traders Ltd and Brightside Cafe\n\n"
+    "1. Term. This agreement starts on 1 March 2026 and runs for twelve months. It renews "
+    "automatically for a further twelve months unless either party gives written notice at least "
+    "sixty days before the end of the term.\n\n"
+    "2. Payment. The supplier will send an invoice on the first working day of each month. Each "
+    "invoice is due within thirty days of the invoice date and must be paid by bank transfer. Late "
+    "payments carry a fee of 2 percent of the amount overdue for each full month of delay.\n\n"
+    "3. Delivery. Orders placed before 14:00 are delivered the next working day between 07:00 and "
+    "11:00. The customer must report damaged items within 24 hours.\n\n"
+    "4. Contact. Questions about invoices go to accounts@northwind.example."
+)
+
+
+def _contents(text: str, size: int, overlap: int) -> list[str]:
+    return [c.content for c in chunk_sections([Section(None, text)], size, overlap)]
+
+
+class TestStructureAwareChunking:
+    def test_aParagraphThatFitsIsNeverCut_andChunksStartAndEndCleanly(self) -> None:
+        chunks = _contents(AGREEMENT, 400, 80)
+        assert len(chunks) > 1
+        for content in chunks:
+            assert content[0].isupper() or content[0].isdigit(), content[:30]
+            assert content.rstrip()[-1] in ".?!", content[-30:]
+        for paragraph in AGREEMENT.split("\n\n"):
+            assert any(paragraph in content for content in chunks), paragraph[:40]
+
+    def test_paragraphsArePackedTogetherWhileTheyFit(self) -> None:
+        paragraphs = ["First paragraph here.", "Second paragraph here.", "Third paragraph here."]
+        assert _contents("\n\n".join(paragraphs), 400, 0) == ["\n\n".join(paragraphs)]
+
+    def test_everyChunkIsAtMostTheSize(self) -> None:
+        for size in (60, 120, 400):
+            assert all(len(c) <= size for c in _contents(AGREEMENT, size, size // 5))
+
+    def test_aLongParagraphIsCutBetweenSentences(self) -> None:
+        text = " ".join(f"This is sentence number {i} of a long paragraph." for i in range(30))
+        chunks = _contents(text, 200, 0)
+        assert len(chunks) > 1
+        assert all(
+            c.startswith("This is sentence number") and c.endswith("paragraph.") for c in chunks
+        )
+
+    def test_theNextChunkStartsWithWholeSentencesFromTheEndOfThePreviousOne(self) -> None:
+        text = " ".join(f"Sentence {i} says something short." for i in range(20))
+        chunks = _contents(text, 150, 80)
+        assert len(chunks) > 2
+        for left, right in zip(chunks, chunks[1:], strict=False):
+            assert right.startswith("Sentence")
+            carried = right.split(" Sentence ")[0]
+            assert carried in left and len(carried) <= 80 + len("Sentence ")
+
+    def test_aSentenceLongerThanTheSizeFallsBackToWordCuts(self) -> None:
+        text = "start " + " ".join(f"word{i}" for i in range(200)) + " end."
+        chunks = _contents(text, 100, 20)
+        assert len(chunks) > 5 and all(len(c) <= 100 for c in chunks)
+        assert "end." in chunks[-1]
+
+    def test_decimalsAndAbbreviationsAreNotSentenceEnds(self) -> None:
+        text = "The fee is 3.5 percent, e.g. a bank charge. " * 20
+        chunks = _contents(text, 120, 0)
+        assert all(not c.startswith(("5 ", "g.")) for c in chunks)
+
+    def test_noWordOfTheInputIsEverLost(self) -> None:
+        for size, overlap in ((60, 12), (150, 30), (400, 80)):
+            words = set(AGREEMENT.split())
+            kept = {w for c in _contents(AGREEMENT, size, overlap) for w in c.split()}
+            assert words <= kept, words - kept
+
+    def test_isDeterministic_andIndexesAreConsecutive(self) -> None:
+        first = chunk_sections([Section(1, AGREEMENT)], 200, 40)
+        assert first == chunk_sections([Section(1, AGREEMENT)], 200, 40)
+        assert [c.index for c in first] == list(range(len(first)))
+
+    def test_windowsAreStillUsedForTextWithNoStructureAtAll(self) -> None:
+        chunks = _contents("x" * 1000, 300, 50)
+        assert len(chunks) >= 4 and all(len(c) <= 300 for c in chunks)
+
+    def test_windowsOfAnUnstructuredRunShareTheirOverlap(self) -> None:
+        text = " ".join(f"w{i}" for i in range(300))
+        chunks = _contents(text, 100, 30)
+        assert any(
+            right.startswith(left.split(" ")[-1]) or left.split(" ")[-1] in right.split(" ")[:8]
+            for left, right in zip(chunks, chunks[1:], strict=False)
+        )
+
+    def test_blankLinesBetweenParagraphsOfAnyKindSeparateThem(self) -> None:
+        text = "One.\n \n\nTwo.\n\n\n\nThree."
+        assert _contents(text, 8, 0) == ["One.", "Two.", "Three."]
