@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.modules.processing.models import ChunkEmbedding, DocumentChunk
 from app.modules.search import repository
+from app.modules.search.service import _snippet
 from app.modules.storage.models import File, FileVersion, Folder
 from tests.conftest import FakeEmbedder
 from tests.test_sharing import Person, _file, _folder, _grant, _person
@@ -317,3 +318,27 @@ class TestContract:
             status, body = _search(client, people["owner"], "secret-search-words")
         assert status == 503 and body["error"]["code"] == "search_unavailable"  # type: ignore[index]
         assert "secret-search-words" not in caplog.text
+
+
+class TestSnippet:
+    def test_aChunkThatBeginsMidSentenceStartsAtTheNextWord(self) -> None:
+        assert (
+            _snippet(". Prices are fixed for six months.", 300)
+            == "Prices are fixed for six months."
+        )
+
+    def test_shortTextIsUnchanged_andExactlyTheLimitToo(self) -> None:
+        assert _snippet("short text", 300) == "short text"
+        assert _snippet("x" * 300, 300) == "x" * 300
+
+    def test_longTextIsCutAtAWordAndMarked(self) -> None:
+        text = "alpha beta gamma delta " * 20
+        snippet = _snippet(text, 50)
+        assert snippet.endswith("…") and len(snippet) <= 51
+        assert snippet.removesuffix("…").split(" ")[-1] in {"alpha", "beta", "gamma", "delta"}
+
+    def test_oneEndlessWordIsStillCutAtTheLimit(self) -> None:
+        assert _snippet("x" * 400, 100) == "x" * 100 + "…"
+
+    def test_nothingButPunctuationGivesAnEmptySnippet_notACrash(self) -> None:
+        assert _snippet(" ., ;", 300) == ""
