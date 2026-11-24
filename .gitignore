@@ -26,3 +26,7 @@ frontend/.angular/
 .vscode/
 *.log
 pgdata/
+
+# Browser automation output (screenshots, snapshots, logs)
+.playwright-mcp/
+e2e-*.png
