@@ -1,7 +1,8 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import {
   catchError,
+  EMPTY,
   filter,
   forkJoin,
   map,
@@ -9,12 +10,13 @@ import {
   startWith,
   switchMap,
   tap,
+  timer,
   type Observable,
 } from 'rxjs';
 
 import { FilesApi } from '@core/api/files-api.service';
 import { FoldersApi } from '@core/api/folders-api.service';
-import { type FileRead, type FolderRead, type Page } from '@core/api/models';
+import { type FileRead, type FileStatus, type FolderRead, type Page } from '@core/api/models';
 import { ErrorResolver } from '@core/error/error-resolver.service';
 import { DEFAULT_PAGE_SIZE } from '@core/api/pagination';
 
@@ -39,7 +41,21 @@ interface Query {
   folderPage: number;
   filePage: number;
   tick: number;
+  /** A refresh nobody asked for (polling): no loading state, and a failure is not shown. */
+  quiet: boolean;
 }
+
+/** Statuses that will still change by themselves, so the list is refreshed until they settle. */
+const IN_PROGRESS: ReadonlySet<FileStatus> = new Set([
+  'pending_upload',
+  'uploaded',
+  'scanning',
+  'processing',
+]);
+/** Waits before each refresh: quick at first, then longer, so a long job costs few requests. */
+export const POLL_DELAYS_MS: readonly number[] = [2000, 3000, 5000, 8000, 10000];
+/** About ten minutes of refreshing; after that a stuck file waits for the next real reload. */
+export const MAX_POLLS = 60;
 
 const lastPage = (page: Page<unknown>): number =>
   Math.max(1, Math.ceil(page.total / page.page_size));
@@ -54,34 +70,57 @@ export class ExplorerStore {
   // Null until the page says which folder to open, so nothing loads (and gets cancelled) twice.
   private readonly query = signal<Query | null>(null);
 
+  // Refreshes done since the last real load, and the last good answer (for a failed refresh).
+  private polls = 0;
+  private latest: ExplorerView = LOADING;
+
   readonly folderId = computed(() => this.query()?.folderId ?? null);
   readonly view = toSignal(
     toObservable(this.query).pipe(
       filter((query): query is Query => query !== null),
       switchMap((query) => this.load(query)),
-      tap((view) => this.stepBackFromEmptyPage(view)),
+      tap((view) => {
+        if (view.status === 'ready') {
+          this.latest = view;
+        }
+        this.stepBackFromEmptyPage(view);
+      }),
     ),
     { initialValue: LOADING },
   );
+
+  constructor() {
+    // switchMap: a new answer, a new folder or leaving the page drops the pending timer.
+    toObservable(this.view)
+      .pipe(
+        switchMap((view) => this.nextPoll(view)),
+        takeUntilDestroyed(),
+      )
+      .subscribe(() => this.refreshQuietly());
+  }
 
   open(folderId: string | null): void {
     this.query.update((q) =>
       q && q.folderId === folderId && q.folderPage === 1 && q.filePage === 1
         ? q
-        : { folderId, folderPage: 1, filePage: 1, tick: q?.tick ?? 0 },
+        : { folderId, folderPage: 1, filePage: 1, tick: q?.tick ?? 0, quiet: false },
     );
   }
 
   setFolderPage(page: number): void {
-    this.query.update((q) => (q && q.folderPage !== page ? { ...q, folderPage: page } : q));
+    this.query.update((q) =>
+      q && q.folderPage !== page ? { ...q, folderPage: page, quiet: false } : q,
+    );
   }
 
   setFilePage(page: number): void {
-    this.query.update((q) => (q && q.filePage !== page ? { ...q, filePage: page } : q));
+    this.query.update((q) =>
+      q && q.filePage !== page ? { ...q, filePage: page, quiet: false } : q,
+    );
   }
 
   reload(): void {
-    this.query.update((q) => (q ? { ...q, tick: q.tick + 1 } : q));
+    this.query.update((q) => (q ? { ...q, tick: q.tick + 1, quiet: false } : q));
   }
 
   createFolder(name: string): Observable<FolderRead> {
@@ -108,13 +147,34 @@ export class ExplorerStore {
     return this.filesApi.remove(fileId).pipe(tap(() => this.reload()));
   }
 
+  /** How long to wait before refreshing, or never: only while a listed file is still changing. */
+  private nextPoll(view: ExplorerView): Observable<unknown> {
+    const changing =
+      view.status === 'ready' && !!view.files?.items.some((file) => IN_PROGRESS.has(file.status));
+    if (!changing || this.polls >= MAX_POLLS) {
+      return EMPTY;
+    }
+    return timer(POLL_DELAYS_MS[Math.min(this.polls, POLL_DELAYS_MS.length - 1)]);
+  }
+
+  private refreshQuietly(): void {
+    this.polls += 1;
+    this.query.update((q) => (q ? { ...q, tick: q.tick + 1, quiet: true } : q));
+  }
+
   private load(query: Query): Observable<ExplorerView> {
-    return forkJoin({
+    const loaded = forkJoin({
       path: query.folderId ? this.foldersApi.path(query.folderId) : of<FolderRead[]>([]),
       folders: this.foldersApi.list(query.folderId, query.folderPage, DEFAULT_PAGE_SIZE),
       files: this.filesApi.list(query.folderId, query.filePage, DEFAULT_PAGE_SIZE),
-    }).pipe(
-      map((result): ExplorerView => ({ status: 'ready', error: null, ...result })),
+    }).pipe(map((result): ExplorerView => ({ status: 'ready', error: null, ...result })));
+    if (query.quiet) {
+      // A copy of the last good answer on failure: the screen keeps what it shows, and the new
+      // object lets the next poll be scheduled (the same object would not look like a change).
+      return loaded.pipe(catchError(() => of<ExplorerView>({ ...this.latest })));
+    }
+    this.polls = 0;
+    return loaded.pipe(
       startWith(LOADING),
       catchError((error: unknown) =>
         of<ExplorerView>({
