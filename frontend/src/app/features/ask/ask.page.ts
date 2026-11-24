@@ -1,4 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  type ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
   catchError,
@@ -109,6 +117,7 @@ type Step =
       <div class="cd-field">
         <label for="ask-box">Ask a question about your files</label>
         <textarea
+          #askBox
           id="ask-box"
           class="cd-input"
           rows="3"
@@ -192,6 +201,8 @@ export class AskPage {
   protected readonly question = signal('');
   protected readonly downloads = fileDownloads();
 
+  // Read with `viewChild` on a plain element, so it is the element and not a component.
+  private readonly box = viewChild.required<ElementRef<HTMLTextAreaElement>>('askBox');
   private readonly api = inject(AnswersApi);
   private readonly resolver = inject(ErrorResolver);
   private readonly asked = new Subject<string>();
@@ -237,10 +248,17 @@ export class AskPage {
     }
     this.downloads.clearError();
     this.asked.next(question);
+    this.focusQuestion();
   }
 
   protected stop(): void {
     this.stopped.next();
+    this.focusQuestion();
+  }
+
+  /** The Ask button turns off and the Stop button goes away: focus must not fall to the page top. */
+  private focusQuestion(): void {
+    this.box().nativeElement.focus();
   }
 
   private answerTo(question: string): Observable<AnswerState> {

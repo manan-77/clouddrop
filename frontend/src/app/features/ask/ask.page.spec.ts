@@ -75,9 +75,14 @@ describe('AskPage', () => {
     });
     backend = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(AskPage);
+    // Focus only exists for elements that are in the document.
+    document.body.appendChild(fixture.nativeElement as HTMLElement);
     await settle();
   });
-  afterEach(() => backend.verify());
+  afterEach(() => {
+    (fixture.nativeElement as HTMLElement).remove();
+    backend.verify();
+  });
 
   it('nothingAskedYet_invitesAQuestion_andTheAskButtonIsOff', () => {
     expect(text('cd-empty-state')).toContain('Ask about your files');
@@ -200,6 +205,25 @@ describe('AskPage', () => {
     expect(root().querySelector('.sources')).toBeNull();
     await finish(next, TOKEN('new') + done([]));
     expect(text('.text')).toBe('new');
+  });
+
+  it('afterPressingAsk_focusStaysInTheQuestionBox_notLostToThePage', async () => {
+    await type('a question');
+    askButton().focus();
+    askButton().click();
+    await settle();
+    expect(document.activeElement).toBe(box());
+    await finish(backend.expectOne(URL), done([]));
+  });
+
+  it('afterPressingStop_focusMovesToTheQuestionBox_whereTheStopButtonWas', async () => {
+    const request = await ask();
+    button('Stop')!.focus();
+    expect(document.activeElement).toBe(button('Stop'));
+    button('Stop')!.click();
+    await settle();
+    expect(request.cancelled).toBe(true);
+    expect(document.activeElement).toBe(box());
   });
 
   it('ctrlEnterAsksFromTheKeyboard', async () => {
