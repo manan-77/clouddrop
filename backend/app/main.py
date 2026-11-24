@@ -17,6 +17,7 @@ from app.modules.sharing.link_router import router as link_router
 from app.modules.sharing.router import router as sharing_router
 from app.modules.storage.file_router import router as file_router
 from app.modules.storage.folder_router import router as folder_router
+from app.modules.summaries.router import router as summaries_router
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(search_router)
     app.include_router(rag_router)
+    app.include_router(summaries_router)
     return app
 
 

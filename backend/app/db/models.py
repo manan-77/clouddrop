@@ -12,6 +12,7 @@ from app.modules.auth import models as auth_models
 from app.modules.processing import models as processing_models
 from app.modules.sharing import models as sharing_models
 from app.modules.storage import models as storage_models
+from app.modules.summaries import models as summaries_models
 from app.modules.workspaces import models as workspace_models
 
 __all__ = [
@@ -20,5 +21,6 @@ __all__ = [
     "processing_models",
     "sharing_models",
     "storage_models",
+    "summaries_models",
     "workspace_models",
 ]

@@ -74,7 +74,13 @@ class ChatStream(Protocol):
 
 
 class ChatClient(Protocol):
-    def stream(self, messages: Sequence[ChatMessage]) -> ChatStream: ...
+    def stream(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        json_output: bool = False,
+        max_output_tokens: int | None = None,
+    ) -> ChatStream: ...
 
 
 def prompt_token_budget(settings: Settings) -> int:
@@ -220,7 +226,13 @@ class OllamaChatClient:
             limits=httpx.Limits(max_connections=settings.chat_max_connections),
         )
 
-    def stream(self, messages: Sequence[ChatMessage]) -> OllamaStream:
+    def stream(
+        self,
+        messages: Sequence[ChatMessage],
+        *,
+        json_output: bool = False,
+        max_output_tokens: int | None = None,
+    ) -> OllamaStream:
         if not messages:
             raise ValueError("a chat needs at least one message")
         # Text that cannot be encoded (a lone surrogate) is sent as the replacement character.
@@ -232,10 +244,17 @@ class OllamaChatClient:
             "messages": [{"role": m.role, "content": m.content} for m in messages],
             "options": {
                 "num_ctx": self.settings.chat_num_ctx,
-                "num_predict": self.settings.chat_max_output_tokens,
+                # A caller that needs a short answer can ask for a lower cap, never a higher one.
+                "num_predict": min(
+                    max_output_tokens or self.settings.chat_max_output_tokens,
+                    self.settings.chat_max_output_tokens,
+                ),
                 "temperature": self.settings.chat_temperature,
             },
         }
+        if json_output:
+            # Ollama then only produces valid JSON, which a small model does not do reliably alone.
+            payload["format"] = "json"
         return OllamaStream(self._open(payload), self.settings)
 
     def _open(self, payload: dict[str, Any]) -> httpx.Response:

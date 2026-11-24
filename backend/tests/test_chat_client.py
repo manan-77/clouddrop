@@ -386,3 +386,27 @@ class TestRealOllama:
         stream = client.stream(messages)
         list(stream)
         assert stream.usage.prompt_tokens <= max_prompt_tokens(messages)
+
+
+class TestOutputCap:
+    def _num_predict(self, **ask: object) -> int:
+        server = FakeOllama(ok(FINISH))
+        stream = client_for(server, chat_max_output_tokens=1000).stream((SYSTEM, ASK), **ask)  # type: ignore[arg-type]
+        list(stream)
+        return json.loads(server.requests[0].content)["options"]["num_predict"]
+
+    def test_aCallerCanAskForALowerCap(self) -> None:
+        assert self._num_predict(max_output_tokens=200) == 200
+
+    def test_noCapAskedMeansTheConfiguredOne(self) -> None:
+        assert self._num_predict() == 1000
+
+    def test_aCallerCanNeverRaiseItAboveTheConfiguredOne(self) -> None:
+        assert self._num_predict(max_output_tokens=5000) == 1000
+
+    def test_jsonModeIsRequestedOnlyWhenAsked(self) -> None:
+        server = FakeOllama(ok(FINISH), ok(FINISH))
+        list(client_for(server).stream((SYSTEM, ASK), json_output=True))
+        list(client_for(server).stream((SYSTEM, ASK)))
+        assert json.loads(server.requests[0].content)["format"] == "json"
+        assert "format" not in json.loads(server.requests[1].content)

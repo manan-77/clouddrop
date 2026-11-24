@@ -6,6 +6,7 @@ from datetime import timedelta
 from celery import Task
 from sqlalchemy.orm import Session
 
+from app.ai import chat as chat_module
 from app.core.config import CELERY_RETRY_BACKOFF_MAX_SECONDS, get_settings
 from app.db import models as all_models  # noqa: F401  (a worker must know every table)
 from app.db.session import get_sessionmaker
@@ -16,6 +17,8 @@ from app.modules.processing.sweeper import sweep_stuck_files as sweep
 from app.modules.storage.factory import build_storage
 from app.modules.storage.purge import purge_expired
 from app.modules.storage.s3 import S3Storage
+from app.modules.summaries.dispatcher import SummaryDispatcher
+from app.modules.summaries.service import SummaryService, SummaryUnavailable
 from app.worker.celery_app import celery_app
 
 _settings = get_settings()
@@ -52,6 +55,11 @@ def process_file_version(self: Task, file_version_id: str) -> None:
             stale_after=timedelta(seconds=settings.processing_job_stale_seconds),
             max_attempts=settings.processing_max_attempts,
         )
+        # Once the file is ready its summary is asked for, as a separate job: the file does not wait
+        # for the model, and a failing model never touches the file.
+        summaries = SummaryService(session, settings)
+        if summaries.request_if_missing(uuid.UUID(file_version_id)):
+            SummaryDispatcher().enqueue(uuid.UUID(file_version_id))
 
 
 @celery_app.task(name="storage.purge_expired")
@@ -79,3 +87,29 @@ def sweep_stuck_files() -> int:
             stuck_after=timedelta(seconds=settings.sweeper_stuck_after_seconds),
             limit=settings.sweeper_batch_size,
         )
+
+
+@celery_app.task(
+    name="summaries.generate_summary",
+    bind=True,
+    autoretry_for=(SummaryUnavailable,),
+    retry_backoff=30,
+    retry_backoff_max=CELERY_RETRY_BACKOFF_MAX_SECONDS,
+    retry_jitter=True,
+    max_retries=_settings.summary_max_attempts,
+)
+def generate_summary(self: Task, file_version_id: str) -> None:
+    """Takes an id only; whether a summary is wanted is read from the database."""
+    settings = get_settings()
+    with open_session() as session:
+        # Looked up at call time so tests can replace it.
+        SummaryService(session, settings).generate(
+            uuid.UUID(file_version_id), chat_module.get_chat_client()
+        )
+
+
+@celery_app.task(name="summaries.sweep")
+def sweep_summaries() -> int:
+    settings = get_settings()
+    with open_session() as session:
+        return SummaryService(session, settings).sweep(SummaryDispatcher())

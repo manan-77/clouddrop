@@ -122,6 +122,23 @@ class Settings(BaseSettings):
     # Answers are slow and use the one local model, so the budget is far below search's.
     rate_limit_answer_per_user: int = 30
     rate_limit_answer_window_seconds: int = 600
+    # Summaries and categories (docs/adr/0019). A document is read in parts of at most this many
+    # bytes (it must fit the chat prompt budget, which counts bytes), at most this many parts, and
+    # for at most this long: after that the summary covers only what was read and says so.
+    summary_part_bytes: int = Field(default=4500, ge=500)
+    summary_max_parts: int = Field(default=8, ge=1, le=20)
+    summary_time_budget_seconds: int = Field(default=200, ge=10)
+    # A summary is a few sentences and a few words. A model in JSON mode can run on until the limit,
+    # which at about 13 tokens a second is over a minute, so each call is capped well below the
+    # chat limit.
+    summary_max_output_tokens: int = Field(default=300, ge=50)
+    summary_max_attempts: int = Field(default=3, ge=1, le=10)
+    # A request nobody picked up for this long (a lost message) is sent again.
+    summary_stale_seconds: int = Field(default=600, ge=60)
+    summary_sweep_interval_seconds: int = Field(default=300, ge=30)
+    summary_sweep_batch_size: int = Field(default=50, ge=1, le=500)
+    rate_limit_summary_per_user: int = 20
+    rate_limit_summary_window_seconds: int = 3600
     rate_limit_grant_per_user: int = 60
     rate_limit_grant_window_seconds: int = 3600
     # Only uploads into someone else's shared folder are limited (they reserve the owner's quota).
@@ -182,6 +199,17 @@ class Settings(BaseSettings):
         if self.chat_num_ctx - self.chat_max_output_tokens < 2048:
             raise ValueError(
                 "CHAT_NUM_CTX must leave at least 2048 tokens above CHAT_MAX_OUTPUT_TOKENS"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _summary_fits_the_task_time_limit(self) -> Self:
+        # The time budget only stops starting new parts; one more call may still be running, so it
+        # needs a margin below the soft limit or a long document would be killed half way.
+        if self.summary_time_budget_seconds > self.celery_task_soft_time_limit_seconds - 60:
+            raise ValueError(
+                "SUMMARY_TIME_BUDGET_SECONDS must be at least 60 below "
+                "CELERY_TASK_SOFT_TIME_LIMIT_SECONDS"
             )
         return self
 

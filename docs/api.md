@@ -111,6 +111,13 @@ The body is a stream of server-sent events, each `data: {json}` followed by a bl
 | `done` | `citations`, `cut_off` | The answer is complete. `citations` lists only sources that were really retrieved: `label` (the `[s1]` style label used in the text), `file_id`, `file_name`, `chunk_id`, `page`. A label in the text that is not listed here is not a source and must not be shown as one. `cut_off` is true when the model stopped at the output limit |
 | `error` | `code` | The answer failed after it had started (the status was already 200), for example `chat_unavailable`. No `done` follows |
 
+## Summaries (`/api/v1/files/{file_id}/summary`) - authenticated
+
+| Method | Path | Result | Notes |
+|---|---|---|---|
+| GET | `/files/{file_id}/summary` | 200 | Needs read access (anything else is the usual 404 `file_not_found`). 404 `summary_not_found` while there is no summary yet (a file that is not ready, or one nobody has asked for). Body: `status` (`pending`, `ready`, `failed`), `summary`, `category` (one of Contract, Invoice, Report, Policy, Letter, Meeting notes, Manual, Presentation, Spreadsheet, Resume, Article, Other), `tags` (up to five plain lowercase words), `partial` (only the start of a very long document was read), `model`, `prompt_version`, `error_code` (a short code such as `bad_output` when `failed`), `generated_at`. While `pending` after a new request the previous text is still shown |
+| POST | `/files/{file_id}/summary` | 202 | Asks for a new summary, written in the background. Needs write access (owner or editor; a viewer gets 404). 409 `file_not_ready` if the file is not ready. Asking while one is waiting changes nothing. 429 over the per-user limit. Answers with the same body as GET |
+
 ## Storage setup notes (S3)
 
 - The IAM identity needs `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:AbortMultipartUpload` and `s3:ListMultipartUploadParts` on the bucket prefixes.
